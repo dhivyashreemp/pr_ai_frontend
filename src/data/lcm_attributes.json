@@ -1,0 +1,342 @@
+{
+  "form_meta": {
+    "title": "Label Comparator — Change Request Input Form",
+    "version": "1.0",
+    "description": "130+ attributes across 4 categories for label change request validation against comparator inspection output",
+    "categories": ["text", "symbol", "barcode", "image"],
+    "change_types": [
+      "Added",
+      "Removed",
+      "Modified",
+      "Repositioned",
+      "Value changed",
+      "Size changed",
+      "Font changed",
+      "Colour changed"
+    ],
+    "metadata_fields": [
+      { "id": "cr_number",      "label": "CR",                 "type": "text", "placeholder": "e.g. CR-2026-0041",                   "required": false },
+      { "id": "part_number",    "label": "SKU",                "type": "text", "placeholder": "e.g. 2440-00-511",                    "required": true  },
+      { "id": "label_version",  "label": "Label Revision",     "type": "text", "placeholder": "e.g. Rev C → Rev D",                  "required": false },
+      { "id": "product_name",   "label": "Product name",       "type": "text", "placeholder": "e.g. QUICKSET STD Tissue Protector",  "required": false },
+      { "id": "requested_by",   "label": "Requested by",       "type": "text", "placeholder": "Name / department",                   "required": false },
+      { "id": "date",           "label": "Date",               "type": "date", "placeholder": "YYYY-MM-DD",                          "required": false }
+    ]
+  },
+
+  "categories": {
+
+    "text": {
+      "id": "text",
+      "label": "Text",
+      "icon": "T",
+      "description": "All text-based content changes on the label",
+      "groups": [
+        {
+          "id": "text_product_identification",
+          "name": "Product identification",
+          "attributes": [
+            { "id": "product_name",        "label": "Product name",               "value_type": "text",   "placeholder": "e.g. QUICKSET STD → QUICKSET PRO" },
+            { "id": "product_description", "label": "Product description",        "value_type": "text",   "placeholder": "e.g. Tissue Protector → Tissue Guard" },
+            { "id": "ref_catalogue",       "label": "REF / catalogue number",     "value_type": "text",   "placeholder": "e.g. 2440-00-511 → 2440-00-512" },
+            { "id": "lot_number",          "label": "LOT number",                 "value_type": "text",   "placeholder": "e.g. format change" },
+            { "id": "rev",            "label": "Rev",                "value_type": "text", "placeholder": "e.g. Rev D",                          "required": false },
+
+            { "id": "serial_number",       "label": "Serial number",              "value_type": "text",   "placeholder": "e.g. format change" },
+            { "id": "batch_number",        "label": "Batch number",               "value_type": "text",   "placeholder": "e.g. format change" },
+            { "id": "gtin_ean",            "label": "GTIN / EAN",                 "value_type": "text",   "placeholder": "e.g. 00840002600017 → 00840002600018" },
+            { "id": "quantity_pack_size",  "label": "Quantity / pack size",       "value_type": "text",   "placeholder": "e.g. 10 → 5" }
+          ]
+        },
+        {
+          "id": "text_dates",
+          "name": "Dates",
+          "attributes": [
+            { "id": "manufacture_date",    "label": "Manufacture date",           "value_type": "text",   "placeholder": "e.g. format YYYY-MM → MM/YYYY" },
+            { "id": "expiry_date",         "label": "Expiry date / Use-by date",  "value_type": "text",   "placeholder": "e.g. format change or removal" }
+          ]
+        },
+        {
+          "id": "text_manufacturer",
+          "name": "Manufacturer & distributor",
+          "attributes": [
+            { "id": "manufacturer_name",   "label": "Manufacturer name",          "value_type": "text",   "placeholder": "e.g. DePuy Ireland UC → DePuy Synthes" },
+            { "id": "made_in_country",     "label": "Made in country",            "value_type": "text",   "placeholder": "e.g. Ireland → UK" },
+            { "id": "manufacturer_addr",   "label": "Manufacturer address",       "value_type": "text",   "placeholder": "e.g. Loughbea, Ringaskiddy → new address" },
+            { "id": "distributor_name",    "label": "Distributor name",           "value_type": "text",   "placeholder": "e.g. name change" },
+            { "id": "distributor_addr",    "label": "Distributor address",        "value_type": "text",   "placeholder": "e.g. address update" },
+            { "id": "ecrep_name",          "label": "EC Rep name",                "value_type": "text",   "placeholder": "e.g. new EC Rep entity" },
+            { "id": "ecrep_addr",          "label": "EC Rep address",             "value_type": "text",   "placeholder": "e.g. address update" }
+          ]
+        },
+        {
+          "id": "text_urls",
+          "name": "URLs & references",
+          "attributes": [
+            { "id": "website_url",         "label": "Website URL",                "value_type": "text",   "placeholder": "e.g. www.depuysynthes.com → new URL" },
+            { "id": "eifu_url",            "label": "eIFU URL",                   "value_type": "text",   "placeholder": "e.g. www.e-ifu.com" },
+            { "id": "patent_url",          "label": "Patent URL",                 "value_type": "text",   "placeholder": "e.g. patentmarking URL change" },
+            { "id": "symbols_glossary",    "label": "Symbols glossary URL",       "value_type": "text",   "placeholder": "e.g. https://www.e-ifu.com/symbols-glossary" }
+          ]
+        },
+        {
+          "id": "text_regulatory",
+          "name": "Regulatory & UDI",
+          "attributes": [
+            { "id": "udi_di",              "label": "UDI-DI",                     "value_type": "text",   "placeholder": "e.g. new UDI-DI value" },
+            { "id": "udi_pi",              "label": "UDI-PI",                     "value_type": "text",   "placeholder": "e.g. format change" },
+            { "id": "gtin_encoded",        "label": "GTIN encoded value",         "value_type": "text",   "placeholder": "e.g. value update" },
+            { "id": "notified_body",       "label": "Notified body number",       "value_type": "text",   "placeholder": "e.g. 0086 → 0344" },
+            { "id": "us_canada_phone",     "label": "US / Canada phone number",   "value_type": "text",   "placeholder": "e.g. 800-25 → 800-26" },
+            { "id": "eu_phone",            "label": "EU phone number",            "value_type": "text",   "placeholder": "e.g. +800 8988 2020 → new number" }
+          ]
+        },
+        {
+          "id": "text_warnings",
+          "name": "Warnings & instructions",
+          "attributes": [
+            { "id": "warning_text",        "label": "Warning text",               "value_type": "text",   "placeholder": "e.g. text addition or modification" },
+            { "id": "caution_text",        "label": "Caution text",               "value_type": "text",   "placeholder": "e.g. text change" },
+            { "id": "contraindication",    "label": "Contraindication text",      "value_type": "text",   "placeholder": "e.g. new contraindication added" },
+            { "id": "sterile_method",      "label": "Sterilisation method text",  "value_type": "text",   "placeholder": "e.g. EO → Radiation" },
+            { "id": "single_use_stmt",     "label": "Single-use statement",       "value_type": "text",   "placeholder": "e.g. added / removed / modified" },
+            { "id": "storage_conditions",  "label": "Storage conditions",         "value_type": "text",   "placeholder": "e.g. added storage condition" },
+            { "id": "temperature_range",   "label": "Temperature range",          "value_type": "text",   "placeholder": "e.g. +15°C to +25°C → +10°C to +30°C" }
+          ]
+        },
+        {
+          "id": "text_languages",
+          "name": "Language variants",
+          "attributes": [
+            { "id": "lang_en",             "label": "English (en)",               "value_type": "text",   "placeholder": "e.g. text correction" },
+            { "id": "lang_de",             "label": "German (de)",                "value_type": "text",   "placeholder": "e.g. STD GEWEBESCHUTZ → updated text" },
+            { "id": "lang_es",             "label": "Spanish (es)",               "value_type": "text",   "placeholder": "e.g. translation update" },
+            { "id": "lang_fr",             "label": "French (fr)",                "value_type": "text",   "placeholder": "e.g. PROTECTION TISSU → updated text" },
+            { "id": "lang_it",             "label": "Italian (it)",               "value_type": "text",   "placeholder": "e.g. translation update" },
+            { "id": "lang_pt",             "label": "Portuguese (pt)",            "value_type": "text",   "placeholder": "e.g. translation update" },
+            { "id": "lang_nl",             "label": "Dutch (nl)",                 "value_type": "text",   "placeholder": "e.g. translation update" },
+            { "id": "lang_da",             "label": "Danish (da)",                "value_type": "text",   "placeholder": "e.g. translation update" },
+            { "id": "lang_sv",             "label": "Swedish (sv)",               "value_type": "text",   "placeholder": "e.g. translation update" },
+            { "id": "lang_no",             "label": "Norwegian (no)",             "value_type": "text",   "placeholder": "e.g. VEVSBESKYTTER → VEVSBE SKYTTER" },
+            { "id": "lang_pl",             "label": "Polish (pl)",                "value_type": "text",   "placeholder": "e.g. translation added" },
+            { "id": "lang_cs",             "label": "Czech (cs)",                 "value_type": "text",   "placeholder": "e.g. translation added" },
+            { "id": "lang_hu",             "label": "Hungarian (hu)",             "value_type": "text",   "placeholder": "e.g. translation added" },
+            { "id": "lang_ro",             "label": "Romanian (ro)",              "value_type": "text",   "placeholder": "e.g. translation added" },
+            { "id": "lang_tr",             "label": "Turkish (tr)",               "value_type": "text",   "placeholder": "e.g. translation added" },
+            { "id": "lang_ar",             "label": "Arabic (ar)",                "value_type": "text",   "placeholder": "e.g. translation added" },
+            { "id": "lang_zh",             "label": "Chinese (zh)",               "value_type": "text",   "placeholder": "e.g. translation added" },
+            { "id": "lang_ja",             "label": "Japanese (ja)",              "value_type": "text",   "placeholder": "e.g. translation added" },
+            { "id": "lang_ko",             "label": "Korean (ko)",                "value_type": "text",   "placeholder": "e.g. translation added" }
+          ]
+        },
+        {
+          "id": "text_typography",
+          "name": "Typography",
+          "attributes": [
+            { "id": "font_size",           "label": "Font size",                  "value_type": "text",   "placeholder": "e.g. 8pt → 7pt" },
+            { "id": "font_weight",         "label": "Font weight",                "value_type": "text",   "placeholder": "e.g. Regular → Bold" },
+            { "id": "text_alignment",      "label": "Text alignment",             "value_type": "text",   "placeholder": "e.g. Left → Centre" },
+            { "id": "text_colour",         "label": "Text colour",                "value_type": "text",   "placeholder": "e.g. Black → Pantone 485" },
+            { "id": "font_family",         "label": "Font family",                "value_type": "text",   "placeholder": "e.g. Helvetica → Arial" }
+          ]
+        }
+      ]
+    },
+
+    "symbol": {
+      "id": "symbol",
+      "label": "Symbols",
+      "icon": "S",
+      "description": "ISO 15223-1 symbols and regulatory marks",
+      "groups": [
+        {
+          "id": "sym_regulatory",
+          "name": "Regulatory marks",
+          "attributes": [
+            { "id": "sym_ce_mark",         "label": "CE Mark",                            "value_type": "text",   "placeholder": "e.g. Added / Removed / Repositioned" },
+            { "id": "sym_ce_nb",           "label": "CE Mark — notified body number",     "value_type": "text",   "placeholder": "e.g. 0086 → 0344" },
+            { "id": "sym_ec_md_block",     "label": "EC / MD block",                      "value_type": "text",   "placeholder": "e.g. Repositioned / size change" },
+            { "id": "sym_md",              "label": "MD — Medical Device",                "value_type": "text",   "placeholder": "e.g. Added per EU MDR 2017/745" },
+            { "id": "sym_rx_only",         "label": "Prescription Only (Rx)",             "value_type": "text",   "placeholder": "e.g. Added / Removed" },
+            { "id": "sym_udi",             "label": "Unique Device Identifier",           "value_type": "text",   "placeholder": "e.g. Added / Removed" },
+            { "id": "sym_ukca",            "label": "UKCA Mark",                          "value_type": "text",   "placeholder": "e.g. Added for UK market" },
+            { "id": "sym_authorized_rep",  "label": "Authorised representative (EC Rep)", "value_type": "text",   "placeholder": "e.g. symbol Added / Removed" }
+          ]
+        },
+        {
+          "id": "sym_sterility",
+          "name": "Sterility",
+          "attributes": [
+            { "id": "sym_sterile",         "label": "Sterile",                            "value_type": "text",   "placeholder": "e.g. Added / Removed" },
+            { "id": "sym_non_sterile",     "label": "Non-Sterile",                        "value_type": "text",   "placeholder": "e.g. Added / Removed / Repositioned" },
+            { "id": "sym_sterile_eo",      "label": "Sterile — Ethylene Oxide",           "value_type": "text",   "placeholder": "e.g. Added" },
+            { "id": "sym_sterile_r",       "label": "Sterile — Radiation",                "value_type": "text",   "placeholder": "e.g. Added" },
+            { "id": "sym_sterile_a",       "label": "Sterile — Aseptic Processing",       "value_type": "text",   "placeholder": "e.g. Added" }
+          ]
+        },
+        {
+          "id": "sym_use_handling",
+          "name": "Use & handling",
+          "attributes": [
+            { "id": "sym_single_use",      "label": "Do Not Re-use (No 2nd Fill)",        "value_type": "text",   "placeholder": "e.g. Added / Removed" },
+            { "id": "sym_no_damaged",      "label": "Do Not Use If Package Is Damaged",   "value_type": "text",   "placeholder": "e.g. Added / Removed" },
+            { "id": "sym_keep_heat",       "label": "Keep away from heat",                "value_type": "text",   "placeholder": "e.g. Added" },
+            { "id": "sym_keep_dry",        "label": "Keep dry",                           "value_type": "text",   "placeholder": "e.g. Added" },
+            { "id": "sym_fragile",         "label": "Fragile — handle with care",         "value_type": "text",   "placeholder": "e.g. Added / Removed" },
+            { "id": "sym_temp_upper",      "label": "Temperature limit — upper",          "value_type": "text",   "placeholder": "e.g. +25°C → +30°C" },
+            { "id": "sym_temp_lower",      "label": "Temperature limit — lower",          "value_type": "text",   "placeholder": "e.g. -10°C → -20°C" },
+            { "id": "sym_do_not_reuse",    "label": "Do Not Resterilize",                 "value_type": "text",   "placeholder": "e.g. Added" },
+            { "id": "sym_phthalate_free",  "label": "Phthalate free",                     "value_type": "text",   "placeholder": "e.g. Added" }
+          ]
+        },
+        {
+          "id": "sym_information",
+          "name": "Information & IFU",
+          "attributes": [
+            { "id": "sym_consult_ifu",     "label": "Consult Instructions for Use",       "value_type": "text",   "placeholder": "e.g. Added / Removed" },
+            { "id": "sym_eifu",            "label": "eIFU symbol",                        "value_type": "text",   "placeholder": "e.g. Added — electronic IFU" },
+            { "id": "sym_manufacturer",    "label": "Manufacturer symbol",                "value_type": "text",   "placeholder": "e.g. Repositioned" },
+            { "id": "sym_caution",         "label": "Caution / Exclamation Mark",         "value_type": "text",   "placeholder": "e.g. Added / Removed" }
+          ]
+        },
+        {
+          "id": "sym_traceability",
+          "name": "Dates & traceability symbols",
+          "attributes": [
+            { "id": "sym_mfg_date",        "label": "Date of Manufacture",                "value_type": "text",   "placeholder": "e.g. Repositioned / size change" },
+            { "id": "sym_use_by",          "label": "Use By Date (Expiry)",               "value_type": "text",   "placeholder": "e.g. Added / Removed" },
+            { "id": "sym_batch_code",      "label": "Lot / Batch Number",                 "value_type": "text",   "placeholder": "e.g. Repositioned" },
+            { "id": "sym_cat_number",      "label": "Catalogue / Reference Number",       "value_type": "text",   "placeholder": "e.g. Repositioned" },
+            { "id": "sym_ref",             "label": "REF symbol",                         "value_type": "text",   "placeholder": "e.g. Repositioned / size change" }
+          ]
+        },
+        {
+          "id": "sym_material",
+          "name": "Material & MR safety",
+          "attributes": [
+            { "id": "sym_latex_free",      "label": "Latex free",                         "value_type": "text",   "placeholder": "e.g. Added" },
+            { "id": "sym_dehp_free",       "label": "DEHP free",                          "value_type": "text",   "placeholder": "e.g. Added" },
+            { "id": "sym_pvc_free",        "label": "PVC free",                           "value_type": "text",   "placeholder": "e.g. Added" },
+            { "id": "sym_mri_safe",        "label": "MR Safe",                            "value_type": "text",   "placeholder": "e.g. Added" },
+            { "id": "sym_mri_conditional", "label": "MR Conditional",                     "value_type": "text",   "placeholder": "e.g. Changed from MR Safe" },
+            { "id": "sym_recyclable",      "label": "Recyclable",                         "value_type": "text",   "placeholder": "e.g. Added" },
+            { "id": "sym_contains_latex",  "label": "Contains natural rubber latex",      "value_type": "text",   "placeholder": "e.g. Added" }
+          ]
+        }
+      ]
+    },
+
+    "barcode": {
+      "id": "barcode",
+      "label": "Barcodes",
+      "icon": "|||",
+      "description": "Barcode and DataMatrix changes including UDI, encoded values, and physical specification",
+      "groups": [
+        {
+          "id": "bc_items",
+          "name": "Barcode items",
+          "attributes": [
+            { "id": "bc_1d_barcode",  "label": "1D Barcode",  "value_type": "text", "placeholder": "" }
+          ]
+        },
+        {
+          "id": "bc_type",
+          "name": "Barcode type & format",
+          "attributes": [
+            { "id": "bc_type_change",      "label": "Barcode type",               "value_type": "text",   "placeholder": "e.g. 1D linear → DataMatrix" },
+            { "id": "bc_symbology",        "label": "Barcode symbology",          "value_type": "text",   "placeholder": "e.g. Code 128 → GS1-128" },
+            { "id": "bc_udi_format",       "label": "UDI format",                 "value_type": "text",   "placeholder": "e.g. GS1 / HIBC / ICCBBA" },
+            { "id": "bc_added",            "label": "Barcode added",              "value_type": "text",   "placeholder": "e.g. DataMatrix added to label" },
+            { "id": "bc_removed",          "label": "Barcode removed",            "value_type": "text",   "placeholder": "e.g. 1D barcode removed" }
+          ]
+        },
+        {
+          "id": "bc_content",
+          "name": "Encoded content",
+          "attributes": [
+            { "id": "bc_gtin",             "label": "GTIN encoded value",         "value_type": "text",   "placeholder": "e.g. 00840002600017 → 00840002600018" },
+            { "id": "bc_lot",              "label": "LOT encoded value",          "value_type": "text",   "placeholder": "e.g. AI (10) format change" },
+            { "id": "bc_expiry",           "label": "Expiry date encoded",        "value_type": "text",   "placeholder": "e.g. AI (17) format YYMMDD → YYYYMMDD" },
+            { "id": "bc_serial",           "label": "Serial number encoded",      "value_type": "text",   "placeholder": "e.g. AI (21) added to DataMatrix" },
+            { "id": "bc_hri",              "label": "HRI (human-readable text)",  "value_type": "text",   "placeholder": "e.g. (10)SAMPLE → (10)LOT001" },
+            { "id": "bc_hri_state",        "label": "HRI — present / absent",     "value_type": "text",   "placeholder": "e.g. HRI removed from below barcode" }
+          ]
+        },
+        {
+          "id": "bc_physical",
+          "name": "Physical specification",
+          "attributes": [
+            { "id": "bc_x_dimension",      "label": "X-dimension",                "value_type": "text",   "placeholder": "e.g. 0.25mm → 0.33mm" },
+            { "id": "bc_quiet_zone",       "label": "Quiet zone",                 "value_type": "text",   "placeholder": "e.g. increased to 10x" },
+            { "id": "bc_size",             "label": "Barcode size",               "value_type": "text",   "placeholder": "e.g. 20mm x 10mm → 25mm x 12mm" },
+            { "id": "bc_iso_grade",        "label": "ISO grading requirement",    "value_type": "text",   "placeholder": "e.g. ISO 15416 Grade C → Grade B" },
+            { "id": "bc_colour",           "label": "Barcode colour",             "value_type": "text",   "placeholder": "e.g. Black → Dark Blue" }
+          ]
+        },
+        {
+          "id": "bc_position",
+          "name": "Position",
+          "attributes": [
+            { "id": "bc_second_barcode",   "label": "Second barcode added",       "value_type": "text",   "placeholder": "e.g. QR code added alongside DataMatrix" }
+          ]
+        }
+      ]
+    },
+
+    "datamatrix": {
+      "id": "datamatrix",
+      "label": "DataMatrix",
+      "icon": "dm",
+      "description": "DataMatrix barcode changes — decoded value, printed text, and physical spec",
+      "groups": [
+        {
+          "id": "dm_items",
+          "name": "DataMatrix",
+          "attributes": [
+            { "id": "dm_datamatrix", "label": "DataMatrix", "value_type": "text", "placeholder": "" }
+          ]
+        }
+      ]
+    },
+
+    "image": {
+      "id": "image",
+      "label": "Images",
+      "icon": "img",
+      "description": "Logo, device image, diagram, and background changes",
+      "groups": [
+        {
+          "id": "img_logo",
+          "name": "Company / brand logo",
+          "attributes": [
+            { "id": "logo_change",         "label": "Logo change",                "value_type": "text",   "placeholder": "e.g. DePuy Synthes logo added / removed / updated" }
+          ]
+        },
+        {
+          "id": "img_device",
+          "name": "Medical device image",
+          "attributes": [
+            { "id": "device_img_change",   "label": "Device image change",        "value_type": "text",   "placeholder": "e.g. product illustration added / removed / updated" }
+          ]
+        },
+        {
+          "id": "img_diagram",
+          "name": "Diagrams & illustrations",
+          "attributes": [
+            { "id": "diag_change",         "label": "Diagram / illustration change", "value_type": "text", "placeholder": "e.g. usage diagram added / removed / updated" }
+          ]
+        },
+        {
+          "id": "img_background",
+          "name": "Background & general",
+          "attributes": [
+            { "id": "bg_colour",           "label": "Background colour change",   "value_type": "text",   "placeholder": "e.g. White → Light Blue" },
+            { "id": "bg_img_change",       "label": "Background image change",    "value_type": "text",   "placeholder": "e.g. texture pattern added / removed" },
+            { "id": "bg_watermark_change", "label": "Watermark change",           "value_type": "text",   "placeholder": "e.g. SAMPLE watermark added / removed" },
+            { "id": "bg_border_change",    "label": "Border / frame change",      "value_type": "text",   "placeholder": "e.g. border colour or weight change" }
+          ]
+        }
+      ]
+    }
+  }
+}
