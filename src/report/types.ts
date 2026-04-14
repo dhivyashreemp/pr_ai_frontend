@@ -1,5 +1,5 @@
 export type ChangeType = 'Modified' | 'Added' | 'Deleted' | 'Misplaced' | 'Repositioned';
-export type ElementType = 'Text' | 'Symbol' | 'Image';
+export type ElementType = 'Text' | 'Symbol' | 'Barcode' | 'DataMatrix' | 'Image';
 
 export interface DrawnBox {
   id: string;
@@ -21,6 +21,14 @@ export interface Requirement {
   expectedValue: string;
   actualValue: string;
   status: RequirementStatus;
+}
+
+export interface UnexpectedChange {
+  id: number;
+  elementType: string;
+  changeType: string;
+  /** Description of what was found / the observed difference */
+  actual: string;
 }
 
 export interface DiscrepancyItem {
@@ -46,5 +54,6 @@ export interface ReportData {
   currentBoxes: DrawnBox[];
   newBoxes: DrawnBox[];
   requirements: Requirement[];
+  unexpectedChanges: UnexpectedChange[];
   discrepancyCategories: DiscrepancyCategory[];
 }

@@ -10,7 +10,7 @@ export interface DiscrepancyItem {
 
 export interface ProofRequestMissingItem {
   id: string;
-  category: "Text" | "Symbol" | "Barcode" | "Image";
+  category: "Text" | "Symbol" | "Barcode" | "DataMatrix" | "Image";
   label: string;
   expectedChange: string;
   expectedValue: string;
@@ -68,7 +68,7 @@ export const proofRequestMissingItems: ProofRequestMissingItem[] = [
 // Unified view of all 6 form changes — found vs not found — used in inspection details and report ExpectedChanges
 export interface ProofRequestChangeItem {
   id: string;
-  category: "Text" | "Symbol" | "Barcode" | "Image";
+  category: "Text" | "Symbol" | "Barcode" | "DataMatrix" | "Image";
   label: string;
   changeType: string;
   expectedValue: string;

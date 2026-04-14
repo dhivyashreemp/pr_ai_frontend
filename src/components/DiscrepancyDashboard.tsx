@@ -7,6 +7,7 @@ import {
   Barcode,
   Image,
   Shield,
+  QrCode,
   ChevronDown,
   ChevronRight,
   X,
@@ -37,21 +38,22 @@ const statusConfig: Record<Status, { icon: typeof Plus; label: string; borderCla
 const categoryIcons: Record<string, typeof Type> = {
   Text: Type,
   Barcode: Barcode,
+  DataMatrix: QrCode,
   Image: Image,
   Symbol: Shield,
 };
 
 const statusOrder: Status[] = ["Deleted", "Added", "Modified", "Repositioned"];
 
-type Category = "Text" | "Symbol" | "Barcode" | "Image";
+type Category = "Text" | "Symbol" | "Barcode" | "DataMatrix" | "Image";
 
 function computeCounts(items: DiscrepancyItem[]) {
   const byStatus: Record<Status, number> = { Deleted: 0, Added: 0, Modified: 0, Repositioned: 0 };
   const byStatusAndCategory: Record<Status, Record<Category, number>> = {
-    Deleted: { Text: 0, Symbol: 0, Barcode: 0, Image: 0 },
-    Added: { Text: 0, Symbol: 0, Barcode: 0, Image: 0 },
-    Modified: { Text: 0, Symbol: 0, Barcode: 0, Image: 0 },
-    Repositioned: { Text: 0, Symbol: 0, Barcode: 0, Image: 0 },
+    Deleted: { Text: 0, Symbol: 0, Barcode: 0, DataMatrix: 0, Image: 0 },
+    Added: { Text: 0, Symbol: 0, Barcode: 0, DataMatrix: 0, Image: 0 },
+    Modified: { Text: 0, Symbol: 0, Barcode: 0, DataMatrix: 0, Image: 0 },
+    Repositioned: { Text: 0, Symbol: 0, Barcode: 0, DataMatrix: 0, Image: 0 },
   };
   items.forEach((item) => {
     byStatus[item.status]++;
@@ -62,15 +64,22 @@ function computeCounts(items: DiscrepancyItem[]) {
 
 
 
-const InspectionSummary = ({ items, formData, missingItems = [] }: { items: DiscrepancyItem[]; formData?: FormDataContext; missingItems?: ProofRequestMissingItem[] }) => {
+const InspectionSummary = ({ items, formData, missingItems = [], satisfiedItems = [] }: { items: DiscrepancyItem[]; formData?: FormDataContext; missingItems?: ProofRequestMissingItem[]; satisfiedItems?: ProofRequestMissingItem[] }) => {
   const { byStatus, byStatusAndCategory, total } = computeCounts(items);
 
   const missingCounts = missingItems.reduce(
     (acc, item) => { acc[item.category] = (acc[item.category] || 0) + 1; return acc; },
     {} as Record<string, number>
   );
-  const missingCountsByCat = { Text: missingCounts["Text"] || 0, Symbol: missingCounts["Symbol"] || 0, Barcode: missingCounts["Barcode"] || 0, Image: missingCounts["Image"] || 0 };
+  const missingCountsByCat = { Text: missingCounts["Text"] || 0, Symbol: missingCounts["Symbol"] || 0, Barcode: missingCounts["Barcode"] || 0, DataMatrix: missingCounts["DataMatrix"] || 0, Image: missingCounts["Image"] || 0 };
   const totalMissing = missingItems.length;
+
+  const satisfiedCounts = satisfiedItems.reduce(
+    (acc, item) => { acc[item.category] = (acc[item.category] || 0) + 1; return acc; },
+    {} as Record<string, number>
+  );
+  const satisfiedCountsByCat = { Text: satisfiedCounts["Text"] || 0, Symbol: satisfiedCounts["Symbol"] || 0, Barcode: satisfiedCounts["Barcode"] || 0, DataMatrix: satisfiedCounts["DataMatrix"] || 0, Image: satisfiedCounts["Image"] || 0 };
+  const totalSatisfied = satisfiedItems.length;
 
   return (
     <div className="bg-card border border-border">
@@ -78,67 +87,96 @@ const InspectionSummary = ({ items, formData, missingItems = [] }: { items: Disc
         <span className="text-[11px] font-semibold uppercase tracking-widest text-muted-foreground">Inspection Summary</span>
       </div>
       <div className="px-4 py-3 space-y-3">
-        <div className="text-sm">
-          <span className="font-semibold text-foreground">Total Differences:</span>{" "}
-          <span className="font-mono font-bold">{total}</span>
-        </div>
+        {/* Total Differences count is only meaningful in direct comparison mode.
+            In form / proof-request mode show only requirement-based counts. */}
+        {!formData && (
+          <div className="text-sm">
+            <span className="font-semibold text-foreground">Total Differences:</span>{" "}
+            <span className="font-mono font-bold">{total}</span>
+          </div>
+        )}
 
-        {/* Status Counts Row */}
-        <div className={`grid ${formData ? 'grid-cols-5' : 'grid-cols-4'} gap-8 text-sm pb-3 border-b border-border`}>
-          {statusOrder.map((status) => {
-            const cfg = statusConfig[status];
-            const statusCount = byStatus[status];
-            return (
-              <div key={status} className="flex items-baseline gap-2">
-                <span className={`font-semibold ${cfg.textClass}`}>{status}:</span>
-                <span className={`font-mono font-bold ${cfg.textClass}`}>{statusCount}</span>
+        {formData ? (
+          <>
+            {/* Totals Row */}
+            <div className="grid grid-cols-2 gap-8 text-sm pb-3 border-b border-border">
+              <div className="flex items-baseline gap-2">
+                <span className="font-semibold text-green-600">Requirements Satisfied:</span>
+                <span className="font-mono font-bold text-green-600">{totalSatisfied}</span>
               </div>
-            );
-          })}
-          {formData && (
-            <div className="flex items-baseline gap-2">
-              <span className="font-semibold text-[#D51900]">Proof Request Missing:</span>
-              <span className="font-mono font-bold text-[#D51900]">{totalMissing}</span>
+              <div className="flex items-baseline gap-2">
+                <span className="font-semibold text-[#D51900]">Proof Request Missing:</span>
+                <span className="font-mono font-bold text-[#D51900]">{totalMissing}</span>
+              </div>
             </div>
-          )}
-        </div>
 
-        {/* Category Counts Row */}
-        <div className={`grid ${formData ? 'grid-cols-5' : 'grid-cols-4'} gap-8 text-sm pt-3`}>
-          {statusOrder.map((status) => {
-            const categoryBreakdown = byStatusAndCategory[status];
-            return (
-              <div key={`${status}-cats`} className="space-y-1">
-                {(["Text", "Symbol", "Barcode", "Image"] as Category[]).map((cat) => {
+            {/* Category breakdown */}
+            <div className="grid grid-cols-2 gap-8 text-sm pt-3">
+              <div className="space-y-1">
+                {(["Text", "Symbol", "Barcode", "DataMatrix", "Image"] as Category[]).map((cat) => {
                   const CatIcon = categoryIcons[cat] || Type;
-                  const catCount = categoryBreakdown[cat];
+                  const catCount = satisfiedCountsByCat[cat];
                   return (
-                    <div key={cat} className="flex items-center gap-2 text-sm">
-                      <CatIcon className="h-4 w-4 text-muted-foreground shrink-0" />
-                      <span className={catCount > 0 ? "text-foreground" : "text-muted-foreground"}>{cat}:</span>
-                      <span className={`font-mono font-semibold ml-auto ${catCount > 0 ? "text-foreground" : "text-muted-foreground"}`}>{catCount}</span>
+                    <div key={`satisfied-${cat}`} className="flex items-center gap-2 text-sm">
+                      <CatIcon className="h-4 w-4 text-green-600/60 shrink-0" />
+                      <span className={catCount > 0 ? "text-green-600" : "text-muted-foreground"}>{cat}:</span>
+                      <span className={`font-mono font-semibold ml-auto ${catCount > 0 ? "text-green-600" : "text-muted-foreground"}`}>{catCount}</span>
                     </div>
                   );
                 })}
               </div>
-            );
-          })}
-          {formData && (
-            <div className="space-y-1">
-              {(["Text", "Symbol", "Barcode", "Image"] as Category[]).map((cat) => {
-                const CatIcon = categoryIcons[cat];
-                const catCount = missingCountsByCat[cat];
+              <div className="space-y-1">
+                {(["Text", "Symbol", "Barcode", "DataMatrix", "Image"] as Category[]).map((cat) => {
+                  const CatIcon = categoryIcons[cat] || Type;
+                  const catCount = missingCountsByCat[cat];
+                  return (
+                    <div key={`missing-${cat}`} className="flex items-center gap-2 text-sm">
+                      <CatIcon className="h-4 w-4 text-[#D51900]/60 shrink-0" />
+                      <span className={catCount > 0 ? "text-[#D51900]" : "text-muted-foreground"}>{cat}:</span>
+                      <span className={`font-mono font-semibold ml-auto ${catCount > 0 ? "text-[#D51900]" : "text-muted-foreground"}`}>{catCount}</span>
+                    </div>
+                  );
+                })}
+              </div>
+            </div>
+          </>
+        ) : (
+          <>
+            {/* Raw diff mode: 4 status columns */}
+            <div className="grid grid-cols-4 gap-8 text-sm pb-3 border-b border-border">
+              {statusOrder.map((status) => {
+                const cfg = statusConfig[status];
+                const statusCount = byStatus[status];
                 return (
-                  <div key={`missing-${cat}`} className="flex items-center gap-2 text-sm">
-                    <CatIcon className="h-4 w-4 text-[#D51900]/60 shrink-0" />
-                    <span className={catCount > 0 ? "text-[#D51900]" : "text-muted-foreground"}>{cat}:</span>
-                    <span className={`font-mono font-semibold ml-auto ${catCount > 0 ? "text-[#D51900]" : "text-muted-foreground"}`}>{catCount}</span>
+                  <div key={status} className="flex items-baseline gap-2">
+                    <span className={`font-semibold ${cfg.textClass}`}>{status}:</span>
+                    <span className={`font-mono font-bold ${cfg.textClass}`}>{statusCount}</span>
                   </div>
                 );
               })}
             </div>
-          )}
-        </div>
+            <div className="grid grid-cols-4 gap-8 text-sm pt-3">
+              {statusOrder.map((status) => {
+                const categoryBreakdown = byStatusAndCategory[status];
+                return (
+                  <div key={`${status}-cats`} className="space-y-1">
+                    {(["Text", "Symbol", "Barcode", "DataMatrix", "Image"] as Category[]).map((cat) => {
+                      const CatIcon = categoryIcons[cat] || Type;
+                      const catCount = categoryBreakdown[cat];
+                      return (
+                        <div key={cat} className="flex items-center gap-2 text-sm">
+                          <CatIcon className="h-4 w-4 text-muted-foreground shrink-0" />
+                          <span className={catCount > 0 ? "text-foreground" : "text-muted-foreground"}>{cat}:</span>
+                          <span className={`font-mono font-semibold ml-auto ${catCount > 0 ? "text-foreground" : "text-muted-foreground"}`}>{catCount}</span>
+                        </div>
+                      );
+                    })}
+                  </div>
+                );
+              })}
+            </div>
+          </>
+        )}
       </div>
     </div>
   );
@@ -405,7 +443,7 @@ const DiscrepancyDashboard = ({ formData, passedDiscrepancies, missingItems = []
         </div>
       )}
 
-      <InspectionSummary items={displayItems} formData={formData} missingItems={missingItems} />
+      <InspectionSummary items={displayItems} formData={formData} missingItems={missingItems} satisfiedItems={satisfiedItems} />
       <div className="bg-card border border-border">
         <div className="bg-secondary/50 px-4 py-2 border-b border-border">
           <span className="text-[11px] font-semibold uppercase tracking-widest text-muted-foreground">Inspection Details</span>

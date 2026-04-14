@@ -15,6 +15,13 @@ const BarcodeIcon = () => (
     <path d="M3 5v14M7 5v14M11 5v14M15 5v14M19 5v14M5 5v14M9 5v14M13 5v14M17 5v14M21 5v14" strokeLinecap="square" />
   </svg>
 );
+const DataMatrixIcon = () => (
+  <svg className="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2}>
+    <rect x="3" y="3" width="7" height="7" /><rect x="14" y="3" width="7" height="7" />
+    <rect x="3" y="14" width="7" height="7" /><rect x="14" y="14" width="3" height="3" />
+    <rect x="18" y="18" width="3" height="3" />
+  </svg>
+);
 const ImageIcon = () => (
   <svg className="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2}>
     <rect x="3" y="3" width="18" height="18" rx="0" />
@@ -22,12 +29,18 @@ const ImageIcon = () => (
     <path d="M21 15l-5-5L5 21" strokeLinecap="square" strokeLinejoin="miter" />
   </svg>
 );
+const UnintendedIcon = () => (
+  <svg className="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2}>
+    <circle cx="12" cy="12" r="9" />
+    <path d="M12 8v4M12 16h.01" strokeLinecap="square" />
+  </svg>
+);
 
 interface SummaryData {
-  deleted:  { text: number; symbol: number; barcode: number; image: number };
-  added:    { text: number; symbol: number; barcode: number; image: number };
-  modified: { text: number; symbol: number; barcode: number; image: number };
-  misplaced:{ text: number; symbol: number; barcode: number; image: number };
+  deleted:  { text: number; symbol: number; barcode: number; datamatrix: number; image: number; other: number };
+  added:    { text: number; symbol: number; barcode: number; datamatrix: number; image: number; other: number };
+  modified: { text: number; symbol: number; barcode: number; datamatrix: number; image: number; other: number };
+  misplaced:{ text: number; symbol: number; barcode: number; datamatrix: number; image: number; other: number };
 }
 
 interface InspectionSummaryProps {
@@ -35,10 +48,10 @@ interface InspectionSummaryProps {
 }
 
 const defaultData: SummaryData = {
-  deleted:  { text: 0, symbol: 3, barcode: 0, image: 0 },
-  added:    { text: 0, symbol: 1, barcode: 0, image: 0 },
-  modified: { text: 4, symbol: 0, barcode: 0, image: 1 },
-  misplaced:{ text: 0, symbol: 0, barcode: 0, image: 0 },
+  deleted:  { text: 0, symbol: 3, barcode: 0, datamatrix: 0, image: 0, other: 0 },
+  added:    { text: 0, symbol: 1, barcode: 0, datamatrix: 0, image: 0, other: 0 },
+  modified: { text: 4, symbol: 0, barcode: 0, datamatrix: 0, image: 1, other: 0 },
+  misplaced:{ text: 0, symbol: 0, barcode: 0, datamatrix: 0, image: 0, other: 0 },
 };
 
 export function ReportInspectionSummary({ data = defaultData }: InspectionSummaryProps) {
@@ -56,19 +69,21 @@ export function ReportInspectionSummary({ data = defaultData }: InspectionSummar
   ];
 
   const elementTypes = [
-    { label: 'Text',    icon: <TextIcon />,    key: 'text'    as const },
-    { label: 'Symbol',  icon: <SymbolIcon />,  key: 'symbol'  as const },
-    { label: 'Barcode', icon: <BarcodeIcon />, key: 'barcode' as const },
-    { label: 'Image',   icon: <ImageIcon />,   key: 'image'   as const },
+    { label: 'Text',              icon: <TextIcon />,        key: 'text'       as const },
+    { label: 'Symbol',            icon: <SymbolIcon />,      key: 'symbol'     as const },
+    { label: 'Barcode',           icon: <BarcodeIcon />,     key: 'barcode'    as const },
+    { label: 'DataMatrix',        icon: <DataMatrixIcon />,  key: 'datamatrix' as const },
+    { label: 'Image',             icon: <ImageIcon />,       key: 'image'      as const },
+    { label: 'Unintended',        icon: <UnintendedIcon />,  key: 'other'      as const },
   ];
 
   return (
-    <div className="bg-white border border-gray-300 p-5">
+    <div className="bg-white border border-gray-300 p-5" style={{ pageBreakInside: 'avoid', breakInside: 'avoid' }}>
       <div className="flex items-center justify-between mb-4">
         <div className="text-[10px] uppercase tracking-wide text-gray-500 font-bold">Inspection Summary</div>
         <div className="text-sm font-bold text-gray-900">Total Differences: <span>{totalDiffs}</span></div>
       </div>
-      <div className="grid grid-cols-4 gap-8 mb-4 pb-4 border-b border-gray-200">
+      <div className="grid grid-cols-3 gap-8 mb-4 pb-4 border-b border-gray-200">
         {categories.map((cat) => (
           <div key={cat.key} className="flex items-center gap-2">
             <span className="text-sm font-semibold" style={{ color: cat.color }}>{cat.label}:</span>
@@ -76,7 +91,7 @@ export function ReportInspectionSummary({ data = defaultData }: InspectionSummar
           </div>
         ))}
       </div>
-      <div className="grid grid-cols-4 gap-8">
+      <div className="grid grid-cols-3 gap-8">
         {categories.map((cat) => (
           <div key={cat.key} className="space-y-1.5">
             {elementTypes.map((el) => (

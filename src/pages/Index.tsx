@@ -1,8 +1,8 @@
-import { useState, useEffect, useMemo } from "react";
+import { useState, useEffect, useMemo, useCallback } from "react";
 import { Download, RefreshCw, FileText, Activity, AlertCircle, Play, ScanLine, ArrowLeft } from "lucide-react";
 import { useLocation, useNavigate } from "react-router-dom";
 import Dropzone from "@/components/Dropzone";
-import VisualDiffViewer from "@/components/VisualDiffViewer";
+import VisualDiffViewer, { type RequirementBox } from "@/components/VisualDiffViewer";
 import DataTables from "@/components/DataTables";
 import ProfileDropdown from "@/components/ProfileDropdown";
 import StepIndicator from "@/components/StepIndicator";
@@ -43,6 +43,8 @@ const Index = () => {
 
   const [progress, setProgress] = useState(0);
   const [selectedResultIndex, setSelectedResultIndex] = useState(0);
+  // Tracks requirement box positions after user drags/resizes/duplicates them in VisualDiffViewer
+  const [adjustedBoxes, setAdjustedBoxes] = useState<RequirementBox[]>([]);
   const [basePreviewUrl, setBasePreviewUrl] = useState<string>("");
   const [childPreviewUrls, setChildPreviewUrls] = useState<string[]>([]);
 
@@ -152,13 +154,14 @@ const Index = () => {
   //   validatedParsedItems — parsedItems enriched with isValid flag (null in lrfOnly)
   //   missingItems         — LRF requirements the AI did NOT find
   //   satisfiedItems       — LRF requirements the AI DID find
-  const { validatedParsedItems, missingItems, satisfiedItems } = useMemo<{
+  const { validatedParsedItems, missingItems, satisfiedItems, requirementBoxes } = useMemo<{
     validatedParsedItems: any[] | undefined;
     missingItems: ProofRequestMissingItem[];
+    requirementBoxes: RequirementBox[];
     satisfiedItems: ProofRequestMissingItem[];
   }>(() => {
     if (!formData || !analysisRun) {
-      return { validatedParsedItems: undefined, missingItems: [], satisfiedItems: [] };
+      return { validatedParsedItems: undefined, missingItems: [], satisfiedItems: [], requirementBoxes: [] };
     }
 
     // ── LRF-only mode ────────────────────────────────────────────────────────
@@ -290,15 +293,15 @@ const Index = () => {
           };
         });
 
-      return { validatedParsedItems: undefined, missingItems, satisfiedItems };
+      return { validatedParsedItems: undefined, missingItems, satisfiedItems, requirementBoxes: [] };
     }
 
     // ── Full diff mode ───────────────────────────────────────────────────────
     if (apiResults.length === 0) {
-      return { validatedParsedItems: undefined, missingItems: [], satisfiedItems: [] };
+      return { validatedParsedItems: undefined, missingItems: [], satisfiedItems: [], requirementBoxes: [] };
     }
     const result = apiResults[selectedResultIndex];
-    if (!result) return { validatedParsedItems: undefined, missingItems: [], satisfiedItems: [] };
+    if (!result) return { validatedParsedItems: undefined, missingItems: [], satisfiedItems: [], requirementBoxes: [] };
 
     const parsedItems: any[] = result.parsedItems ?? [];
 
@@ -309,23 +312,23 @@ const Index = () => {
     // ("Symbols", "Barcodes", "Images") but the AI backend emits singular forms
     // ("Symbol", "Barcode", "Image"). Centralising the mapping here means adding
     // a new category to the JSON never silently breaks requirement matching.
-    const CATEGORY_LABEL_TO_AI: Record<string, "Text" | "Symbol" | "Barcode" | "Image"> = {
+    const CATEGORY_LABEL_TO_AI: Record<string, "Text" | "Symbol" | "Barcode" | "DataMatrix" | "Image"> = {
       "Text":       "Text",
       "Symbols":    "Symbol",
       "Symbol":     "Symbol",
       "Barcodes":   "Barcode",
       "Barcode":    "Barcode",
-      // DataMatrix is a barcode type — maps to "Barcode" in the API result
-      "DataMatrix": "Barcode",
-      "Datamatrix": "Barcode",
+      // DataMatrix has its own tab — keep it distinct for per-category summary counts
+      "DataMatrix": "DataMatrix",
+      "Datamatrix": "DataMatrix",
       "Images":     "Image",
       "Image":      "Image",
     };
-    const normCat = (label: string): "Text" | "Symbol" | "Barcode" | "Image" =>
-      CATEGORY_LABEL_TO_AI[label] ?? (label as "Text" | "Symbol" | "Barcode" | "Image");
+    const normCat = (label: string): "Text" | "Symbol" | "Barcode" | "DataMatrix" | "Image" =>
+      CATEGORY_LABEL_TO_AI[label] ?? (label as "Text" | "Symbol" | "Barcode" | "DataMatrix" | "Image");
 
     // Build flat requirement list from formData.changes + CATEGORIES
-    type Req = { attrId: string; label: string; category: "Text" | "Symbol" | "Barcode" | "Image"; changeType: string; expectedValue: string };
+    type Req = { attrId: string; label: string; category: "Text" | "Symbol" | "Barcode" | "DataMatrix" | "Image"; changeType: string; expectedValue: string };
     const requirements: Req[] = [];
     for (const catId of Object.keys(CATEGORIES)) {
       const cat = CATEGORIES[catId as keyof typeof CATEGORIES];
@@ -408,7 +411,7 @@ const Index = () => {
     // label-only matching (valueMatches still required — no blind first-match).
     for (const req of requirements) {
       if (reqFoundIds.has(req.attrId)) continue;
-      if (!req.expectedValue && (req.category === "Symbol" || req.category === "Barcode" || req.category === "Image")) {
+      if (!req.expectedValue && (req.category === "Symbol" || req.category === "Barcode" || req.category === "DataMatrix" || req.category === "Image")) {
         for (const pi of parsedItems) {
           if (pi.status !== req.changeType) continue;
           if (pi.category !== req.category) continue;
@@ -464,7 +467,7 @@ const Index = () => {
 
       for (const req of requirements) {
         if (reqFoundIds.has(req.attrId)) continue;
-        if (req.category !== "Barcode") continue;
+        if (req.category !== "Barcode" && req.category !== "DataMatrix") continue;
         const bcChangeType = req.changeType === "Deleted" ? "Removed" : req.changeType;
 
         // bc_1d_barcode / bc_datamatrix (barcode tab) and dm_* (datamatrix tab) narrow
@@ -513,7 +516,7 @@ const Index = () => {
         if (req.category === "Text") {
           // Show whatever the child label actually has in that field
           actualValue = childFields[req.attrId] || "—";
-        } else if (req.category === "Barcode") {
+        } else if (req.category === "Barcode" || req.category === "DataMatrix") {
           // No matching change detected — show the full 4-combination snapshot of what
           // is currently on each label so the reviewer can see the actual state.
           const baseBarcodes: any[]  = result.barcode_summary?.base?.barcode_elements  ?? [];
@@ -557,8 +560,91 @@ const Index = () => {
         actualValue: actualValueMap.get(req.attrId) || "—",
       }));
 
-    return { validatedParsedItems, missingItems, satisfiedItems };
+    // Build draggable requirement boxes for the Visual Diff Viewer.
+    // Use the AI annotation that best matches each requirement as the initial
+    // position so the user only needs a small adjustment, not a full drag.
+    const DEFAULT_W = 0.24;
+    const DEFAULT_H = 0.055;
+    const GAP       = 0.010;
+
+    const aiAnnotations: any[] = apiResults[selectedResultIndex]?.annotations ?? [];
+
+    // Simple label-similarity match: split req label into words and look for
+    // any word (>2 chars) appearing in the annotation label.
+    const usedAnnIdx = new Set<number>();
+    const findAnn = (label: string, changeType: string): any | null => {
+      const words = label.toLowerCase().split(/\s+/).filter(w => w.length > 2);
+      const ct    = changeType.toLowerCase();
+      // First pass: label word match + change type match
+      for (let i = 0; i < aiAnnotations.length; i++) {
+        if (usedAnnIdx.has(i)) continue;
+        const ann = aiAnnotations[i];
+        const al  = ann.label?.toLowerCase() ?? "";
+        const typeOk  = ann.change_type?.toLowerCase() === ct;
+        const labelOk = words.some(w => al.includes(w));
+        if (labelOk && typeOk) { usedAnnIdx.add(i); return ann; }
+      }
+      // Second pass: label only (looser match)
+      for (let i = 0; i < aiAnnotations.length; i++) {
+        if (usedAnnIdx.has(i)) continue;
+        const ann = aiAnnotations[i];
+        const al  = ann.label?.toLowerCase() ?? "";
+        if (words.some(w => al.includes(w))) { usedAnnIdx.add(i); return ann; }
+      }
+      return null;
+    };
+
+    const allReqs = [
+      ...satisfiedItems.map(i => ({ ...i, satisfied: true  as const })),
+      ...missingItems.map(i =>   ({ ...i, satisfied: false as const })),
+    ];
+
+    let fallbackIdx = 0;
+    const requirementBoxes: RequirementBox[] = allReqs.map(item => {
+      const ann = findAnn(item.label, item.expectedChange);
+      if (ann) {
+        return {
+          id:         item.id,
+          label:      item.label,
+          changeType: item.expectedChange,
+          category:   item.category,
+          satisfied:  item.satisfied,
+          x:          ann.x,
+          y:          ann.y,
+          width:      ann.width  > 0 ? ann.width  : DEFAULT_W,
+          height:     ann.height > 0 ? ann.height : DEFAULT_H,
+        };
+      }
+      // No AI annotation match — stack on left edge as fallback
+      const pos = {
+        id:         item.id,
+        label:      item.label,
+        changeType: item.expectedChange,
+        category:   item.category,
+        satisfied:  item.satisfied,
+        x:          0.01,
+        y:          0.01 + fallbackIdx * (DEFAULT_H + GAP),
+        width:      DEFAULT_W,
+        height:     DEFAULT_H,
+      };
+      fallbackIdx++;
+      return pos;
+    });
+
+    return { validatedParsedItems, missingItems, satisfiedItems, requirementBoxes };
   }, [formData, analysisRun, lrfOnly, lrfAnalysis, apiResults, selectedResultIndex]);
+
+  // Called when user duplicates a requirement box in VisualDiffViewer
+  const handleAddBox = useCallback((newBox: RequirementBox) => {
+    setAdjustedBoxes(prev => {
+      // If adjustedBoxes is empty the user hasn't moved anything yet —
+      // seed from the original requirementBoxes so positions are preserved
+      const current = prev.length > 0 ? prev : (requirementBoxes ?? []);
+      // Avoid adding the same id twice (safety guard)
+      if (current.some(b => b.id === newBox.id)) return current;
+      return [...current, newBox];
+    });
+  }, [requirementBoxes]);
 
   return (
     <div className="min-h-screen bg-[#f8f9fa] flex flex-col">
@@ -696,17 +782,30 @@ const Index = () => {
           <VisualDiffViewer
             baseImage={basePreviewUrl || undefined}
             childImage={childPreviewUrls[selectedResultIndex] || childPreviewUrls[0] || undefined}
-            annotations={analysisRun && !lrfOnly && apiResults.length > 0 ? apiResults[selectedResultIndex]?.annotations ?? [] : []}
+            annotations={
+              // In proof-request mode show only requirement boxes — not general AI annotations
+              formData
+                ? []
+                : analysisRun && !lrfOnly && apiResults.length > 0
+                  ? apiResults[selectedResultIndex]?.annotations ?? []
+                  : []
+            }
+            requirementBoxes={formData ? (adjustedBoxes.length > 0 ? adjustedBoxes : (requirementBoxes ?? [])) : []}
+            onBoxesChange={formData ? setAdjustedBoxes : undefined}
+            onAddBox={formData ? handleAddBox : undefined}
           />
 
           {/* ── Inspection Summary + Details ── */}
           <DataTables
             formData={formData}
-            discrepancies={analysisRun && apiResults.length > 0
-              ? formData
-                ? (validatedParsedItems ?? []).filter(item => item.isValid)
-                : (validatedParsedItems ?? apiResults[selectedResultIndex].parsedItems)
-              : undefined}
+            discrepancies={
+              // In form mode: never pass raw AI diffs — the dashboard shows
+              // only Requirements Satisfied / Missing derived from the form.
+              // In direct comparison mode (no form): show all AI detections.
+              !formData && analysisRun && apiResults.length > 0
+                ? (validatedParsedItems ?? apiResults[selectedResultIndex]?.parsedItems ?? [])
+                : undefined
+            }
             missingItems={missingItems}
             satisfiedItems={satisfiedItems}
           />
@@ -723,22 +822,27 @@ const Index = () => {
           )}
         </div>
         <button
-          onClick={() => navigate('/report', {
+          onClick={() => navigate('/preview', {
           state: {
             scenario: formData ? 'C' : 'A',
             formData,
             submissionId,
-            parsedItems: formData
-              ? (validatedParsedItems ?? []).filter(item => item.isValid)
-              : validatedParsedItems ?? (analysisRun && apiResults.length > 0 ? apiResults[selectedResultIndex]?.parsedItems : []) ?? [],
+            // Pass ALL validated items (valid + invalid).
+            // ReportPage splits them: isValid===true → Expected Changes, isValid===false → Unexpected Changes.
+            parsedItems: validatedParsedItems ?? (analysisRun && apiResults.length > 0 ? apiResults[selectedResultIndex]?.parsedItems : []) ?? [],
             missingItems,
             satisfiedItems,
             annotations: analysisRun && apiResults.length > 0 ? apiResults[selectedResultIndex]?.annotations ?? [] : [],
-            baseFile: baseFile[0] ?? null,
-            childFile: childFiles[selectedResultIndex] ?? null,
+            // User-adjusted requirement box positions (proof-request mode only)
+            requirementBoxes: adjustedBoxes.length > 0 ? adjustedBoxes : (requirementBoxes ?? []),
+            // Barcode pipeline results for report summary + changes made
+            barcode_summary: analysisRun && apiResults.length > 0 ? apiResults[selectedResultIndex]?.barcode_summary ?? null : null,
+            // Pass as arrays — PreviewPage unpacks [0] for display, passes single File to ReportPage
+            baseFile:  baseFile[0] ? [baseFile[0]] : [],
+            childFile: childFiles[selectedResultIndex] ? [childFiles[selectedResultIndex]] : [],
             baseFileName: baseFile[0]?.name ?? '',
             childFileName: childFiles[selectedResultIndex]?.name ?? '',
-            // Stored so the compare page can be fully restored when navigating back
+            // Stored so compare page can be fully restored when navigating back
             apiResults,
             lrfAnalysis,
           },
@@ -746,7 +850,7 @@ const Index = () => {
           className="flex items-center gap-2 bg-[#d51900] text-white px-8 py-3 text-[13px] font-bold uppercase tracking-widest hover:bg-[#b01300] transition-colors rounded-lg shadow-md"
         >
           <FileText className="w-4 h-4" />
-          Generate Report
+          Preview &amp; Report
         </button>
       </div>
     </div>
