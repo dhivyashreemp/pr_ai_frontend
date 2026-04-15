@@ -8,6 +8,7 @@ import Index from "./pages/Index";
 import Dashboard from "./pages/Dashboard";
 import FormPage from "./pages/FormPage";
 import FormSummaryPage from "./pages/FormSummaryPage";
+import PreviewPage from "./pages/PreviewPage";
 import ReportPage from "./pages/ReportPage";
 import NotFound from "./pages/NotFound";
 
@@ -34,6 +35,7 @@ const App = () => (
           <Route path="/compare" element={<Index />} />
           <Route path="/form" element={<FormPage />} />
           <Route path="/form-summary" element={<FormSummaryPage />} />
+          <Route path="/preview" element={<PreviewPage />} />
           <Route path="/report" element={<ReportPage />} />
           {/* ADD ALL CUSTOM ROUTES ABOVE THE CATCH-ALL "*" ROUTE */}
           <Route path="*" element={<NotFound />} />

@@ -32,6 +32,8 @@ interface DrawState {
   curX:   number; curY:   number;
 }
 
+type ResizeHandle = 'resize-nw' | 'resize-ne' | 'resize-se' | 'resize-sw';
+
 interface DrawableImagePanelProps {
   src: string;
   title: string;
@@ -44,12 +46,13 @@ interface DrawableImagePanelProps {
   onDrawComplete: (target: 'base' | 'new', box: { top: number; left: number; width: number; height: number }) => void;
   onDeleteBox: (id: string) => void;
   onDuplicateBox?: (source: DrawnBox | UserAnnotation, pos: { top: number; left: number; width: number; height: number }, panelTarget: 'base' | 'new') => void;
+  onAdjustAiBox?: (id: string, pos: { top: number; left: number; width: number; height: number }) => void;
 }
 
 function DrawableImagePanel({
   src, title, subtitle, target,
   aiBoxes, userBoxes, isDrawingMode, activeGroupId,
-  onDrawComplete, onDeleteBox, onDuplicateBox,
+  onDrawComplete, onDeleteBox, onDuplicateBox, onAdjustAiBox,
 }: DrawableImagePanelProps) {
   const containerRef = useRef<HTMLDivElement>(null);
   const [draw, setDraw] = useState<DrawState | null>(null);
@@ -58,6 +61,60 @@ function DrawableImagePanel({
   const [selectedBoxId, setSelectedBoxId] = useState<string | null>(null);
   const [placing, setPlacing] = useState<DrawnBox | UserAnnotation | null>(null);
   const [ghostPos, setGhostPos] = useState<{ top: number; left: number } | null>(null);
+
+  // AI box drag / resize
+  const [aiOverrides, setAiOverrides] = useState<Record<string, { top: number; left: number; width: number; height: number }>>({});
+  const [activeDrag, setActiveDrag]   = useState<{
+    type: 'move' | ResizeHandle;
+    id: string;
+    startCX: number; startCY: number;
+    orig: { top: number; left: number; width: number; height: number };
+  } | null>(null);
+  const latestDragPos = useRef<{ top: number; left: number; width: number; height: number } | null>(null);
+
+  useEffect(() => {
+    if (!activeDrag) return;
+    const onMove = (e: PointerEvent) => {
+      const rect = containerRef.current?.getBoundingClientRect();
+      if (!rect) return;
+      const dx = (e.clientX - activeDrag.startCX) / rect.width  * 100;
+      const dy = (e.clientY - activeDrag.startCY) / rect.height * 100;
+      const { top: ot, left: ol, width: ow, height: oh } = activeDrag.orig;
+      let pos: { top: number; left: number; width: number; height: number };
+      if (activeDrag.type === 'move') {
+        pos = {
+          top:    Math.max(0, Math.min(100 - oh, ot + dy)),
+          left:   Math.max(0, Math.min(100 - ow, ol + dx)),
+          width:  ow, height: oh,
+        };
+      } else {
+        let top = ot, left = ol, width = ow, height = oh;
+        if (activeDrag.type.includes('n')) { top = ot + dy; height = oh - dy; }
+        if (activeDrag.type.includes('s')) { height = oh + dy; }
+        if (activeDrag.type.includes('w')) { left = ol + dx; width  = ow - dx; }
+        if (activeDrag.type.includes('e')) { width = ow + dx; }
+        pos = {
+          top:    Math.max(0, Math.min(100 - 2, top)),
+          left:   Math.max(0, Math.min(100 - 2, left)),
+          width:  Math.max(3, Math.min(100 - Math.max(0, left), width)),
+          height: Math.max(3, Math.min(100 - Math.max(0, top),  height)),
+        };
+      }
+      latestDragPos.current = pos;
+      setAiOverrides(prev => ({ ...prev, [activeDrag.id]: pos }));
+    };
+    const onUp = () => {
+      if (latestDragPos.current) onAdjustAiBox?.(activeDrag.id, latestDragPos.current);
+      latestDragPos.current = null;
+      setActiveDrag(null);
+    };
+    window.addEventListener('pointermove', onMove);
+    window.addEventListener('pointerup',   onUp);
+    return () => {
+      window.removeEventListener('pointermove', onMove);
+      window.removeEventListener('pointerup',   onUp);
+    };
+  }, [activeDrag, onAdjustAiBox]);
 
   // Cancel placement or deselect on Escape
   useEffect(() => {
@@ -152,36 +209,81 @@ function DrawableImagePanel({
       >
         <img src={src} alt={title} className="w-full h-auto block" draggable={false} />
 
-        {/* AI / requirement boxes — selectable for duplication */}
+        {/* AI / requirement boxes — selectable, draggable, resizable */}
         {aiBoxes.map((box) => {
-          const color      = TYPE_COLORS[box.type as AnnotationType] ?? '#6b7280';
+          const eff        = { ...box, ...(aiOverrides[box.id] ?? {}) };
+          const color      = TYPE_COLORS[eff.type as AnnotationType] ?? '#6b7280';
           const isSelected = selectedBoxId === box.id;
+          const isDragging = activeDrag?.id === box.id;
           const clickable  = !isDrawingMode && !placing;
+          const HANDLES: { h: ResizeHandle; style: React.CSSProperties }[] = [
+            { h: 'resize-nw', style: { top: -5,    left: -5              } },
+            { h: 'resize-ne', style: { top: -5,    right: -5             } },
+            { h: 'resize-se', style: { bottom: -5, right: -5             } },
+            { h: 'resize-sw', style: { bottom: -5, left: -5              } },
+          ];
           return (
             <div
               key={box.id}
-              className={`absolute ${clickable ? 'cursor-pointer' : 'pointer-events-none'}`}
+              className={`absolute ${clickable ? '' : 'pointer-events-none'}`}
               style={{
-                top:    `${box.top}%`,
-                left:   `${box.left}%`,
-                width:  `${box.width}%`,
-                height: `${box.height}%`,
+                top:    `${eff.top}%`,
+                left:   `${eff.left}%`,
+                width:  `${eff.width}%`,
+                height: `${eff.height}%`,
                 border:          `2px dashed ${color}`,
                 backgroundColor: `${color}18`,
                 boxShadow:       isSelected ? `0 0 0 3px ${color}, 0 0 0 5px white` : undefined,
                 zIndex:          isSelected ? 25 : undefined,
+                cursor:          !clickable ? undefined : isDragging ? 'grabbing' : isSelected ? 'grab' : 'pointer',
+                userSelect:      'none',
               }}
-              onPointerDown={clickable ? (e) => { e.stopPropagation(); e.nativeEvent.stopImmediatePropagation(); } : undefined}
-              onClick={clickable ? (e) => { e.stopPropagation(); setSelectedBoxId(isSelected ? null : box.id); } : undefined}
+              onPointerDown={clickable ? (e) => {
+                e.stopPropagation();
+                e.nativeEvent.stopImmediatePropagation();
+                if (isSelected && !placing) {
+                  latestDragPos.current = null;
+                  setActiveDrag({ type: 'move', id: box.id, startCX: e.clientX, startCY: e.clientY,
+                    orig: { top: eff.top, left: eff.left, width: eff.width, height: eff.height } });
+                }
+              } : undefined}
+              onClick={clickable ? (e) => {
+                e.stopPropagation();
+                if (!isDragging) setSelectedBoxId(isSelected ? null : box.id);
+              } : undefined}
             >
-              <span
-                className="absolute top-0 left-0 text-white px-1 leading-tight"
-                style={{ fontSize: '7px', backgroundColor: color, transform: 'translateY(-100%)' }}
-              >
-                {box.text || box.type}
-              </span>
-              {/* Duplicate toolbar */}
-              {isSelected && (
+              {/* Label tag — hidden while dragging to reduce clutter */}
+              {!isDragging && (
+                <span
+                  className="absolute top-0 left-0 text-white px-1 leading-tight pointer-events-none"
+                  style={{ fontSize: '7px', backgroundColor: color, transform: 'translateY(-100%)', whiteSpace: 'nowrap' }}
+                >
+                  {box.text || box.type}
+                </span>
+              )}
+
+              {/* Corner resize handles */}
+              {isSelected && !isDragging && HANDLES.map(({ h, style }) => (
+                <div
+                  key={h}
+                  style={{
+                    position: 'absolute', width: 10, height: 10,
+                    background: 'white', border: `1.5px solid ${color}`,
+                    zIndex: 26, cursor: `${h.replace('resize-', '')}-resize`,
+                    ...style,
+                  }}
+                  onPointerDown={(e) => {
+                    e.stopPropagation();
+                    e.nativeEvent.stopImmediatePropagation();
+                    latestDragPos.current = null;
+                    setActiveDrag({ type: h, id: box.id, startCX: e.clientX, startCY: e.clientY,
+                      orig: { top: eff.top, left: eff.left, width: eff.width, height: eff.height } });
+                  }}
+                />
+              ))}
+
+              {/* Toolbar — Duplicate + Deselect (hidden while dragging) */}
+              {isSelected && !isDragging && (
                 <div
                   style={{
                     position: 'absolute', bottom: -28, left: '50%',
@@ -555,6 +657,13 @@ const PreviewPage = () => {
     }));
   })();
 
+  // ── AI box position adjustments (human-in-the-loop fine-tuning) ─────────
+  const [aiBoxAdjustments, setAiBoxAdjustments] = useState<Record<string, { top: number; left: number; width: number; height: number }>>({});
+
+  const handleAdjustAiBox = useCallback((id: string, pos: { top: number; left: number; width: number; height: number }) => {
+    setAiBoxAdjustments(prev => ({ ...prev, [id]: pos }));
+  }, []);
+
   // ── User-drawn annotation state ──────────────────────────────────────────
   const [userAnnotations, setUserAnnotations] = useState<UserAnnotation[]>([]);
   const [isDrawingMode,   setIsDrawingMode]   = useState(false);
@@ -693,9 +802,17 @@ const PreviewPage = () => {
       return true;
     });
 
+    // Merge human-adjusted positions back into requirementBoxes (% → 0-1 range)
+    const adjustedRequirementBoxes = (state.requirementBoxes ?? []).map((b: any, i: number) => {
+      const adj = aiBoxAdjustments[`existing-${i}`];
+      if (!adj) return b;
+      return { ...b, y: adj.top / 100, x: adj.left / 100, width: adj.width / 100, height: adj.height / 100 };
+    });
+
     navigate('/report', {
       state: {
         ...state,
+        requirementBoxes: adjustedRequirementBoxes,
         baseFile:  baseFileArr[0]  ?? null,
         childFile: childFileArr[0] ?? null,
         userAnnotationsBase,
@@ -795,6 +912,7 @@ const PreviewPage = () => {
               <p className="text-xs text-gray-500">
                 Toggle <strong>Draw Mode</strong> and click-drag to add annotations.
                 Use <strong>Add Location</strong> on any annotation to mark the same change in multiple places — they share a single report entry.
+                AI-detected boxes can be <strong>clicked to select</strong>, then <strong>dragged to reposition</strong> or resized via corner handles.
               </p>
             </div>
             <div className="flex items-center gap-3">
@@ -886,6 +1004,7 @@ const PreviewPage = () => {
                 onDrawComplete={handleDrawComplete}
                 onDeleteBox={handleDeleteBox}
                 onDuplicateBox={handleDuplicateBox}
+                onAdjustAiBox={handleAdjustAiBox}
               />
             )}
             {hasNew && (
@@ -901,6 +1020,7 @@ const PreviewPage = () => {
                 onDrawComplete={handleDrawComplete}
                 onDeleteBox={handleDeleteBox}
                 onDuplicateBox={handleDuplicateBox}
+                onAdjustAiBox={handleAdjustAiBox}
               />
             )}
             {!hasBase && !hasNew && (
