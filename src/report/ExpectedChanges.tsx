@@ -12,7 +12,7 @@ import type { ProofRequestChangeItem } from '@/data/dummyData';
 
 const STATUS_COLORS: Record<RequirementStatus, string> = {
   Match:   '#16a34a',
-  Unmatch: '#dc2626',
+  Mismatch: '#dc2626',
 };
 
 export function ExpectedChangesTable({ requirements }: { requirements: Requirement[] }) {

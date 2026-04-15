@@ -11,7 +11,7 @@ export interface DrawnBox {
   text?: string;
 }
 
-export type RequirementStatus = 'Match' | 'Unmatch';
+export type RequirementStatus = 'Match' | 'Mismatch';
 
 export interface Requirement {
   id: number;

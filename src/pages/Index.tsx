@@ -594,9 +594,10 @@ const Index = () => {
       return null;
     };
 
+    // Only satisfied requirements get a bounding box — missing ones have no
+    // confirmed location on the label, so we don't place a box for them.
     const allReqs = [
-      ...satisfiedItems.map(i => ({ ...i, satisfied: true  as const })),
-      ...missingItems.map(i =>   ({ ...i, satisfied: false as const })),
+      ...satisfiedItems.map(i => ({ ...i, satisfied: true as const })),
     ];
 
     let fallbackIdx = 0;

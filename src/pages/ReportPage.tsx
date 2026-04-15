@@ -32,7 +32,7 @@ function buildRequirements(
       description: item.label,
       expectedValue: item.expectedValue,
       actualValue:   '— NOT FOUND —',
-      status: 'Unmatch' as const,
+      status: 'Mismatch' as const,
     })),
   ];
 }
