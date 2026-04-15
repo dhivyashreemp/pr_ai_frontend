@@ -809,6 +809,13 @@ const PreviewPage = () => {
       return { ...b, y: adj.top / 100, x: adj.left / 100, width: adj.width / 100, height: adj.height / 100 };
     });
 
+    // A label is considered "changed" if the user drew any annotations on the
+    // preview page OR if form-validated requirements produced satisfied/missing
+    // results. If none of these apply the report renders the No Change template.
+    const satisfiedCount = (state.satisfiedItems?.length ?? 0);
+    const missingCount   = (state.missingItems?.length   ?? 0);
+    const hasChanges     = userAnnotationsUnique.length > 0 || satisfiedCount > 0 || missingCount > 0;
+
     navigate('/report', {
       state: {
         ...state,
@@ -818,6 +825,7 @@ const PreviewPage = () => {
         userAnnotationsBase,
         userAnnotationsNew,
         userAnnotationsUnique,
+        hasChanges,
       },
     });
   };

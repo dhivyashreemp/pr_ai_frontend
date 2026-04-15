@@ -3,7 +3,7 @@ import { useLocation } from 'react-router-dom';
 import { ThemeProvider } from '@/report/ThemeContext';
 import { ReportHeader } from '@/report/ReportHeader';
 import { MetadataRow } from '@/report/MetadataRow';
-import { FrameA, FrameB, FrameC } from '@/report/Frames';
+import { FrameA, FrameB, FrameC, FrameNoChange } from '@/report/Frames';
 import type { ReportData, Requirement, DiscrepancyCategory, DrawnBox, UnexpectedChange } from '@/report/types';
 import type { ProofRequestMissingItem } from '@/data/dummyData';
 import type { RequirementBox } from '@/components/VisualDiffViewer';
@@ -147,6 +147,11 @@ const ReportPageInner = () => {
   const initialScenario = (location.state?.scenario as 'A' | 'B' | 'C') ?? 'A';
   const [activeScenario, setActiveScenario] = useState<'A' | 'B' | 'C'>(initialScenario);
 
+  // hasChanges is set by PreviewPage based on whether the user annotated anything
+  // or form requirements produced results. Default true so existing direct
+  // navigations (bypassing PreviewPage) are unaffected.
+  const hasChanges: boolean = location.state?.hasChanges ?? true;
+
   const formData       = location.state?.formData;
   const parsedItems    = location.state?.parsedItems    ?? [];
   const missingItems   = location.state?.missingItems   ?? [];
@@ -237,20 +242,31 @@ const ReportPageInner = () => {
       />
       <MetadataRow data={reportData} />
       <div className="report-content-wrap max-w-[1600px] mx-auto px-8 py-6">
-        {activeScenario === 'A' && (
-          <FrameA data={reportData} summaryData={summaryData} />
-        )}
-        {activeScenario === 'B' && (
-          <FrameB formData={formData} />
-        )}
-        {activeScenario === 'C' && (
-          <FrameC
-            data={reportData}
-            formData={formData}
-            summaryData={summaryData}
-            satisfiedItems={satisfiedItems}
-            missingItems={missingItems}
+        {!hasChanges ? (
+          <FrameNoChange
+            labelName={childFileName || baseFileName || undefined}
+            labelUrl={childUrl || baseUrl || undefined}
+            crNumber={reportData.crNumber || undefined}
+            sku={reportData.sku || undefined}
           />
+        ) : (
+          <>
+            {activeScenario === 'A' && (
+              <FrameA data={reportData} summaryData={summaryData} />
+            )}
+            {activeScenario === 'B' && (
+              <FrameB formData={formData} />
+            )}
+            {activeScenario === 'C' && (
+              <FrameC
+                data={reportData}
+                formData={formData}
+                summaryData={summaryData}
+                satisfiedItems={satisfiedItems}
+                missingItems={missingItems}
+              />
+            )}
+          </>
         )}
       </div>
     </div>

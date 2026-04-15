@@ -3,6 +3,7 @@ import { LabelComparison } from './LabelComparison';
 import { MissingChanges } from './MissingChanges';
 import { ExpectedChanges } from './ExpectedChanges';
 import { UnexpectedChanges } from './UnexpectedChanges';
+import { useTheme } from './ThemeContext';
 import type { ReportData } from './types';
 import type { ProofRequestMissingItem } from '@/data/dummyData';
 
@@ -16,6 +17,13 @@ interface DynamicProps {
   summaryData?: any;
   satisfiedItems?: ProofRequestMissingItem[];
   missingItems?: ProofRequestMissingItem[];
+}
+
+interface NoChangeProps {
+  labelName?: string;
+  labelUrl?:  string;
+  crNumber?:  string;
+  sku?:       string;
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -122,6 +130,86 @@ export function FrameC({ data, formData, summaryData, satisfiedItems, missingIte
 
         {/* Inspection Summary */}
         <ReportInspectionSummary data={summaryData} />
+      </div>
+    </div>
+  );
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Scene No Change — Label reviewed with no changes identified
+//   Single page: confirmation banner + full label image
+// ─────────────────────────────────────────────────────────────────────────────
+export function FrameNoChange({ labelName, labelUrl, crNumber, sku }: NoChangeProps) {
+  const { theme } = useTheme();
+
+  return (
+    <div className="report-section space-y-6">
+      {/* Confirmation banner */}
+      <div className="bg-white border border-gray-300 p-5">
+        <div className="flex items-center justify-between mb-4">
+          <div className="space-y-1">
+            {(crNumber || sku) && (
+              <div className="flex items-center gap-4 text-xs text-gray-500">
+                {crNumber && <span>CR: <span className="font-bold text-gray-700">{crNumber}</span></span>}
+                {sku      && <span>SKU: <span className="font-bold text-gray-700">{sku}</span></span>}
+              </div>
+            )}
+            {labelName && (
+              <div className="text-sm font-semibold text-gray-800">{labelName}</div>
+            )}
+          </div>
+          {/* No Change badge */}
+          <div
+            className="flex items-center gap-2 px-4 py-2 border text-sm font-bold uppercase tracking-widest"
+            style={{ backgroundColor: `${theme.statusColors.added}15`, color: theme.statusColors.added, borderColor: `${theme.statusColors.added}60` }}
+          >
+            <svg className="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2.5}>
+              <path d="M20 6L9 17l-5-5" strokeLinecap="square" strokeLinejoin="miter" />
+            </svg>
+            No Change
+          </div>
+        </div>
+
+        {/* Horizontal rule with status text */}
+        <div className="flex items-center gap-3 my-4">
+          <div className="flex-1 h-px bg-gray-200" />
+          <span className="text-[10px] uppercase tracking-widest text-gray-400 font-bold">Label reviewed — no changes identified</span>
+          <div className="flex-1 h-px bg-gray-200" />
+        </div>
+
+        {/* Inspection summary row */}
+        <div className="grid grid-cols-3 gap-4 text-center">
+          {[
+            { label: 'Add',    count: 0, color: theme.statusColors.added },
+            { label: 'Remove', count: 0, color: theme.statusColors.deleted },
+            { label: 'Modify', count: 0, color: theme.statusColors.modified },
+          ].map(({ label, count, color }) => (
+            <div key={label} className="border border-gray-200 py-3">
+              <div className="text-lg font-bold" style={{ color }}>{count}</div>
+              <div className="text-[10px] uppercase tracking-wide text-gray-500">{label}</div>
+            </div>
+          ))}
+        </div>
+      </div>
+
+      {/* Label image — full width */}
+      <div className="report-label-page bg-white border border-gray-300 p-4">
+        <div className="text-[10px] uppercase tracking-wide text-gray-500 font-bold mb-3">Label</div>
+        {labelUrl ? (
+          <img
+            src={labelUrl}
+            alt={labelName ?? 'Label'}
+            className="w-full object-contain"
+            style={{ maxHeight: '600px' }}
+          />
+        ) : (
+          <div className="flex items-center justify-center h-48 bg-gray-50 border border-dashed border-gray-300 text-sm text-gray-400 italic">
+            No label image provided
+          </div>
+        )}
+        {labelName && (
+          <div className="mt-2 text-[10px] text-gray-400 text-center">{labelName}</div>
+        )}
       </div>
     </div>
   );
