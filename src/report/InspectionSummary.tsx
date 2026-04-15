@@ -63,9 +63,9 @@ export function ReportInspectionSummary({ data = defaultData }: InspectionSummar
   const totalDiffs    = totalDeleted + totalAdded + totalModified;
 
   const categories = [
-    { key: 'deleted'  as const, label: 'Remove',  color: theme.statusColors.deleted,  count: totalDeleted },
-    { key: 'added'    as const, label: 'Add',      color: theme.statusColors.added,    count: totalAdded },
-    { key: 'modified' as const, label: 'Modify',   color: theme.statusColors.modified, count: totalModified },
+    { key: 'deleted'  as const, label: 'Removed',  color: theme.statusColors.deleted,  count: totalDeleted },
+    { key: 'added'    as const, label: 'Added',     color: theme.statusColors.added,    count: totalAdded },
+    { key: 'modified' as const, label: 'Modified',  color: theme.statusColors.modified, count: totalModified },
   ];
 
   const elementTypes = [

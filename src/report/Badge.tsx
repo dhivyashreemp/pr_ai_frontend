@@ -4,10 +4,11 @@ interface BadgeProps {
   type: 'Added' | 'Deleted' | 'Modified' | 'Repositioned' | 'Misplaced' | 'Add' | 'Remove' | 'Modify';
 }
 
+// Report always uses past-tense labels — the process is complete.
 const LABEL_MAP: Record<string, string> = {
-  Added: 'Add', Add: 'Add',
-  Deleted: 'Remove', Remove: 'Remove',
-  Modified: 'Modify', Modify: 'Modify',
+  Added: 'Added',  Add: 'Added',
+  Deleted: 'Removed', Remove: 'Removed',
+  Modified: 'Modified', Modify: 'Modified',
   Repositioned: 'Repositioned',
   Misplaced: 'Misplaced',
 };
