@@ -46,20 +46,20 @@ export interface FormState {
 }
 
 export const CHANGE_TYPES = [
-  "Added",
-  "Removed",
-  "Modified",
+  "Add",
+  "Remove",
+  "Modify",
 ] as const;
 
 export const SYMBOL_CHANGE_TYPES = [
-  "Added",
-  "Deleted",
+  "Add",
+  "Remove",
 ] as const;
 
 export const IMAGE_CHANGE_TYPES = [
-  "Added",
-  "Deleted",
-  "Modified",
+  "Add",
+  "Remove",
+  "Modify",
 ] as const;
 
 export type ChangeType = typeof CHANGE_TYPES[number];

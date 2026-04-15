@@ -63,9 +63,9 @@ export function ReportInspectionSummary({ data = defaultData }: InspectionSummar
   const totalDiffs    = totalDeleted + totalAdded + totalModified;
 
   const categories = [
-    { key: 'deleted'  as const, label: 'Deleted',  color: theme.statusColors.deleted,  count: totalDeleted },
-    { key: 'added'    as const, label: 'Added',    color: theme.statusColors.added,    count: totalAdded },
-    { key: 'modified' as const, label: 'Modified', color: theme.statusColors.modified, count: totalModified },
+    { key: 'deleted'  as const, label: 'Remove',  color: theme.statusColors.deleted,  count: totalDeleted },
+    { key: 'added'    as const, label: 'Add',      color: theme.statusColors.added,    count: totalAdded },
+    { key: 'modified' as const, label: 'Modify',   color: theme.statusColors.modified, count: totalModified },
   ];
 
   const elementTypes = [
@@ -74,7 +74,7 @@ export function ReportInspectionSummary({ data = defaultData }: InspectionSummar
     { label: 'Barcode',           icon: <BarcodeIcon />,     key: 'barcode'    as const },
     { label: 'DataMatrix',        icon: <DataMatrixIcon />,  key: 'datamatrix' as const },
     { label: 'Image',             icon: <ImageIcon />,       key: 'image'      as const },
-    { label: 'Unintended',        icon: <UnintendedIcon />,  key: 'other'      as const },
+    { label: 'Additional',        icon: <UnintendedIcon />,  key: 'other'      as const },
   ];
 
   return (

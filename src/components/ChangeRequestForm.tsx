@@ -270,7 +270,7 @@ const ChangeRequestForm = () => {
           <div className="border-b border-gray-100 px-6 py-4 flex items-center justify-between bg-gray-50">
             <div>
               <h1 className="text-base font-bold text-gray-900 uppercase tracking-wider">Proofing Request Form</h1>
-              <p className="text-xs text-gray-500 mt-0.5">Define expected changes to be validated against comparator output</p>
+              <p className="text-xs text-gray-500 mt-0.5">Define required changes to be validated against comparator output</p>
             </div>
             {totalChanges > 0 && (
               <span className="inline-flex items-center gap-1.5 rounded-full bg-primary/10 border border-primary/20 px-3 py-1 text-xs font-bold text-primary uppercase tracking-wider">

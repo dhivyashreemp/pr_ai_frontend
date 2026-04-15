@@ -909,9 +909,9 @@ const VisualDiffViewer = ({
           </>
         ) : (
           <>
-            <LegendItem color="bg-status-added"     label="Added"        />
-            <LegendItem color="bg-status-deleted"   label="Deleted"      />
-            <LegendItem color="bg-status-modified"  label="Modified"     />
+            <LegendItem color="bg-status-added"     label="Add"          />
+            <LegendItem color="bg-status-deleted"   label="Remove"       />
+            <LegendItem color="bg-status-modified"  label="Modify"       />
             <LegendItem color="bg-status-misplaced" label="Repositioned" />
           </>
         )}

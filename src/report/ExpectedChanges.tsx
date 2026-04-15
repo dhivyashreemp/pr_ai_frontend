@@ -19,7 +19,7 @@ export function ExpectedChangesTable({ requirements }: { requirements: Requireme
   if (requirements.length === 0) {
     return (
       <div className="space-y-3">
-        <h4 className="text-xs font-bold uppercase tracking-wide text-gray-700">Expected Changes</h4>
+        <h4 className="text-xs font-bold uppercase tracking-wide text-gray-700">Required Changes</h4>
         <div className="border border-gray-300 px-4 py-6 text-center text-xs text-gray-400 italic bg-white">
           No expected changes recorded.
         </div>
@@ -29,7 +29,7 @@ export function ExpectedChangesTable({ requirements }: { requirements: Requireme
 
   return (
     <div className="space-y-3">
-      <h4 className="text-xs font-bold uppercase tracking-wide text-gray-700">Expected Changes</h4>
+      <h4 className="text-xs font-bold uppercase tracking-wide text-gray-700">Required Changes</h4>
       <div className="border border-gray-300 overflow-hidden">
         <table className="w-full border-collapse text-xs" style={{ tableLayout: 'fixed' }}>
           <colgroup>
@@ -130,7 +130,7 @@ function TabbedChangesTable({ items }: { items: ProofRequestChangeItem[] }) {
         <thead>
           <tr>
             <th colSpan={3} className="px-4 py-2 text-left text-xs font-semibold uppercase tracking-wide bg-[#eff6ff] border-t-4 border-t-[#3b82f6] border-b border-b-gray-300" style={{ color: '#2563eb' }}>
-              Expected Changes
+              Required Changes
             </th>
           </tr>
           <tr className="border-b border-gray-300">
@@ -199,7 +199,7 @@ export function ExpectedChanges({ formData, satisfiedItems, missingItems, requir
 
   return (
     <div className="space-y-4">
-      <h3 className="text-sm uppercase tracking-wide font-bold text-gray-700">Expected Changes</h3>
+      <h3 className="text-sm uppercase tracking-wide font-bold text-gray-700">Required Changes</h3>
 
       {/* Screen: tabbed */}
       <div className="print:hidden">

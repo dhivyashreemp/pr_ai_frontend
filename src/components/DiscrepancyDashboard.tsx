@@ -29,9 +29,9 @@ interface FormDataContext {
 type Status = "Deleted" | "Added" | "Modified" | "Repositioned";
 
 const statusConfig: Record<Status, { icon: typeof Plus; label: string; borderClass: string; textClass: string }> = {
-  Deleted: { icon: Trash2, label: "Deleted", borderClass: "border-l-status-deleted", textClass: "text-status-deleted" },
-  Added: { icon: Plus, label: "Added", borderClass: "border-l-status-added", textClass: "text-status-added" },
-  Modified: { icon: Pencil, label: "Modified", borderClass: "border-l-status-modified", textClass: "text-status-modified" },
+  Deleted: { icon: Trash2, label: "Remove", borderClass: "border-l-status-deleted", textClass: "text-status-deleted" },
+  Added: { icon: Plus, label: "Add", borderClass: "border-l-status-added", textClass: "text-status-added" },
+  Modified: { icon: Pencil, label: "Modify", borderClass: "border-l-status-modified", textClass: "text-status-modified" },
   Repositioned: { icon: ArrowRightLeft, label: "Repositioned", borderClass: "border-l-status-misplaced", textClass: "text-status-misplaced" },
 };
 

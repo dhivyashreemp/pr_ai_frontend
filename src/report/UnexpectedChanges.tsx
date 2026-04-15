@@ -10,7 +10,7 @@ export function UnexpectedChanges({ changes }: UnexpectedChangesProps) {
 
   return (
     <div className="space-y-3">
-      <h4 className="text-xs font-bold uppercase tracking-wide text-gray-700">Unexpected Changes</h4>
+      <h4 className="text-xs font-bold uppercase tracking-wide text-gray-700">Additional Changes</h4>
       <div className="border border-gray-300 overflow-hidden">
         <table className="w-full border-collapse text-xs" style={{ tableLayout: 'fixed' }}>
           <colgroup>

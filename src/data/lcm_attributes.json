@@ -61,7 +61,7 @@
           "name": "Manufacturer & distributor",
           "attributes": [
             { "id": "manufacturer_name",   "label": "Manufacturer name",          "value_type": "text",   "placeholder": "e.g. DePuy Ireland UC → DePuy Synthes" },
-            { "id": "made_in_country",     "label": "Made in country",            "value_type": "text",   "placeholder": "e.g. Ireland → UK" },
+            { "id": "made_in_country",     "label": "Country of Origin",          "value_type": "text",   "placeholder": "e.g. Ireland → UK" },
             { "id": "manufacturer_addr",   "label": "Manufacturer address",       "value_type": "text",   "placeholder": "e.g. Loughbea, Ringaskiddy → new address" },
             { "id": "distributor_name",    "label": "Distributor name",           "value_type": "text",   "placeholder": "e.g. name change" },
             { "id": "distributor_addr",    "label": "Distributor address",        "value_type": "text",   "placeholder": "e.g. address update" },

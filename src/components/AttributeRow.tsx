@@ -33,9 +33,9 @@ const AttributeRow = ({
   const isImage       = categoryId === "image";
   const isBarcode     = categoryId === "barcode";
   const isDataMatrix  = categoryId === "datamatrix";
-  const isDeleted     = changeType === "Deleted";
-  const showUpload = !isDeleted && ((isSymbol && changeType === "Added") ||
-                     (isImage && (changeType === "Added" || changeType === "Modified")));
+  const isDeleted     = changeType === "Remove";
+  const showUpload = !isDeleted && ((isSymbol && changeType === "Add") ||
+                     (isImage && (changeType === "Add" || changeType === "Modify")));
   const hideExpectedValue = isSymbol || isImage || isBarcode || isDataMatrix || isDeleted;
 
   const changeTypes = isSymbol ? SYMBOL_CHANGE_TYPES : isImage ? IMAGE_CHANGE_TYPES : CHANGE_TYPES;

@@ -29,10 +29,19 @@ const categoryColor: Record<string, string> = {
 
 const changeTypeColor: Record<string, string> = {
   Added: "bg-green-50 text-green-700 border-green-200",
+  Add: "bg-green-50 text-green-700 border-green-200",
   Removed: "bg-red-50 text-red-700 border-red-200",
+  Remove: "bg-red-50 text-red-700 border-red-200",
   Deleted: "bg-red-50 text-red-700 border-red-200",
   Modified: "bg-blue-50 text-blue-700 border-blue-200",
+  Modify: "bg-blue-50 text-blue-700 border-blue-200",
   Repositioned: "bg-amber-50 text-amber-700 border-amber-200",
+};
+
+const changeTypeLabel: Record<string, string> = {
+  Added: "Add", Add: "Add",
+  Removed: "Remove", Remove: "Remove", Deleted: "Remove",
+  Modified: "Modify", Modify: "Modify",
 };
 
 const FormSummaryPage = () => {
@@ -202,7 +211,7 @@ const FormSummaryPage = () => {
             {/* Changes table */}
             <div className="bg-white border border-gray-200 shadow-sm">
               <div className="px-5 py-3 bg-gray-50 border-b border-gray-100 flex items-center justify-between">
-                <span className="text-xs font-bold uppercase tracking-widest text-gray-600">Expected Changes</span>
+                <span className="text-xs font-bold uppercase tracking-widest text-gray-600">Required Changes</span>
                 <span className="inline-flex items-center px-2.5 py-0.5 rounded-full bg-primary/10 border border-primary/20 text-xs font-bold text-primary">
                   {parsedChanges.length} item{parsedChanges.length !== 1 ? "s" : ""}
                 </span>
@@ -234,7 +243,7 @@ const FormSummaryPage = () => {
                           </td>
                           <td className="px-4 py-2.5">
                             <span className={`inline-flex items-center px-2 py-0.5 text-[10px] font-bold uppercase tracking-wider border ${changeTypeColor[change.changeType] || "bg-gray-50 text-gray-600 border-gray-200"}`}>
-                              {change.changeType}
+                              {changeTypeLabel[change.changeType] ?? change.changeType}
                             </span>
                           </td>
                           <td className="px-4 py-2.5 text-xs text-gray-600 font-mono max-w-[180px]">
@@ -334,7 +343,7 @@ const FormSummaryPage = () => {
             <div className="bg-blue-50 border border-blue-200 px-4 py-3">
               <div className="text-[10px] font-bold uppercase tracking-widest text-blue-600 mb-1">What happens next?</div>
               <ul className="text-xs text-blue-700 space-y-1 leading-relaxed">
-                <li>• The uploaded label is analysed against the {parsedChanges.length} expected change{parsedChanges.length !== 1 ? "s" : ""}.</li>
+                <li>• The uploaded label is analysed against the {parsedChanges.length} required change{parsedChanges.length !== 1 ? "s" : ""}.</li>
                 <li>• A validation summary and inspection detail report are generated.</li>
                 <li>• You can then generate a full PDF report.</li>
               </ul>
