@@ -36,7 +36,7 @@ export function FrameA({ data, summaryData }: Pick<DynamicProps, 'data' | 'summa
   return (
     <div className="report-section space-y-6">
       {/* Page 1 — Requirements/Changes summary */}
-      <MissingChanges requirements={data?.requirements?.length ? data.requirements : undefined} />
+      <MissingChanges requirements={data?.requirements ?? []} />
 
       {/* Page 2 — Label comparison */}
       <div className="report-page-break report-label-page">
@@ -102,7 +102,7 @@ export function FrameC({ data, formData, summaryData, satisfiedItems, missingIte
   return (
     <div className="report-section space-y-6">
       {/* Page 1 — Requirements Summary */}
-      <MissingChanges requirements={data?.requirements?.length ? data.requirements : undefined} />
+      <MissingChanges requirements={data?.requirements ?? []} />
 
       {/* Page 2 — Label Comparison */}
       <div className="report-page-break report-label-page">

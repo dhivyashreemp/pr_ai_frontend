@@ -1,17 +1,19 @@
 import { Badge } from './Badge';
 import type { Requirement } from './types';
 
-const staticRequirements: Requirement[] = [
-  { id: 1, elementType: 'Text',   changeType: 'Modified', description: 'Trademark ® change to ™',                               expectedValue: '™',                             actualValue: '™',             status: 'Match' },
-  { id: 2, elementType: 'Symbol', changeType: 'Deleted',  description: 'Remove CE mark',                                         expectedValue: 'CE mark removed',                actualValue: 'CE mark removed', status: 'Match' },
-  { id: 3, elementType: 'Text',   changeType: 'Modified', description: 'All Revisions change to the next consecutive character',  expectedValue: 'Next consecutive character',     actualValue: 'Next consecutive character', status: 'Match' },
-  { id: 4, elementType: 'Symbol', changeType: 'Deleted',  description: 'Remove EC REP symbol from labels where applicable',       expectedValue: 'EC REP symbol removed',          actualValue: 'EC REP symbol removed', status: 'Match' },
-  { id: 5, elementType: 'Symbol', changeType: 'Deleted',  description: 'Remove EC REP address from labels where applicable',      expectedValue: 'EC REP address removed',         actualValue: 'EC REP address removed', status: 'Match' },
-  { id: 6, elementType: 'Symbol', changeType: 'Added',    description: 'Add MR Conditional symbol',                              expectedValue: 'MR Conditional symbol present',  actualValue: 'MR Conditional symbol present', status: 'Match' },
-];
-
 export function MissingChanges({ requirements }: { requirements?: Requirement[] }) {
-  const reqs = requirements ?? staticRequirements;
+  const reqs = requirements ?? [];
+  if (reqs.length === 0) {
+    return (
+      <div className="space-y-3">
+        <h3 className="text-sm font-bold uppercase tracking-wide text-gray-800">Requirements Summary</h3>
+        <div className="border border-gray-300 px-4 py-6 text-center text-xs text-gray-400 italic bg-white">
+          No requirements defined.
+        </div>
+      </div>
+    );
+  }
+
   return (
     <div className="space-y-3">
       <div className="flex items-center justify-between">

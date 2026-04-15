@@ -81,8 +81,13 @@ function buildSummaryData(requirements: Requirement[], unexpectedChanges: Unexpe
   const catKey: Record<string, keyof ReturnType<typeof empty>> = {
     Text: 'text', Symbol: 'symbol', Barcode: 'barcode', DataMatrix: 'datamatrix', Image: 'image',
   };
+  // Maps both legacy API values (Added/Deleted/Modified) and current form
+  // values (Add/Remove/Modify) to the same summary bucket.
   const statusKey: Record<string, keyof typeof data> = {
-    Deleted: 'deleted', Added: 'added', Modified: 'modified', Repositioned: 'misplaced',
+    Added: 'added',    Add: 'added',
+    Deleted: 'deleted', Remove: 'deleted',
+    Modified: 'modified', Modify: 'modified',
+    Repositioned: 'misplaced', Misplaced: 'misplaced',
   };
   for (const req of requirements) {
     const sk = statusKey[req.changeType];
@@ -109,7 +114,11 @@ function buildAnnotationBoxes(
   if (requirementBoxes && requirementBoxes.length > 0) {
     base = requirementBoxes.map((box, i) => {
       const ct   = (box.changeType ?? 'Modified');
-      const type = (ct === 'Added' ? 'Added' : ct === 'Deleted' ? 'Deleted' : 'Modified') as DrawnBox['type'];
+      const type = (
+        ct === 'Added'   || ct === 'Add'    ? 'Added'   :
+        ct === 'Deleted' || ct === 'Remove' ? 'Deleted' :
+        'Modified'
+      ) as DrawnBox['type'];
       return {
         id:     `req-${box.id ?? i}`,
         type,

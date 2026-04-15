@@ -13,42 +13,11 @@ function groupByChangeType(items: { changeType: ChangeType; value: string }[]) {
   return order.filter(ct => map.has(ct)).map(ct => ({ changeType: ct, values: map.get(ct)! }));
 }
 
-const staticCategories: DiscrepancyCategory[] = [
-  {
-    title: 'TEXT',
-    items: [
-      { changeType: 'Modified', value: 'Trademark has been changed to ™' },
-      { changeType: 'Modified', value: 'Manufacturing date has been changed' },
-      { changeType: 'Modified', value: 'The Revisions was changed to the next consecutive character.' },
-      { changeType: 'Modified', value: 'The e-IFU symbol has been changed to e-IFU for US/Canada only.' },
-    ],
-  },
-  {
-    title: 'SYMBOLS',
-    items: [
-      { changeType: 'Deleted', value: 'CE mark has been removed' },
-      { changeType: 'Deleted', value: 'EC REP symbol has been removed.' },
-      { changeType: 'Deleted', value: 'EC REP address has been removed.' },
-      { changeType: 'Added',   value: 'MR Conditional symbol has been added' },
-    ],
-  },
-  {
-    title: 'IMAGE',
-    items: [
-      { changeType: 'Modified', value: 'Background has been added in the size of the implant (11mm, 7)' },
-    ],
-  },
-];
-
 export function ReportDiscrepancyDetails({ categories: propCategories }: { categories?: DiscrepancyCategory[] }) {
   const { theme } = useTheme();
-  // propCategories === undefined  →  no analysis data provided, use static demo
-  // propCategories === []         →  analysis ran but found no differences
-  // propCategories has items      →  show real analysis results
-  const isDemo = propCategories === undefined;
-  const source = isDemo ? staticCategories : propCategories;
+  const source = propCategories ?? [];
 
-  if (!isDemo && source.length === 0) {
+  if (source.length === 0) {
     return (
       <div className="space-y-4">
         <h3 className="text-sm uppercase tracking-wide font-bold text-gray-700">Changes made</h3>
