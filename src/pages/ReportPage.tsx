@@ -90,6 +90,7 @@ function buildSummaryData(requirements: Requirement[], unexpectedChanges: Unexpe
     Repositioned: 'misplaced', Misplaced: 'misplaced',
   };
   for (const req of requirements) {
+    if (req.status !== 'Match') continue;   // only count verified matches
     const sk = statusKey[req.changeType];
     const ck = catKey[req.elementType];
     if (sk && ck) data[sk][ck]++;
