@@ -10,6 +10,41 @@ import type { RequirementBox } from '@/components/VisualDiffViewer';
 
 // ── helpers ───────────────────────────────────────────────────────────────────
 
+/**
+ * Derive the ACTUAL column value for a missing (Mismatch) requirement.
+ *
+ * - Text/Symbol/Image: use the detected label value directly (e.g. "Belgium", "2026-01-22").
+ * - Barcode/DataMatrix: the raw actualValue is a multi-line dump of decoded/printed data.
+ *   We extract the child (new) label's printed value for a clean single-line summary.
+ *   Falls back to "No change in the [barcode/data matrix]." when the barcode was not
+ *   updated, matching the PDF report format.
+ * - If nothing was detected ("—" or empty) → "— NOT FOUND —"
+ */
+function resolveMissingActual(item: ProofRequestMissingItem): string {
+  const raw = item.actualValue ?? '';
+  if (!raw || raw === '—') return '— NOT FOUND —';
+
+  if (item.category === 'Barcode' || item.category === 'DataMatrix') {
+    // Multi-line dump — extract the child printed value if present
+    const lines = raw.split('\n');
+    const childPrinted = lines.find(l => l.startsWith('Child printed:'));
+    if (childPrinted) {
+      const val = childPrinted.replace('Child printed:', '').trim();
+      if (val && val !== '(none)') return val;
+    }
+    const childDecoded = lines.find(l => l.startsWith('Child decoded:'));
+    if (childDecoded) {
+      const val = childDecoded.replace('Child decoded:', '').trim();
+      if (val && val !== '(none)') return val;
+    }
+    // No meaningful child value — barcode was not updated
+    const label = item.category === 'DataMatrix' ? 'data matrix' : 'barcode';
+    return `No change in the ${label}.`;
+  }
+
+  return raw;
+}
+
 function buildRequirements(
   satisfiedItems: ProofRequestMissingItem[],
   missingItems: ProofRequestMissingItem[],
@@ -31,7 +66,7 @@ function buildRequirements(
       changeType:  item.expectedChange as Requirement['changeType'],
       description: item.label,
       expectedValue: item.expectedValue,
-      actualValue:   '— NOT FOUND —',
+      actualValue:   resolveMissingActual(item),
       status: 'Mismatch' as const,
     })),
   ];
@@ -265,7 +300,7 @@ const ReportPageInner = () => {
               <FrameA data={reportData} summaryData={summaryData} />
             )}
             {activeScenario === 'B' && (
-              <FrameB formData={formData} />
+              <FrameB formData={formData} summaryData={summaryData} />
             )}
             {activeScenario === 'C' && (
               <FrameC

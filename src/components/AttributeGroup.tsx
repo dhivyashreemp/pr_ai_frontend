@@ -80,6 +80,7 @@ const AttributeGroup = ({
               expectedValue={changes[attr.id]?.expectedValue || ""}
               isEven={i % 2 === 0}
               categoryId={categoryId}
+              groupId={groupId}
               onChangeType={(v) => onChangeType(attr.id, v)}
               onExpectedValue={(v) => onExpectedValue(attr.id, v)}
               onClear={() => onClear(attr.id, false)}
@@ -97,6 +98,7 @@ const AttributeGroup = ({
               isCustom
               isEven={(attributes.length + i) % 2 === 0}
               categoryId={categoryId}
+              groupId={groupId}
               onChangeType={(v) => onChangeType(attr.id, v)}
               onExpectedValue={(v) => onExpectedValue(attr.id, v)}
               onClear={() => onClear(attr.id, true)}

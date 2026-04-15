@@ -11,6 +11,7 @@ interface AttributeRowProps {
   isCustom?: boolean;
   isEven: boolean;
   categoryId: CategoryId;
+  groupId?: string;
   onChangeType: (value: string) => void;
   onExpectedValue: (value: string) => void;
   onClear: () => void;
@@ -24,6 +25,7 @@ const AttributeRow = ({
   isCustom,
   isEven,
   categoryId,
+  groupId = '',
   onChangeType,
   onExpectedValue,
   onClear,
@@ -34,9 +36,12 @@ const AttributeRow = ({
   const isBarcode     = categoryId === "barcode";
   const isDataMatrix  = categoryId === "datamatrix";
   const isDeleted     = changeType === "Remove";
-  const showUpload = !isDeleted && ((isSymbol && changeType === "Add") ||
+  // Background & general items use a text "area/region" field instead of image upload
+  const isBackground  = groupId === 'img_background';
+  const showUpload = !isDeleted && !isBackground && ((isSymbol && changeType === "Add") ||
                      (isImage && (changeType === "Add" || changeType === "Modify")));
-  const hideExpectedValue = isSymbol || isImage || isBarcode || isDataMatrix || isDeleted;
+  const hideExpectedValue = (isSymbol || isBarcode || isDataMatrix || isDeleted) ||
+                            (isImage && !isBackground);
 
   const changeTypes = isSymbol ? SYMBOL_CHANGE_TYPES : isImage ? IMAGE_CHANGE_TYPES : CHANGE_TYPES;
   const hasDefined = changeType !== "";
@@ -89,7 +94,9 @@ const AttributeRow = ({
             {/* Expected value / Upload */}
             {!hideExpectedValue && (
               <div className="flex-1">
-                <label className="block text-xs font-medium text-muted-foreground mb-1">Expected value</label>
+                <label className="block text-xs font-medium text-muted-foreground mb-1">
+                  {isBackground ? "Area / region" : "Expected value"}
+                </label>
                 <input
                   type="text"
                   value={expectedValue}

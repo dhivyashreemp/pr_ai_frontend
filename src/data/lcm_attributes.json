@@ -330,10 +330,10 @@
           "id": "img_background",
           "name": "Background & general",
           "attributes": [
-            { "id": "bg_colour",           "label": "Background colour change",   "value_type": "text",   "placeholder": "e.g. White → Light Blue" },
-            { "id": "bg_img_change",       "label": "Background image change",    "value_type": "text",   "placeholder": "e.g. texture pattern added / removed" },
-            { "id": "bg_watermark_change", "label": "Watermark change",           "value_type": "text",   "placeholder": "e.g. SAMPLE watermark added / removed" },
-            { "id": "bg_border_change",    "label": "Border / frame change",      "value_type": "text",   "placeholder": "e.g. border colour or weight change" }
+            { "id": "bg_colour",           "label": "Background colour change",   "value_type": "text",   "placeholder": "e.g. all sizes text area, full label background" },
+            { "id": "bg_img_change",       "label": "Background image change",    "value_type": "text",   "placeholder": "e.g. header region, sizes panel, entire label" },
+            { "id": "bg_watermark_change", "label": "Watermark change",           "value_type": "text",   "placeholder": "e.g. centre of label, all text areas" },
+            { "id": "bg_border_change",    "label": "Border / frame change",      "value_type": "text",   "placeholder": "e.g. outer border, specific panel boundary" }
           ]
         }
       ]

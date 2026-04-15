@@ -811,12 +811,15 @@ const PreviewPage = () => {
 
     // A label is considered "changed" only when:
     //   • the user drew at least one annotation on the preview page, OR
-    //   • at least one proof-request requirement was actually SATISFIED (found on the label)
+    //   • at least one proof-request requirement was actually SATISFIED (found on the label), OR
+    //   • there are any requirements at all (even all-Mismatch) — these still need the full
+    //     3-page FrameC report, NOT the FrameNoChange template.
     //
-    // All-missing (no satisfied items, no annotations) means the label has no
-    // detectable changes — report renders the No Change template instead.
-    const satisfiedCount = (state.satisfiedItems?.length ?? 0);
-    const hasChanges     = userAnnotationsUnique.length > 0 || satisfiedCount > 0;
+    // Only when there are zero requirements AND zero annotations does the report
+    // render the No Change template (Scenario A with truly no detected changes).
+    const satisfiedCount  = (state.satisfiedItems?.length ?? 0);
+    const hasRequirements = (state.satisfiedItems?.length ?? 0) + (state.missingItems?.length ?? 0) > 0;
+    const hasChanges      = userAnnotationsUnique.length > 0 || satisfiedCount > 0 || hasRequirements;
 
     navigate('/report', {
       state: {

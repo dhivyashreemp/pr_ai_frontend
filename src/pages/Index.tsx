@@ -173,7 +173,13 @@ const Index = () => {
         "Images": "Image", "Image": "Image",
       };
       const normCat = (label: string) => CATEGORY_LABEL_TO_AI[label] ?? label;
-      const norm = (ct: string) => (ct === "Removed" ? "Deleted" : ct);
+      const norm = (ct: string): string => {
+        const MAP: Record<string, string> = {
+          Modify: 'Modified', Add: 'Added', Delete: 'Deleted',
+          Remove: 'Deleted',  Removed: 'Deleted',
+        };
+        return MAP[ct] ?? ct;
+      };
 
       type Req = { attrId: string; label: string; category: string; changeType: string; expectedValue: string };
       const requirements: Req[] = [];
@@ -305,8 +311,18 @@ const Index = () => {
 
     const parsedItems: any[] = result.parsedItems ?? [];
 
-    // Normalize "Removed" (form uses it) → "Deleted" (AI uses it)
-    const norm = (ct: string) => (ct === "Removed" ? "Deleted" : ct);
+    // Normalize present-tense form values → past-tense API values used throughout
+    // matching logic (Pass 1–4) and barcode_summary change_type comparisons.
+    const norm = (ct: string): string => {
+      const MAP: Record<string, string> = {
+        Modify:  'Modified',
+        Add:     'Added',
+        Delete:  'Deleted',
+        Remove:  'Deleted',
+        Removed: 'Deleted',
+      };
+      return MAP[ct] ?? ct;
+    };
 
     // Normalize category labels: lcm_attributes.json uses plural display labels
     // ("Symbols", "Barcodes", "Images") but the AI backend emits singular forms

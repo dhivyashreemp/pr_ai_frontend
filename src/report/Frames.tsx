@@ -53,9 +53,7 @@ export function FrameA({ data, summaryData }: Pick<DynamicProps, 'data' | 'summa
       {/* Page 3 — Report Details */}
       <div className="report-page-break space-y-6">
         <ExpectedChanges requirements={data?.requirements} />
-        {data?.unexpectedChanges && data.unexpectedChanges.length > 0 && (
-          <UnexpectedChanges changes={data.unexpectedChanges} />
-        )}
+        <UnexpectedChanges changes={data?.unexpectedChanges ?? []} />
         <ReportInspectionSummary data={summaryData} />
       </div>
     </div>
@@ -69,7 +67,7 @@ export function FrameA({ data, summaryData }: Pick<DynamicProps, 'data' | 'summa
 //   Page 3: Master label
 //   Page 4: Inspection Summary
 // ─────────────────────────────────────────────────────────────────────────────
-export function FrameB({ formData }: { formData?: FormData }) {
+export function FrameB({ formData, summaryData }: { formData?: FormData; summaryData?: any }) {
   return (
     <div className="report-section space-y-6">
       <MissingChanges />
@@ -83,7 +81,7 @@ export function FrameB({ formData }: { formData?: FormData }) {
       </div>
 
       <div className="report-page-break space-y-6">
-        <ReportInspectionSummary />
+        <ReportInspectionSummary data={summaryData} />
       </div>
     </div>
   );
@@ -123,10 +121,8 @@ export function FrameC({ data, formData, summaryData, satisfiedItems, missingIte
         {/* Expected Changes — unified 7-column table */}
         <ExpectedChanges requirements={data?.requirements} />
 
-        {/* Unexpected Changes — AI-detected items not in requirements */}
-        {data?.unexpectedChanges && data.unexpectedChanges.length > 0 && (
-          <UnexpectedChanges changes={data.unexpectedChanges} />
-        )}
+        {/* Unexpected Changes — always visible; shows placeholder when none found */}
+        <UnexpectedChanges changes={data?.unexpectedChanges ?? []} />
 
         {/* Inspection Summary */}
         <ReportInspectionSummary data={summaryData} />

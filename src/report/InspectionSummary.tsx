@@ -47,10 +47,12 @@ interface InspectionSummaryProps {
   data?: SummaryData;
 }
 
+// All-zero baseline — no analysis data means no differences to report.
+// FrameC/FrameA always pass computed summaryData; this only applies to FrameB (form-only, no AI).
 const defaultData: SummaryData = {
-  deleted:  { text: 0, symbol: 3, barcode: 0, datamatrix: 0, image: 0, other: 0 },
-  added:    { text: 0, symbol: 1, barcode: 0, datamatrix: 0, image: 0, other: 0 },
-  modified: { text: 4, symbol: 0, barcode: 0, datamatrix: 0, image: 1, other: 0 },
+  deleted:  { text: 0, symbol: 0, barcode: 0, datamatrix: 0, image: 0, other: 0 },
+  added:    { text: 0, symbol: 0, barcode: 0, datamatrix: 0, image: 0, other: 0 },
+  modified: { text: 0, symbol: 0, barcode: 0, datamatrix: 0, image: 0, other: 0 },
   misplaced:{ text: 0, symbol: 0, barcode: 0, datamatrix: 0, image: 0, other: 0 },
 };
 

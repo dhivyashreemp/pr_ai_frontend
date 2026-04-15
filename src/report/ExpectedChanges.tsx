@@ -19,7 +19,7 @@ export function ExpectedChangesTable({ requirements }: { requirements: Requireme
   if (requirements.length === 0) {
     return (
       <div className="space-y-3">
-        <h4 className="text-xs font-bold uppercase tracking-wide text-gray-700">Required Changes</h4>
+        <h4 className="text-xs font-bold uppercase tracking-wide text-gray-700">Expected Changes</h4>
         <div className="border border-gray-300 px-4 py-6 text-center text-xs text-gray-400 italic bg-white">
           No expected changes recorded.
         </div>
@@ -29,7 +29,7 @@ export function ExpectedChangesTable({ requirements }: { requirements: Requireme
 
   return (
     <div className="space-y-3">
-      <h4 className="text-xs font-bold uppercase tracking-wide text-gray-700">Required Changes</h4>
+      <h4 className="text-xs font-bold uppercase tracking-wide text-gray-700">Expected Changes</h4>
       <div className="border border-gray-300 overflow-hidden">
         <table className="w-full border-collapse text-xs" style={{ tableLayout: 'fixed' }}>
           <colgroup>

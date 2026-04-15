@@ -59,11 +59,13 @@ function LabelBox({
   title,
   subtitle,
   drawnBoxes,
+  showNoChangesBadge,
 }: {
   src: string;
   title: string;
   subtitle?: string;
   drawnBoxes?: DrawnBox[];
+  showNoChangesBadge?: boolean;
 }) {
   const { theme } = useTheme();
   const typeColorMap: Record<DrawnBox['type'], string> = {
@@ -76,9 +78,22 @@ function LabelBox({
   return (
     <div className="bg-white border border-gray-300" style={{ pageBreakInside: 'avoid', breakInside: 'avoid' }}>
       {/* Section header */}
-      <div className="border-b border-gray-300 px-4 py-2.5">
-        <div className="text-[11px] font-bold uppercase tracking-wide text-gray-700">{title}</div>
-        {subtitle && <div className="text-[10px] text-gray-400 mt-0.5">{subtitle}</div>}
+      <div className="border-b border-gray-300 px-4 py-2.5 flex items-start justify-between">
+        <div>
+          <div className="text-[11px] font-bold uppercase tracking-wide text-gray-700">{title}</div>
+          {subtitle && <div className="text-[10px] text-gray-400 mt-0.5">{subtitle}</div>}
+        </div>
+        {showNoChangesBadge && (
+          <div
+            className="flex items-center gap-1.5 text-[11px] font-semibold"
+            style={{ color: theme.statusColors.added }}
+          >
+            <svg className="w-3.5 h-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2.5}>
+              <path d="M20 6L9 17l-5-5" strokeLinecap="square" strokeLinejoin="miter" />
+            </svg>
+            No Changes
+          </div>
+        )}
       </div>
 
       {/* Image with bounding boxes */}
@@ -101,8 +116,8 @@ function LabelBox({
                   left:   `${box.left}%`,
                   width:  `${box.width}%`,
                   height: `${box.height}%`,
-                  border: `2px solid ${color}`,
-                  backgroundColor: `${color}1a`,
+                  border: `1px solid ${color}80`,
+                  backgroundColor: `${color}12`,
                 }}
               />
             );
@@ -154,6 +169,7 @@ export function LabelComparison({
             title="New Version"
             subtitle={newSubtitle}
             drawnBoxes={resolvedNewBoxes}
+            showNoChangesBadge={!isDemoMode && resolvedNewBoxes.length === 0}
           />
         </div>
       ) : (
@@ -162,6 +178,7 @@ export function LabelComparison({
           title="New Version"
           subtitle={newSubtitle}
           drawnBoxes={resolvedNewBoxes}
+          showNoChangesBadge={!isDemoMode && resolvedNewBoxes.length === 0}
         />
       )}
     </div>
