@@ -12,6 +12,7 @@ import {
   ChevronRight,
   X,
   CheckCircle2,
+  AlertCircle,
 } from "lucide-react";
 import { useState } from "react";
 import { type DiscrepancyItem, type ProofRequestMissingItem } from "@/data/dummyData";
@@ -385,6 +386,32 @@ const StatusGroup = ({ status, items, showValidity }: { status: Status; items: D
   );
 };
 
+// Unexpected Changes group — detected by AI but not requested in LRF
+const UnexpectedChangesGroup = ({ items }: { items: DiscrepancyItem[] }) => {
+  const [open, setOpen] = useState(true);
+  if (items.length === 0) return null;
+  return (
+    <div>
+      <button
+        onClick={() => setOpen(!open)}
+        className="w-full flex items-center gap-2 py-1.5 hover:bg-orange-50/40 transition-colors"
+      >
+        {open ? <ChevronDown className="h-3.5 w-3.5 text-muted-foreground" /> : <ChevronRight className="h-3.5 w-3.5 text-muted-foreground" />}
+        <AlertCircle className="h-3.5 w-3.5 text-orange-500" />
+        <span className="text-xs font-semibold uppercase tracking-wider text-orange-600">Unexpected Changes</span>
+        <span className="text-xs text-muted-foreground font-mono">({items.length})</span>
+      </button>
+      {open && (
+        <div className="ml-1 space-y-0.5 mt-0.5 mb-3">
+          {items.map((item) => (
+            <DiscrepancyRow key={item.id} item={item} status={item.status as Status} showValidity={true} />
+          ))}
+        </div>
+      )}
+    </div>
+  );
+};
+
 const DiscrepancyDashboard = ({ formData, passedDiscrepancies, missingItems = [], satisfiedItems = [] }: { formData?: FormDataContext, passedDiscrepancies?: DiscrepancyItem[], missingItems?: ProofRequestMissingItem[], satisfiedItems?: ProofRequestMissingItem[] }) => {
   const [isModalOpen, setIsModalOpen] = useState(false);
   const grouped: Record<Status, DiscrepancyItem[]> = { Deleted: [], Added: [], Modified: [], Repositioned: [] };
@@ -453,6 +480,7 @@ const DiscrepancyDashboard = ({ formData, passedDiscrepancies, missingItems = []
             <div className="py-2 first:pt-0">
               <ProofRequestSatisfiedGroup items={satisfiedItems} />
               <ProofRequestMissingGroup items={missingItems} />
+              <UnexpectedChangesGroup items={displayItems.filter((item) => item.isValid === false)} />
             </div>
           )}
           {/* In proof-request mode the satisfied/missing groups already cover all

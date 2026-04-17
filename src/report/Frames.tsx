@@ -17,6 +17,7 @@ interface DynamicProps {
   summaryData?: any;
   satisfiedItems?: ProofRequestMissingItem[];
   missingItems?: ProofRequestMissingItem[];
+  onDiscardUnexpected?: (id: string | number) => void;
 }
 
 interface NoChangeProps {
@@ -32,7 +33,7 @@ interface NoChangeProps {
 //   Page 2: Label Comparison
 //   Page 3: Unexpected Changes + Inspection Summary
 // ─────────────────────────────────────────────────────────────────────────────
-export function FrameA({ data, summaryData }: Pick<DynamicProps, 'data' | 'summaryData'>) {
+export function FrameA({ data, summaryData, onDiscardUnexpected }: Pick<DynamicProps, 'data' | 'summaryData' | 'onDiscardUnexpected'>) {
   return (
     <div className="report-section space-y-6">
       {/* Page 1 — Requirements/Changes summary */}
@@ -53,7 +54,7 @@ export function FrameA({ data, summaryData }: Pick<DynamicProps, 'data' | 'summa
       {/* Page 3 — Report Details */}
       <div className="report-page-break space-y-6">
         <ExpectedChanges requirements={data?.requirements} />
-        <UnexpectedChanges changes={data?.unexpectedChanges ?? []} />
+        <UnexpectedChanges changes={data?.unexpectedChanges ?? []} onDiscard={onDiscardUnexpected} />
         <ReportInspectionSummary data={summaryData} />
       </div>
     </div>
@@ -96,7 +97,7 @@ export function FrameB({ formData, summaryData }: { formData?: FormData; summary
 //             — Unexpected Changes (4-col, AI-detected items outside requirements)
 //             — Inspection Summary
 // ─────────────────────────────────────────────────────────────────────────────
-export function FrameC({ data, formData, summaryData, satisfiedItems, missingItems }: DynamicProps) {
+export function FrameC({ data, formData, summaryData, satisfiedItems, missingItems, onDiscardUnexpected }: DynamicProps) {
   return (
     <div className="report-section space-y-6">
       {/* Page 1 — Requirements Summary */}
@@ -122,7 +123,7 @@ export function FrameC({ data, formData, summaryData, satisfiedItems, missingIte
         <ExpectedChanges requirements={data?.requirements} />
 
         {/* Unexpected Changes — always visible; shows placeholder when none found */}
-        <UnexpectedChanges changes={data?.unexpectedChanges ?? []} />
+        <UnexpectedChanges changes={data?.unexpectedChanges ?? []} onDiscard={onDiscardUnexpected} />
 
         {/* Inspection Summary */}
         <ReportInspectionSummary data={summaryData} />
@@ -192,12 +193,21 @@ export function FrameNoChange({ labelName, labelUrl, crNumber, sku }: NoChangePr
       <div className="report-label-page bg-white border border-gray-300 p-4">
         <div className="text-[10px] uppercase tracking-wide text-gray-500 font-bold mb-3">Label</div>
         {labelUrl ? (
-          <img
-            src={labelUrl}
-            alt={labelName ?? 'Label'}
-            className="w-full object-contain"
-            style={{ maxHeight: '600px' }}
-          />
+          labelName?.toLowerCase().endsWith('.pdf') ? (
+            <embed
+              src={labelUrl}
+              type="application/pdf"
+              className="w-full"
+              style={{ height: '600px' }}
+            />
+          ) : (
+            <img
+              src={labelUrl}
+              alt={labelName ?? 'Label'}
+              className="w-full object-contain"
+              style={{ maxHeight: '600px' }}
+            />
+          )
         ) : (
           <div className="flex items-center justify-center h-48 bg-gray-50 border border-dashed border-gray-300 text-sm text-gray-400 italic">
             No label image provided

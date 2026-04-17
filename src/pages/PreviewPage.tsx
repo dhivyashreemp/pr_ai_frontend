@@ -11,10 +11,14 @@ import type { RequirementBox } from '@/components/VisualDiffViewer';
 // ─────────────────────────────────────────────────────────────────────────────
 
 type AnnotationType = 'Modified' | 'Added' | 'Deleted';
+type AnnotationDisposition = 'Expected' | 'Unexpected';
+type AnnotationElementType = 'Text' | 'Symbol' | 'Barcode' | 'DataMatrix' | 'Image';
 
 interface UserAnnotation extends DrawnBox {
   target:  'base' | 'new';
   groupId: string;  // boxes with the same groupId share one table row / report entry
+  elementType: AnnotationElementType;
+  disposition: AnnotationDisposition;
 }
 
 const TYPE_COLORS: Record<AnnotationType, string> = {
@@ -32,6 +36,13 @@ interface DrawState {
   curX:   number; curY:   number;
 }
 
+interface PlacementDraft {
+  startX: number;
+  startY: number;
+  currentX: number;
+  currentY: number;
+}
+
 type ResizeHandle = 'resize-nw' | 'resize-ne' | 'resize-se' | 'resize-sw';
 
 interface DrawableImagePanelProps {
@@ -45,6 +56,7 @@ interface DrawableImagePanelProps {
   activeGroupId: string | null;   // if set, drawing adds to this group
   onDrawComplete: (target: 'base' | 'new', box: { top: number; left: number; width: number; height: number }) => void;
   onDeleteBox: (id: string) => void;
+  onDeleteAiBox?: (id: string) => void;
   onDuplicateBox?: (source: DrawnBox | UserAnnotation, pos: { top: number; left: number; width: number; height: number }, panelTarget: 'base' | 'new') => void;
   onAdjustAiBox?: (id: string, pos: { top: number; left: number; width: number; height: number }) => void;
 }
@@ -52,7 +64,7 @@ interface DrawableImagePanelProps {
 function DrawableImagePanel({
   src, title, subtitle, target,
   aiBoxes, userBoxes, isDrawingMode, activeGroupId,
-  onDrawComplete, onDeleteBox, onDuplicateBox, onAdjustAiBox,
+  onDrawComplete, onDeleteBox, onDeleteAiBox, onDuplicateBox, onAdjustAiBox,
 }: DrawableImagePanelProps) {
   const containerRef = useRef<HTMLDivElement>(null);
   const [draw, setDraw] = useState<DrawState | null>(null);
@@ -60,7 +72,8 @@ function DrawableImagePanel({
   // Duplicate / selection state
   const [selectedBoxId, setSelectedBoxId] = useState<string | null>(null);
   const [placing, setPlacing] = useState<DrawnBox | UserAnnotation | null>(null);
-  const [ghostPos, setGhostPos] = useState<{ top: number; left: number } | null>(null);
+  const [ghostBox, setGhostBox] = useState<{ top: number; left: number; width: number; height: number } | null>(null);
+  const [placementDraft, setPlacementDraft] = useState<PlacementDraft | null>(null);
 
   // AI box drag / resize
   const [aiOverrides, setAiOverrides] = useState<Record<string, { top: number; left: number; width: number; height: number }>>({});
@@ -106,6 +119,7 @@ function DrawableImagePanel({
     const onUp = () => {
       if (latestDragPos.current) onAdjustAiBox?.(activeDrag.id, latestDragPos.current);
       latestDragPos.current = null;
+      setSelectedBoxId(activeDrag.id);
       setActiveDrag(null);
     };
     window.addEventListener('pointermove', onMove);
@@ -120,7 +134,7 @@ function DrawableImagePanel({
   useEffect(() => {
     const handler = (e: KeyboardEvent) => {
       if (e.key !== 'Escape') return;
-      if (placing) { setPlacing(null); setGhostPos(null); }
+      if (placing) { setPlacing(null); setGhostBox(null); setPlacementDraft(null); }
       else         { setSelectedBoxId(null); }
     };
     window.addEventListener('keydown', handler);
@@ -135,6 +149,35 @@ function DrawableImagePanel({
       y: Math.max(0, Math.min(100, (clientY - rect.top)   / rect.height * 100)),
     };
   };
+
+  const clampPlacement = useCallback((left: number, top: number, width: number, height: number) => ({
+    left: Math.max(0, Math.min(100 - width, left)),
+    top:  Math.max(0, Math.min(100 - height, top)),
+    width,
+    height,
+  }), []);
+
+  const buildPlacementBox = useCallback((draft: PlacementDraft, source: DrawnBox | UserAnnotation) => {
+    const dx = draft.currentX - draft.startX;
+    const dy = draft.currentY - draft.startY;
+    const moved = Math.abs(dx) > 0.8 || Math.abs(dy) > 0.8;
+
+    if (!moved) {
+      return clampPlacement(
+        draft.currentX - source.width / 2,
+        draft.currentY - source.height / 2,
+        source.width,
+        source.height,
+      );
+    }
+
+    return clampPlacement(
+      Math.min(draft.startX, draft.currentX),
+      Math.min(draft.startY, draft.currentY),
+      Math.max(3, Math.abs(dx)),
+      Math.max(3, Math.abs(dy)),
+    );
+  }, [clampPlacement]);
 
   const handlePointerDown = (e: React.PointerEvent<HTMLDivElement>) => {
     if (!isDrawingMode || placing) return;
@@ -297,8 +340,14 @@ function DrawableImagePanel({
                   onClick={(e) => e.stopPropagation()}
                 >
                   <button
-                    title="Duplicate — click on the image to place a copy"
-                    onClick={(e) => { e.stopPropagation(); setPlacing(box); setSelectedBoxId(null); }}
+                    title="Duplicate — click or drag on the image to place a copy"
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      setPlacing(box);
+                      setGhostBox(null);
+                      setPlacementDraft(null);
+                      setSelectedBoxId(null);
+                    }}
                     style={{
                       display: 'flex', alignItems: 'center', gap: 3,
                       fontSize: 9, fontWeight: 700, fontFamily: 'sans-serif',
@@ -307,6 +356,18 @@ function DrawableImagePanel({
                     }}
                   >
                     <Copy style={{ width: 9, height: 9 }} /> Duplicate
+                  </button>
+                  <div style={{ width: 1, height: 12, background: '#e2e8f0' }} />
+                  <button
+                    title="Delete this AI box"
+                    onClick={(e) => { e.stopPropagation(); onDeleteAiBox?.(box.id); setSelectedBoxId(null); }}
+                    style={{
+                      display: 'flex', alignItems: 'center', color: '#ef4444',
+                      background: 'none', border: 'none', cursor: 'pointer',
+                      padding: '2px 3px', borderRadius: 3, lineHeight: 1,
+                    }}
+                  >
+                    <Trash2 style={{ width: 9, height: 9 }} />
                   </button>
                   <div style={{ width: 1, height: 12, background: '#e2e8f0' }} />
                   <button
@@ -386,8 +447,14 @@ function DrawableImagePanel({
                   onClick={(e) => e.stopPropagation()}
                 >
                   <button
-                    title="Duplicate — click on the image to place a copy"
-                    onClick={(e) => { e.stopPropagation(); setPlacing(box); setSelectedBoxId(null); }}
+                    title="Duplicate — click or drag on the image to place a copy"
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      setPlacing(box);
+                      setGhostBox(null);
+                      setPlacementDraft(null);
+                      setSelectedBoxId(null);
+                    }}
                     style={{
                       display: 'flex', alignItems: 'center', gap: 3,
                       fontSize: 9, fontWeight: 700, fontFamily: 'sans-serif',
@@ -439,30 +506,46 @@ function DrawableImagePanel({
         {placing && (
           <div
             style={{ position: 'absolute', inset: 0, cursor: 'crosshair', zIndex: 50 }}
-            onPointerDown={(e) => { e.stopPropagation(); e.preventDefault(); }}
-            onPointerUp={(e)   => { e.stopPropagation(); e.preventDefault(); }}
-            onPointerMove={(e) => {
-              const rect = containerRef.current?.getBoundingClientRect();
-              if (!rect) return;
-              const l = (e.clientX - rect.left) / rect.width  * 100;
-              const t = (e.clientY - rect.top)  / rect.height * 100;
-              setGhostPos({
-                left: Math.max(0, Math.min(100 - placing.width,  l - placing.width  / 2)),
-                top:  Math.max(0, Math.min(100 - placing.height, t - placing.height / 2)),
-              });
-            }}
-            onClick={(e) => {
+            onPointerDown={(e) => {
               e.stopPropagation();
               e.preventDefault();
               const rect = containerRef.current?.getBoundingClientRect();
-              if (!rect) { setPlacing(null); setGhostPos(null); return; }
-              const l  = (e.clientX - rect.left) / rect.width  * 100;
-              const t  = (e.clientY - rect.top)  / rect.height * 100;
-              const nl = Math.max(0, Math.min(100 - placing.width,  l - placing.width  / 2));
-              const nt = Math.max(0, Math.min(100 - placing.height, t - placing.height / 2));
-              onDuplicateBox?.(placing, { top: nt, left: nl, width: placing.width, height: placing.height }, target);
+              if (!rect) { setPlacing(null); setGhostBox(null); setPlacementDraft(null); return; }
+              if (e.clientX < rect.left || e.clientX > rect.right || e.clientY < rect.top || e.clientY > rect.bottom) {
+                setPlacing(null);
+                setGhostBox(null);
+                setPlacementDraft(null);
+                return;
+              }
+              e.currentTarget.setPointerCapture(e.pointerId);
+              const { x, y } = toPercent(e.clientX, e.clientY);
+              const draft = { startX: x, startY: y, currentX: x, currentY: y };
+              setPlacementDraft(draft);
+              setGhostBox(buildPlacementBox(draft, placing));
+            }}
+            onPointerUp={(e)   => {
+              e.stopPropagation();
+              e.preventDefault();
+              const rect = containerRef.current?.getBoundingClientRect();
+              if (!rect) { setPlacing(null); setGhostBox(null); setPlacementDraft(null); return; }
+              const { x, y } = toPercent(e.clientX, e.clientY);
+              const draft = placementDraft
+                ? { ...placementDraft, currentX: x, currentY: y }
+                : { startX: x, startY: y, currentX: x, currentY: y };
+              onDuplicateBox?.(placing, buildPlacementBox(draft, placing), target);
               setPlacing(null);
-              setGhostPos(null);
+              setGhostBox(null);
+              setPlacementDraft(null);
+            }}
+            onPointerMove={(e) => {
+              const rect = containerRef.current?.getBoundingClientRect();
+              if (!rect) return;
+              const { x, y } = toPercent(e.clientX, e.clientY);
+              const draft = placementDraft
+                ? { ...placementDraft, currentX: x, currentY: y }
+                : { startX: x, startY: y, currentX: x, currentY: y };
+              if (placementDraft) setPlacementDraft(draft);
+              setGhostBox(buildPlacementBox(draft, placing));
             }}
           >
             <div style={{
@@ -485,14 +568,14 @@ function DrawableImagePanel({
         )}
 
         {/* Ghost box preview */}
-        {placing && ghostPos && (
+        {placing && ghostBox && (
           <div
             style={{
               position: 'absolute',
-              top:    `${ghostPos.top}%`,
-              left:   `${ghostPos.left}%`,
-              width:  `${placing.width}%`,
-              height: `${placing.height}%`,
+              top:    `${ghostBox.top}%`,
+              left:   `${ghostBox.left}%`,
+              width:  `${ghostBox.width}%`,
+              height: `${ghostBox.height}%`,
               border:          `2px dashed ${TYPE_COLORS[placing.type as AnnotationType] ?? '#6b7280'}`,
               backgroundColor: `${TYPE_COLORS[placing.type as AnnotationType] ?? '#6b7280'}25`,
               pointerEvents:   'none',
@@ -516,13 +599,17 @@ interface PendingBox {
 
 interface AnnotationDialogProps {
   pending: PendingBox;
-  onSave:   (comment: string, type: AnnotationType) => void;
+  onSave:   (payload: { comment: string; type: AnnotationType; elementType: AnnotationElementType; disposition: AnnotationDisposition }) => void;
   onCancel: () => void;
 }
 
 function AnnotationDialog({ pending, onSave, onCancel }: AnnotationDialogProps) {
   const [comment, setComment] = useState('');
   const [type,    setType]    = useState<AnnotationType>('Modified');
+  const [elementType, setElementType] = useState<AnnotationElementType>('Text');
+  const [disposition, setDisposition] = useState<AnnotationDisposition>('Unexpected');
+
+  const ELEMENT_TYPES: AnnotationElementType[] = ['Text', 'Symbol', 'Barcode', 'DataMatrix', 'Image'];
 
   return (
     <div className="fixed inset-0 z-50 bg-black/40 flex items-center justify-center p-4">
@@ -573,8 +660,45 @@ function AnnotationDialog({ pending, onSave, onCancel }: AnnotationDialogProps) 
             />
           </div>
 
+          <div>
+            <label className="block text-xs font-semibold text-gray-600 mb-1.5 uppercase tracking-wide">
+              Element Type
+            </label>
+            <select
+              value={elementType}
+              onChange={(e) => setElementType(e.target.value as AnnotationElementType)}
+              className="w-full border border-gray-300 text-xs px-3 py-2 focus:outline-none focus:ring-1 focus:ring-blue-500 text-gray-800 bg-white"
+            >
+              {ELEMENT_TYPES.map((item) => (
+                <option key={item} value={item}>{item}</option>
+              ))}
+            </select>
+          </div>
+
+          <div>
+            <label className="block text-xs font-semibold text-gray-600 mb-1.5 uppercase tracking-wide">
+              Report Section
+            </label>
+            <div className="grid grid-cols-2 gap-2">
+              {(['Expected', 'Unexpected'] as AnnotationDisposition[]).map((item) => (
+                <button
+                  key={item}
+                  onClick={() => setDisposition(item)}
+                  className="py-2 text-xs font-semibold border transition-colors"
+                  style={
+                    disposition === item
+                      ? { backgroundColor: item === 'Expected' ? '#0f766e' : '#9a3412', color: '#fff', borderColor: item === 'Expected' ? '#0f766e' : '#9a3412' }
+                      : { backgroundColor: item === 'Expected' ? '#ccfbf1' : '#ffedd5', color: item === 'Expected' ? '#115e59' : '#9a3412', borderColor: item === 'Expected' ? '#5eead4' : '#fdba74' }
+                  }
+                >
+                  {item}
+                </button>
+              ))}
+            </div>
+          </div>
+
           <div className="bg-blue-50 border border-blue-200 px-3 py-2 text-[10px] text-blue-700">
-            <strong>Tip:</strong> After saving, use <strong>Add Location</strong> on the annotation row to place more boxes for the same change — they'll share a single report entry.
+            <strong>Tip:</strong> After saving, use <strong>Add Location</strong> on the annotation row to place more boxes for the same change — they&apos;ll share a single report entry and stay linked in the report.
           </div>
 
           <div className="text-[10px] text-gray-400">
@@ -592,7 +716,9 @@ function AnnotationDialog({ pending, onSave, onCancel }: AnnotationDialogProps) 
             Cancel
           </button>
           <button
-            onClick={() => { if (comment.trim()) onSave(comment.trim(), type); }}
+            onClick={() => {
+              if (comment.trim()) onSave({ comment: comment.trim(), type, elementType, disposition });
+            }}
             disabled={!comment.trim()}
             className="px-4 py-1.5 text-xs font-semibold text-white bg-[#D71500] hover:bg-[#b01300] disabled:opacity-40 transition-colors flex items-center gap-1.5"
           >
@@ -643,25 +769,41 @@ const PreviewPage = () => {
   // ── Build existing AI / requirement boxes for overlay ────────────────────
   const annotations:      any[]            = state.annotations     ?? [];
   const requirementBoxes: RequirementBox[] = state.requirementBoxes ?? [];
+  const [hiddenAiBoxIds, setHiddenAiBoxIds] = useState<string[]>([]);
 
-  const existingNewBoxes: DrawnBox[] = (() => {
-    const boxes = formData && requirementBoxes.length > 0 ? requirementBoxes : annotations;
-    return boxes.map((b: any, i: number) => ({
-      id:     `existing-${i}`,
-      type:   (b.change_type ?? b.changeType ?? 'Modified') as DrawnBox['type'],
-      top:    (b.y      ?? b.top    ?? 0) * (b.y !== undefined ? 100 : 1),
-      left:   (b.x      ?? b.left   ?? 0) * (b.x !== undefined ? 100 : 1),
-      width:  (b.width  ?? 0) * (b.width !== undefined && b.width <= 1 ? 100 : 1),
-      height: (b.height ?? 0) * (b.height !== undefined && b.height <= 1 ? 100 : 1),
+  const existingNewBoxes: DrawnBox[] = useMemo(() => {
+    const requirementAiBoxes = requirementBoxes.map((b: any, i: number) => ({
+      id:     `requirement-${i}`,
+      type:   (b.changeType ?? 'Modified') as DrawnBox['type'],
+      top:    (b.y ?? 0) * 100,
+      left:   (b.x ?? 0) * 100,
+      width:  (b.width ?? 0) * 100,
+      height: (b.height ?? 0) * 100,
       text:   b.label ?? b.text ?? '',
     }));
-  })();
+
+    const annotationAiBoxes = annotations.map((b: any, i: number) => ({
+      id:     `annotation-${i}`,
+      type:   (b.change_type ?? 'Modified') as DrawnBox['type'],
+      top:    (b.y ?? b.top ?? 0) * (b.y !== undefined ? 100 : 1),
+      left:   (b.x ?? b.left ?? 0) * (b.x !== undefined ? 100 : 1),
+      width:  (b.width ?? 0) * ((b.width ?? 0) <= 1 ? 100 : 1),
+      height: (b.height ?? 0) * ((b.height ?? 0) <= 1 ? 100 : 1),
+      text:   b.label ?? b.text ?? '',
+    }));
+
+    return [...requirementAiBoxes, ...annotationAiBoxes].filter(box => !hiddenAiBoxIds.includes(box.id));
+  }, [annotations, hiddenAiBoxIds, requirementBoxes]);
 
   // ── AI box position adjustments (human-in-the-loop fine-tuning) ─────────
   const [aiBoxAdjustments, setAiBoxAdjustments] = useState<Record<string, { top: number; left: number; width: number; height: number }>>({});
 
   const handleAdjustAiBox = useCallback((id: string, pos: { top: number; left: number; width: number; height: number }) => {
     setAiBoxAdjustments(prev => ({ ...prev, [id]: pos }));
+  }, []);
+
+  const handleDeleteAiBox = useCallback((id: string) => {
+    setHiddenAiBoxIds(prev => prev.includes(id) ? prev : [...prev, id]);
   }, []);
 
   // ── User-drawn annotation state ──────────────────────────────────────────
@@ -703,6 +845,8 @@ const PreviewPage = () => {
             text:    leader.text,
             target,
             groupId: activeGroupId,
+            elementType: leader.elementType,
+            disposition: leader.disposition,
           }];
         });
         // Draw mode stays on so user can keep adding locations
@@ -714,7 +858,17 @@ const PreviewPage = () => {
     [activeGroupId],
   );
 
-  const handleSaveAnnotation = (comment: string, type: AnnotationType) => {
+  const handleSaveAnnotation = ({
+    comment,
+    type,
+    elementType,
+    disposition,
+  }: {
+    comment: string;
+    type: AnnotationType;
+    elementType: AnnotationElementType;
+    disposition: AnnotationDisposition;
+  }) => {
     if (!pendingBox) return;
     const groupId = `grp-${Date.now()}`;
     const newBox: UserAnnotation = {
@@ -727,6 +881,8 @@ const PreviewPage = () => {
       text:   comment,
       target: pendingBox.target,
       groupId,
+      elementType,
+      disposition,
     };
     setUserAnnotations(prev => [...prev, newBox]);
     setPendingBox(null);
@@ -751,6 +907,8 @@ const PreviewPage = () => {
         target:  panelTarget,
         // User annotation → same group (adds location); AI box → new group
         groupId: isUserAnn ? (source as UserAnnotation).groupId : `grp-${Date.now()}`,
+        elementType: isUserAnn ? (source as UserAnnotation).elementType : 'Text',
+        disposition: isUserAnn ? (source as UserAnnotation).disposition : 'Unexpected',
       };
       setUserAnnotations(prev => [...prev, newBox]);
     },
@@ -778,6 +936,8 @@ const PreviewPage = () => {
       boxes,
       type:    boxes[0].type  as AnnotationType,
       text:    boxes[0].text  ?? '',
+      elementType: boxes[0].elementType,
+      disposition: boxes[0].disposition,
       targets: [...new Set(boxes.map(b => b.target))],
     }));
   }, [userAnnotations]);
@@ -794,20 +954,39 @@ const PreviewPage = () => {
     const userAnnotationsBase = userAnnotations.filter(a => a.target === 'base');
     const userAnnotationsNew  = userAnnotations.filter(a => a.target === 'new');
 
-    // One entry per unique group → Unexpected Changes table in report
+    // One entry per unique group → report tables
     const seen = new Set<string>();
     const userAnnotationsUnique = userAnnotations.filter(a => {
       if (seen.has(a.groupId)) return false;
       seen.add(a.groupId);
       return true;
     });
+    const userExpectedUnique = userAnnotationsUnique.filter(a => a.disposition === 'Expected');
+    const userUnexpectedUnique = userAnnotationsUnique.filter(a => a.disposition !== 'Expected');
 
     // Merge human-adjusted positions back into requirementBoxes (% → 0-1 range)
-    const adjustedRequirementBoxes = (state.requirementBoxes ?? []).map((b: any, i: number) => {
-      const adj = aiBoxAdjustments[`existing-${i}`];
-      if (!adj) return b;
-      return { ...b, y: adj.top / 100, x: adj.left / 100, width: adj.width / 100, height: adj.height / 100 };
-    });
+    const adjustedRequirementBoxes = (state.requirementBoxes ?? [])
+      .filter((_: any, i: number) => !hiddenAiBoxIds.includes(`requirement-${i}`))
+      .map((b: any, i: number) => {
+        const originalIndex = requirementBoxes.indexOf(b);
+        const adj = aiBoxAdjustments[`requirement-${originalIndex}`];
+        if (!adj) return b;
+        return { ...b, y: adj.top / 100, x: adj.left / 100, width: adj.width / 100, height: adj.height / 100 };
+      });
+
+    const adjustedAnnotations = (state.annotations ?? [])
+      .filter((_: any, i: number) => !hiddenAiBoxIds.includes(`annotation-${i}`))
+      .map((b: any, i: number) => {
+        const adj = aiBoxAdjustments[`annotation-${i}`];
+        if (!adj) return b;
+        return {
+          ...b,
+          y: adj.top / 100,
+          x: adj.left / 100,
+          width: adj.width / 100,
+          height: adj.height / 100,
+        };
+      });
 
     // A label is considered "changed" only when:
     //   • the user drew at least one annotation on the preview page, OR
@@ -824,12 +1003,15 @@ const PreviewPage = () => {
     navigate('/report', {
       state: {
         ...state,
+        annotations: adjustedAnnotations,
         requirementBoxes: adjustedRequirementBoxes,
         baseFile:  baseFileArr[0]  ?? null,
         childFile: childFileArr[0] ?? null,
         userAnnotationsBase,
         userAnnotationsNew,
         userAnnotationsUnique,
+        userExpectedUnique,
+        userUnexpectedUnique,
         hasChanges,
       },
     });
@@ -1016,6 +1198,7 @@ const PreviewPage = () => {
                 activeGroupId={activeGroupId}
                 onDrawComplete={handleDrawComplete}
                 onDeleteBox={handleDeleteBox}
+                onDeleteAiBox={handleDeleteAiBox}
                 onDuplicateBox={handleDuplicateBox}
                 onAdjustAiBox={handleAdjustAiBox}
               />
@@ -1032,6 +1215,7 @@ const PreviewPage = () => {
                 activeGroupId={activeGroupId}
                 onDrawComplete={handleDrawComplete}
                 onDeleteBox={handleDeleteBox}
+                onDeleteAiBox={handleDeleteAiBox}
                 onDuplicateBox={handleDuplicateBox}
                 onAdjustAiBox={handleAdjustAiBox}
               />
@@ -1065,6 +1249,8 @@ const PreviewPage = () => {
                       <th className="px-4 py-2 text-left font-bold text-gray-600 uppercase tracking-wide text-[10px] border-r border-gray-200 w-8">#</th>
                       <th className="px-4 py-2 text-left font-bold text-gray-600 uppercase tracking-wide text-[10px] border-r border-gray-200 w-28">Type</th>
                       <th className="px-4 py-2 text-left font-bold text-gray-600 uppercase tracking-wide text-[10px] border-r border-gray-200">Comment</th>
+                      <th className="px-4 py-2 text-left font-bold text-gray-600 uppercase tracking-wide text-[10px] border-r border-gray-200 w-24">Element</th>
+                      <th className="px-4 py-2 text-left font-bold text-gray-600 uppercase tracking-wide text-[10px] border-r border-gray-200 w-28">Section</th>
                       <th className="px-4 py-2 text-left font-bold text-gray-600 uppercase tracking-wide text-[10px] border-r border-gray-200 w-24">Locations</th>
                       <th className="px-4 py-2 text-center font-bold text-gray-600 uppercase tracking-wide text-[10px] w-28">Actions</th>
                     </tr>
@@ -1090,6 +1276,16 @@ const PreviewPage = () => {
                             </span>
                           </td>
                           <td className="px-4 py-2.5 border-r border-gray-200 text-gray-800">{group.text}</td>
+                          <td className="px-4 py-2.5 border-r border-gray-200 text-gray-700">{group.elementType}</td>
+                          <td className="px-4 py-2.5 border-r border-gray-200">
+                            <span className={`inline-block px-2 py-0.5 text-[10px] font-bold border ${
+                              group.disposition === 'Expected'
+                                ? 'text-teal-700 bg-teal-50 border-teal-200'
+                                : 'text-orange-700 bg-orange-50 border-orange-200'
+                            }`}>
+                              {group.disposition}
+                            </span>
+                          </td>
                           <td className="px-4 py-2.5 border-r border-gray-200">
                             <div className="flex items-center gap-1.5">
                               <MapPin className="w-3 h-3 text-gray-400" />

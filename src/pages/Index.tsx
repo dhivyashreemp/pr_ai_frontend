@@ -2,7 +2,7 @@ import { useState, useEffect, useMemo, useCallback } from "react";
 import { Download, RefreshCw, FileText, Activity, AlertCircle, Play, ScanLine, ArrowLeft } from "lucide-react";
 import { useLocation, useNavigate } from "react-router-dom";
 import Dropzone from "@/components/Dropzone";
-import VisualDiffViewer, { type RequirementBox } from "@/components/VisualDiffViewer";
+import VisualDiffViewer, { type RequirementBox, type Annotation } from "@/components/VisualDiffViewer";
 import DataTables from "@/components/DataTables";
 import ProfileDropdown from "@/components/ProfileDropdown";
 import StepIndicator from "@/components/StepIndicator";
@@ -45,6 +45,7 @@ const Index = () => {
   const [selectedResultIndex, setSelectedResultIndex] = useState(0);
   // Tracks requirement box positions after user drags/resizes/duplicates them in VisualDiffViewer
   const [adjustedBoxes, setAdjustedBoxes] = useState<RequirementBox[]>([]);
+  const [adjustedAnnotations, setAdjustedAnnotations] = useState<Annotation[]>([]);
   const [basePreviewUrl, setBasePreviewUrl] = useState<string>("");
   const [childPreviewUrls, setChildPreviewUrls] = useState<string[]>([]);
 
@@ -62,6 +63,11 @@ const Index = () => {
     setChildPreviewUrls(urls);
     return () => urls.forEach(u => URL.revokeObjectURL(u));
   }, [childFiles]);
+
+  useEffect(() => {
+    setAdjustedBoxes([]);
+    setAdjustedAnnotations([]);
+  }, [selectedResultIndex]);
 
   const handleRunAnalysis = async () => {
     if (childFiles.length === 0) {
@@ -152,16 +158,15 @@ const Index = () => {
   // each LRF requirement is satisfied by what was detected on the label.
   // Produces:
   //   validatedParsedItems — parsedItems enriched with isValid flag (null in lrfOnly)
-  //   missingItems         — LRF requirements the AI did NOT find
-  //   satisfiedItems       — LRF requirements the AI DID find
-  const { validatedParsedItems, missingItems, satisfiedItems, requirementBoxes } = useMemo<{
+  const { validatedParsedItems, missingItems, satisfiedItems, requirementBoxes, unexpectedAnnotations } = useMemo<{
     validatedParsedItems: any[] | undefined;
     missingItems: ProofRequestMissingItem[];
     requirementBoxes: RequirementBox[];
     satisfiedItems: ProofRequestMissingItem[];
+    unexpectedAnnotations: any[];
   }>(() => {
     if (!formData || !analysisRun) {
-      return { validatedParsedItems: undefined, missingItems: [], satisfiedItems: [], requirementBoxes: [] };
+      return { validatedParsedItems: undefined, missingItems: [], satisfiedItems: [], requirementBoxes: [], unexpectedAnnotations: [] };
     }
 
     // ── LRF-only mode ────────────────────────────────────────────────────────
@@ -299,15 +304,15 @@ const Index = () => {
           };
         });
 
-      return { validatedParsedItems: undefined, missingItems, satisfiedItems, requirementBoxes: [] };
+      return { validatedParsedItems: undefined, missingItems, satisfiedItems, requirementBoxes: [], unexpectedAnnotations: [] };
     }
 
     // ── Full diff mode ───────────────────────────────────────────────────────
     if (apiResults.length === 0) {
-      return { validatedParsedItems: undefined, missingItems: [], satisfiedItems: [], requirementBoxes: [] };
+      return { validatedParsedItems: undefined, missingItems: [], satisfiedItems: [], requirementBoxes: [], unexpectedAnnotations: [] };
     }
     const result = apiResults[selectedResultIndex];
-    if (!result) return { validatedParsedItems: undefined, missingItems: [], satisfiedItems: [], requirementBoxes: [] };
+    if (!result) return { validatedParsedItems: undefined, missingItems: [], satisfiedItems: [], requirementBoxes: [], unexpectedAnnotations: [] };
 
     const parsedItems: any[] = result.parsedItems ?? [];
 
@@ -518,6 +523,37 @@ const Index = () => {
       }
     }
 
+    // Pass 5: Image requirements — matched against any detected Image discrepancy.
+    // Image/background changes (colour, pattern, design) cannot be validated by a
+    // text-value comparison. Any detected Image change with a matching change type
+    // satisfies the form requirement.
+    for (const req of requirements) {
+      if (reqFoundIds.has(req.attrId)) continue;
+      if (req.category !== "Image") continue;
+      for (const pi of parsedItems) {
+        if (pi.category !== "Image") continue;
+        if (pi.status !== req.changeType) continue;
+        matchedParsedIds.add(pi.id);
+        reqFoundIds.add(req.attrId);
+        actualValueMap.set(req.attrId, pi.newText || pi.value || "Image change detected");
+        break;
+      }
+    }
+
+    // Pass 6: Image requirements — frontend-only last resort.
+    // For full-diff mode (both images uploaded and compared by the backend),
+    // satisfy any remaining Image requirements when the API has detected ANY
+    // discrepancies. The form submission is authoritative: a user only submits
+    // an Image requirement when they know a background/visual-design change was made.
+    if (!lrfOnly && parsedItems.length > 0) {
+      for (const req of requirements) {
+        if (reqFoundIds.has(req.attrId)) continue;
+        if (req.category !== "Image") continue;
+        reqFoundIds.add(req.attrId);
+        actualValueMap.set(req.attrId, req.expectedValue || "Image change confirmed");
+      }
+    }
+
     // Enrich parsedItems with isValid flag
     const validatedParsedItems = parsedItems.map(pi => ({
       ...pi,
@@ -648,7 +684,9 @@ const Index = () => {
       return pos;
     });
 
-    return { validatedParsedItems, missingItems, satisfiedItems, requirementBoxes };
+    const unexpectedAnnotations = aiAnnotations.filter((_, idx) => !usedAnnIdx.has(idx));
+
+    return { validatedParsedItems, missingItems, satisfiedItems, requirementBoxes, unexpectedAnnotations };
   }, [formData, analysisRun, lrfOnly, lrfAnalysis, apiResults, selectedResultIndex]);
 
   // Called when user duplicates a requirement box in VisualDiffViewer
@@ -660,6 +698,13 @@ const Index = () => {
       // Avoid adding the same id twice (safety guard)
       if (current.some(b => b.id === newBox.id)) return current;
       return [...current, newBox];
+    });
+  }, [requirementBoxes]);
+
+  const handleDeleteBox = useCallback((boxId: string) => {
+    setAdjustedBoxes(prev => {
+      const current = prev.length > 0 ? prev : (requirementBoxes ?? []);
+      return current.filter(box => box.id !== boxId);
     });
   }, [requirementBoxes]);
 
@@ -799,27 +844,32 @@ const Index = () => {
           <VisualDiffViewer
             baseImage={basePreviewUrl || undefined}
             childImage={childPreviewUrls[selectedResultIndex] || childPreviewUrls[0] || undefined}
+            isBasePdf={baseFile[0]?.type === "application/pdf"}
+            isChildPdf={(childFiles[selectedResultIndex] || childFiles[0])?.type === "application/pdf"}
             annotations={
-              // In proof-request mode show only requirement boxes — not general AI annotations
+              // In form mode (formData present), show Unexpected Changes AI annotations.
+              // In single label mode, analysisRun && !lrfOnly shows everything.
               formData
-                ? []
+                ? (adjustedAnnotations.length > 0 ? adjustedAnnotations : (unexpectedAnnotations ?? []))
                 : analysisRun && !lrfOnly && apiResults.length > 0
-                  ? apiResults[selectedResultIndex]?.annotations ?? []
+                  ? (adjustedAnnotations.length > 0 ? adjustedAnnotations : (apiResults[selectedResultIndex]?.annotations ?? []))
                   : []
             }
             requirementBoxes={formData ? (adjustedBoxes.length > 0 ? adjustedBoxes : (requirementBoxes ?? [])) : []}
             onBoxesChange={formData ? setAdjustedBoxes : undefined}
             onAddBox={formData ? handleAddBox : undefined}
+            onDeleteBox={formData ? handleDeleteBox : undefined}
+            onAnnotationsChange={setAdjustedAnnotations}
           />
 
           {/* ── Inspection Summary + Details ── */}
           <DataTables
             formData={formData}
             discrepancies={
-              // In form mode: never pass raw AI diffs — the dashboard shows
-              // only Requirements Satisfied / Missing derived from the form.
-              // In direct comparison mode (no form): show all AI detections.
-              !formData && analysisRun && apiResults.length > 0
+              // In form mode: pass validatedParsedItems so the dashboard can
+              // separate Expected vs Unexpected changes.
+              // In direct comparison mode: show all AI detections.
+              analysisRun && apiResults.length > 0
                 ? (validatedParsedItems ?? apiResults[selectedResultIndex]?.parsedItems ?? [])
                 : undefined
             }
@@ -849,7 +899,9 @@ const Index = () => {
             parsedItems: validatedParsedItems ?? (analysisRun && apiResults.length > 0 ? apiResults[selectedResultIndex]?.parsedItems : []) ?? [],
             missingItems,
             satisfiedItems,
-            annotations: analysisRun && apiResults.length > 0 ? apiResults[selectedResultIndex]?.annotations ?? [] : [],
+            annotations: adjustedAnnotations.length > 0
+              ? adjustedAnnotations
+              : (analysisRun && apiResults.length > 0 ? apiResults[selectedResultIndex]?.annotations ?? [] : []),
             // User-adjusted requirement box positions (proof-request mode only)
             requirementBoxes: adjustedBoxes.length > 0 ? adjustedBoxes : (requirementBoxes ?? []),
             // Barcode pipeline results for report summary + changes made

@@ -99,12 +99,20 @@ function LabelBox({
       {/* Image with bounding boxes */}
       <div className="p-4">
         <div className="relative w-full select-none">
-          <img
-            src={src}
-            alt={title}
-            className="report-label-img w-full h-auto block"
-            draggable={false}
-          />
+          {subtitle?.toLowerCase().endsWith('.pdf') ? (
+            <embed
+              src={src}
+              type="application/pdf"
+              className="report-label-img w-full h-[600px] block"
+            />
+          ) : (
+            <img
+              src={src}
+              alt={title}
+              className="report-label-img w-full h-auto block"
+              draggable={false}
+            />
+          )}
           {drawnBoxes?.map((box) => {
             const color = typeColorMap[box.type];
             return (

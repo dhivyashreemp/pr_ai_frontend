@@ -9,6 +9,10 @@ export interface DrawnBox {
   width: number;
   height: number;
   text?: string;
+  elementType?: string;
+  disposition?: 'Expected' | 'Unexpected';
+  groupId?: string;
+  linkedRowId?: string;
 }
 
 export type RequirementStatus = 'Match' | 'Mismatch';
@@ -24,11 +28,13 @@ export interface Requirement {
 }
 
 export interface UnexpectedChange {
-  id: number;
+  id: number | string;
   elementType: string;
   changeType: string;
   /** Description of what was found / the observed difference */
   actual: string;
+  linkedBoxIds?: string[];
+  source?: 'ai' | 'reviewer';
 }
 
 export interface DiscrepancyItem {

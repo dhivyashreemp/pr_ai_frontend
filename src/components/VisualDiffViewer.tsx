@@ -1,6 +1,6 @@
 import { useRef, useCallback, useState, useEffect } from "react";
 import { TransformWrapper, TransformComponent } from "react-zoom-pan-pinch";
-import { ZoomIn, ZoomOut, RotateCcw, Move, Copy, X, Maximize2 } from "lucide-react";
+import { ZoomIn, ZoomOut, RotateCcw, Move, Copy, X, Maximize2, Trash2 } from "lucide-react";
 
 export const PLACEHOLDER_LABEL_CHILD = "/LCN-187301111_1_Rev-E.png";
 
@@ -21,7 +21,7 @@ export interface RequirementBox {
   label: string;
   changeType: string;
   category: string;
-  satisfied: boolean;
+  satisfied?: boolean;
   x: number;        // normalized 0–1 initial left
   y: number;        // normalized 0–1 initial top
   width: number;    // normalized 0–1
@@ -94,11 +94,29 @@ interface PlacingState {
   color: string;
 }
 
+const getBoxVisuals = (box: RequirementBox) => {
+  if (typeof box.satisfied === "boolean") {
+    return box.satisfied
+      ? { color: "#16a34a", bg: "rgba(22,163,74,0.10)" }
+      : { color: "#D51900", bg: "rgba(213,25,0,0.10)" };
+  }
+  const color = ANNOTATION_COLORS[box.changeType] ?? "#555";
+  return { color, bg: `${color}20` };
+};
+
+interface PlacementDraft {
+  startX: number;
+  startY: number;
+  currentX: number;
+  currentY: number;
+}
+
 const DraggableBoxOverlay = ({
   initialBoxes,
   containerRef,
   onBoxesChange,
   onAddBox,
+  onDeleteBox,
   onRequestPlacement,
   placingGhost,
 }: {
@@ -106,6 +124,7 @@ const DraggableBoxOverlay = ({
   containerRef: React.RefObject<HTMLDivElement>;
   onBoxesChange?: (boxes: RequirementBox[]) => void;
   onAddBox?: (box: RequirementBox) => void;
+  onDeleteBox?: (boxId: string) => void;
   /** Called when user clicks Duplicate — parent activates placement mode */
   onRequestPlacement?: (template: RequirementBox, color: string) => void;
   /** Ghost preview rendered while parent is in placement mode */
@@ -121,6 +140,18 @@ const DraggableBoxOverlay = ({
 
   const onBoxesChangeRef = useRef(onBoxesChange);
   onBoxesChangeRef.current = onBoxesChange;
+
+  const commitBoxes = useCallback((nextStates: BoxState[]) => {
+    onBoxesChangeRef.current?.(
+      initialBoxes.map((box, i) => ({
+        ...box,
+        x: nextStates[i]?.x ?? box.x,
+        y: nextStates[i]?.y ?? box.y,
+        width: nextStates[i]?.w ?? box.width,
+        height: nextStates[i]?.h ?? box.height,
+      }))
+    );
+  }, [initialBoxes]);
 
   const drag = useRef<{
     type: "move" | ResizeDir;
@@ -206,29 +237,28 @@ const DraggableBoxOverlay = ({
       return;
     }
 
-    setSelectedIdx(null);
-    onBoxesChangeRef.current?.(
-      initialBoxes.map((box, i) => ({
-        ...box,
-        x:      statesRef.current[i]?.x  ?? box.x,
-        y:      statesRef.current[i]?.y  ?? box.y,
-        width:  statesRef.current[i]?.w  ?? box.width,
-        height: statesRef.current[i]?.h  ?? box.height,
-      }))
-    );
+    setSelectedIdx(idx);
+    commitBoxes(statesRef.current);
   };
 
   // Notify parent to enter placement mode — parent renders the capture overlay
   const handleDuplicate = (idx: number) => {
     const box   = initialBoxes[idx];
     const s     = statesRef.current[idx];
-    const color = box.satisfied ? "#16a34a" : "#D51900";
+    const { color } = getBoxVisuals(box);
     onRequestPlacement?.({
       ...box,
       id:     `${box.id}-dup-${Date.now()}`,
       width:  s.w,
       height: s.h,
     }, color);
+    setSelectedIdx(null);
+  };
+
+  const handleDelete = (idx: number) => {
+    const boxId = initialBoxes[idx]?.id;
+    if (!boxId) return;
+    onDeleteBox?.(boxId);
     setSelectedIdx(null);
   };
 
@@ -256,8 +286,7 @@ const DraggableBoxOverlay = ({
           // states syncs via boxKey effect — guard against the one render before it fires
           const s          = states[idx] ?? { x: box.x, y: box.y, w: box.width, h: box.height };
           const isSelected = selectedIdx === idx;
-          const color      = box.satisfied ? "#16a34a" : "#D51900";
-          const bg         = box.satisfied ? "rgba(22,163,74,0.10)" : "rgba(213,25,0,0.10)";
+          const { color, bg } = getBoxVisuals(box);
           return (
             <div
               key={box.id}
@@ -336,7 +365,7 @@ const DraggableBoxOverlay = ({
                 >
                   <button
                     className="no-pan"
-                    title="Duplicate — then click on the label to place a copy there"
+                    title="Duplicate — then click or drag on the label to place a copy there"
                     onClick={(e) => { e.stopPropagation(); handleDuplicate(idx); }}
                     style={{
                       display: "flex", alignItems: "center", gap: 3,
@@ -350,6 +379,24 @@ const DraggableBoxOverlay = ({
                   >
                     <Copy style={{ width: 9, height: 9 }} />
                     Duplicate
+                  </button>
+                  <div style={{ width: 1, height: 12, background: "#e2e8f0" }} />
+                  <button
+                    className="no-pan"
+                    title="Delete this bounding box"
+                    onClick={(e) => { e.stopPropagation(); handleDelete(idx); }}
+                    style={{
+                      display: "flex", alignItems: "center", gap: 3,
+                      fontSize: 9, fontWeight: 700, fontFamily: "sans-serif",
+                      color: "#dc2626", background: "none", border: "none",
+                      cursor: "pointer", padding: "2px 4px", borderRadius: 3,
+                      lineHeight: 1,
+                    }}
+                    onMouseEnter={e => (e.currentTarget.style.background = "rgba(220,38,38,0.08)")}
+                    onMouseLeave={e => (e.currentTarget.style.background = "none")}
+                  >
+                    <Trash2 style={{ width: 9, height: 9 }} />
+                    Delete
                   </button>
                   <div style={{ width: 1, height: 12, background: "#e2e8f0" }} />
                   <button
@@ -445,38 +492,121 @@ function PlacementOverlay({
   onCancel: () => void;
   onGhostMove: (pos: { x: number; y: number } | null) => void;
 }) {
+  const [draft, setDraft] = useState<PlacementDraft | null>(null);
+
+  const getNormalizedPoint = useCallback((clientX: number, clientY: number) => {
+    const rect = wrapperRef.current?.getBoundingClientRect();
+    if (!rect) return null;
+    if (
+      clientX < rect.left || clientX > rect.right ||
+      clientY < rect.top || clientY > rect.bottom
+    ) {
+      return null;
+    }
+    return {
+      x: (clientX - rect.left) / rect.width,
+      y: (clientY - rect.top) / rect.height,
+    };
+  }, [wrapperRef]);
+
+  const clampGhost = useCallback((x: number, y: number, width: number, height: number) => ({
+    x: Math.max(0, Math.min(1 - width, x)),
+    y: Math.max(0, Math.min(1 - height, y)),
+  }), []);
+
+  const previewPlacement = useCallback((nextDraft: PlacementDraft | null) => {
+    if (!nextDraft) {
+      onGhostMove(null);
+      return;
+    }
+    const dx = nextDraft.currentX - nextDraft.startX;
+    const dy = nextDraft.currentY - nextDraft.startY;
+    const moved = Math.abs(dx) > 0.008 || Math.abs(dy) > 0.008;
+
+    if (!moved) {
+      const pos = clampGhost(
+        nextDraft.currentX - placing.template.width / 2,
+        nextDraft.currentY - placing.template.height / 2,
+        placing.template.width,
+        placing.template.height
+      );
+      onGhostMove(pos);
+      return;
+    }
+
+    const width = Math.max(MIN_BOX, Math.abs(dx));
+    const height = Math.max(MIN_BOX, Math.abs(dy));
+    const pos = clampGhost(
+      Math.min(nextDraft.startX, nextDraft.currentX),
+      Math.min(nextDraft.startY, nextDraft.currentY),
+      width,
+      height
+    );
+    onGhostMove(pos);
+  }, [clampGhost, onGhostMove, placing.template.height, placing.template.width]);
+
   return (
     <div
       style={{ position: "absolute", inset: 0, zIndex: 50, cursor: "crosshair" }}
-      onPointerDown={(e) => { e.stopPropagation(); e.preventDefault(); }}
-      onPointerUp={(e)   => { e.stopPropagation(); e.preventDefault(); }}
-      onPointerMove={(e) => {
-        const rect = wrapperRef.current?.getBoundingClientRect();
-        if (!rect) return;
-        const x = (e.clientX - rect.left) / rect.width;
-        const y = (e.clientY - rect.top)  / rect.height;
-        onGhostMove({
-          x: Math.max(0, Math.min(1 - placing.template.width,  x - placing.template.width  / 2)),
-          y: Math.max(0, Math.min(1 - placing.template.height, y - placing.template.height / 2)),
-        });
-      }}
-      onClick={(e) => {
+      onPointerDown={(e) => {
         e.stopPropagation();
         e.preventDefault();
-        const rect = wrapperRef.current?.getBoundingClientRect();
-        if (!rect) { onCancel(); return; }
-        // Click outside image bounds → cancel
-        if (
-          e.clientX < rect.left || e.clientX > rect.right ||
-          e.clientY < rect.top  || e.clientY > rect.bottom
-        ) {
-          onCancel(); return;
+        const point = getNormalizedPoint(e.clientX, e.clientY);
+        if (!point) {
+          onCancel();
+          return;
         }
-        const x  = (e.clientX - rect.left) / rect.width;
-        const y  = (e.clientY - rect.top)  / rect.height;
-        const nx = Math.max(0, Math.min(1 - placing.template.width,  x - placing.template.width  / 2));
-        const ny = Math.max(0, Math.min(1 - placing.template.height, y - placing.template.height / 2));
-        onPlace({ ...placing.template, x: nx, y: ny });
+        e.currentTarget.setPointerCapture(e.pointerId);
+        const nextDraft = { startX: point.x, startY: point.y, currentX: point.x, currentY: point.y };
+        setDraft(nextDraft);
+        previewPlacement(nextDraft);
+      }}
+      onPointerUp={(e)   => {
+        e.stopPropagation();
+        e.preventDefault();
+        if (!draft) return;
+        const point = getNormalizedPoint(e.clientX, e.clientY);
+        const finalDraft = point ? { ...draft, currentX: point.x, currentY: point.y } : draft;
+        const dx = finalDraft.currentX - finalDraft.startX;
+        const dy = finalDraft.currentY - finalDraft.startY;
+        const moved = Math.abs(dx) > 0.008 || Math.abs(dy) > 0.008;
+
+        if (!moved) {
+          const pos = clampGhost(
+            finalDraft.currentX - placing.template.width / 2,
+            finalDraft.currentY - placing.template.height / 2,
+            placing.template.width,
+            placing.template.height
+          );
+          onPlace({ ...placing.template, x: pos.x, y: pos.y });
+        } else {
+          const width = Math.max(MIN_BOX, Math.abs(dx));
+          const height = Math.max(MIN_BOX, Math.abs(dy));
+          const pos = clampGhost(
+            Math.min(finalDraft.startX, finalDraft.currentX),
+            Math.min(finalDraft.startY, finalDraft.currentY),
+            width,
+            height
+          );
+          onPlace({
+            ...placing.template,
+            x: pos.x,
+            y: pos.y,
+            width,
+            height,
+          });
+        }
+
+        setDraft(null);
+      }}
+      onPointerMove={(e) => {
+        const point = getNormalizedPoint(e.clientX, e.clientY);
+        if (!point) return;
+        const nextDraft = draft
+          ? { ...draft, currentX: point.x, currentY: point.y }
+          : { startX: point.x, startY: point.y, currentX: point.x, currentY: point.y };
+        if (draft) setDraft(nextDraft);
+        previewPlacement(nextDraft);
       }}
     >
       {/* Instruction banner */}
@@ -492,7 +622,7 @@ function PlacementOverlay({
         pointerEvents: "none",
       }}>
         <Copy style={{ width: 11, height: 11 }} />
-        Click to place "{placing.template.label.length > 22
+        Click to place, or drag for an exact fit: "{placing.template.label.length > 22
           ? placing.template.label.slice(0, 22) + "…"
           : placing.template.label}"
         <span style={{ opacity: 0.5, fontWeight: 400, marginLeft: 4 }}>· Esc to cancel</span>
@@ -505,15 +635,19 @@ function PlacementOverlay({
 
 const ExpandedLabelModal = ({
   childImage,
+  isChildPdf = false,
   requirementBoxes,
   onBoxesChange,
   onAddBox,
+  onDeleteBox,
   onClose,
 }: {
   childImage: string;
+  isChildPdf?: boolean;
   requirementBoxes: RequirementBox[];
   onBoxesChange?: (boxes: RequirementBox[]) => void;
   onAddBox?: (box: RequirementBox) => void;
+  onDeleteBox?: (boxId: string) => void;
   onClose: () => void;
 }) => {
   const transformRef = useRef<any>(null);
@@ -608,13 +742,13 @@ const ExpandedLabelModal = ({
                 color: "rgba(255,255,255,0.7)",
               }}
             >
-              {requirementBoxes.length} requirement{requirementBoxes.length !== 1 ? "s" : ""}
+              {requirementBoxes.length} bounding box{requirementBoxes.length !== 1 ? "es" : ""}
             </span>
           </div>
 
           <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
             <span style={{ fontSize: 10, color: "rgba(255,255,255,0.5)", marginRight: 4 }}>
-              Click box → select &amp; duplicate • Drag to move • Handles to resize • Esc to close
+              Click box → select &amp; duplicate • Drag to move • Handles to resize • Delete from toolbar • Esc to close
             </span>
             <button style={btnStyle} title="Zoom In"    onClick={() => transformRef.current?.zoomIn()}>
               <ZoomIn  style={{ width: 13, height: 13 }} />
@@ -660,17 +794,26 @@ const ExpandedLabelModal = ({
                 ref={wrapperRef}
                 style={{ position: "relative", display: "inline-block", lineHeight: 0 }}
               >
-                <img
-                  src={childImage}
-                  alt="New version label — expanded"
-                  style={{ display: "block", maxWidth: "90vw", maxHeight: "calc(94vh - 100px)" }}
-                  draggable={false}
-                />
+                  {isChildPdf ? (
+                    <embed
+                      src={childImage}
+                      type="application/pdf"
+                      style={{ display: "block", width: "90vw", height: "calc(94vh - 100px)" }}
+                    />
+                  ) : (
+                    <img
+                      src={childImage}
+                      alt="New version label — expanded"
+                      style={{ display: "block", maxWidth: "90vw", maxHeight: "calc(94vh - 100px)" }}
+                      draggable={false}
+                    />
+                  )}
                 <DraggableBoxOverlay
                   initialBoxes={requirementBoxes}
                   containerRef={wrapperRef}
                   onBoxesChange={onBoxesChange}
                   onAddBox={onAddBox}
+                  onDeleteBox={onDeleteBox}
                   onRequestPlacement={handleRequestPlacement}
                   placingGhost={placing && ghostPos ? { ...placing, ...ghostPos } : null}
                 />
@@ -712,17 +855,25 @@ const ExpandedLabelModal = ({
 const VisualDiffViewer = ({
   baseImage,
   childImage,
+  isBasePdf = false,
+  isChildPdf = false,
   annotations      = [],
   requirementBoxes = [],
   onBoxesChange,
   onAddBox,
+  onDeleteBox,
+  onAnnotationsChange,
 }: {
   baseImage?:         string;
   childImage?:        string;
+  isBasePdf?:         boolean;
+  isChildPdf?:        boolean;
   annotations?:       Annotation[];
   requirementBoxes?:  RequirementBox[];
   onBoxesChange?:     (boxes: RequirementBox[]) => void;
   onAddBox?:          (box: RequirementBox) => void;
+  onDeleteBox?:       (boxId: string) => void;
+  onAnnotationsChange?: (annotations: Annotation[]) => void;
 }) => {
   const baseRef    = useRef<any>(null);
   const childRef   = useRef<any>(null);
@@ -746,6 +897,55 @@ const VisualDiffViewer = ({
 
   const singlePanel = !baseImage;
   const useReqBoxes = requirementBoxes.length > 0;
+  const editableAnnotationBoxes: RequirementBox[] = annotations.map((ann, idx) => ({
+    id: `annotation-${idx}`,
+    label: ann.label,
+    changeType: ann.change_type,
+    category: ann.category,
+    x: ann.x,
+    y: ann.y,
+    width: ann.width,
+    height: ann.height,
+  }));
+
+  const handleAnnotationBoxesChange = useCallback((boxes: RequirementBox[]) => {
+    const next = boxes.map((box, idx) => {
+      const original = annotations[idx];
+      return {
+        ...(original ?? annotations[0]),
+        label: box.label,
+        change_type: box.changeType as Annotation["change_type"],
+        category: box.category,
+        x: box.x,
+        y: box.y,
+        width: box.width,
+        height: box.height,
+      };
+    }).filter(Boolean) as Annotation[];
+    onAnnotationsChange?.(next);
+  }, [annotations, onAnnotationsChange]);
+
+  const handleDeleteAnnotation = useCallback((boxId: string) => {
+    const index = Number(boxId.replace("annotation-", ""));
+    if (Number.isNaN(index)) return;
+    onAnnotationsChange?.(annotations.filter((_, idx) => idx !== index));
+  }, [annotations, onAnnotationsChange]);
+
+  const handleAddAnnotation = useCallback((box: RequirementBox) => {
+    onAnnotationsChange?.([
+      ...annotations,
+      {
+        label: box.label,
+        change_type: box.changeType as Annotation["change_type"],
+        category: box.category,
+        x: box.x,
+        y: box.y,
+        width: box.width,
+        height: box.height,
+        confidence: "high",
+      },
+    ]);
+  }, [annotations, onAnnotationsChange]);
 
   const handleZoomIn  = useCallback(() => { baseRef.current?.zoomIn();         childRef.current?.zoomIn();         }, []);
   const handleZoomOut = useCallback(() => { baseRef.current?.zoomOut();        childRef.current?.zoomOut();        }, []);
@@ -776,9 +976,13 @@ const VisualDiffViewer = ({
           Visual Diff Viewer
         </span>
         <div className="flex items-center gap-2">
-          {useReqBoxes && (
-            <span className="text-[10px] font-semibold text-green-700 bg-green-50 border border-green-200 px-2 py-0.5 rounded-full">
-              Click box → select &amp; duplicate • Drag to move • Handles to resize
+          {(useReqBoxes || annotations.length > 0) && (
+            <span className={`text-[10px] font-semibold border px-2 py-0.5 rounded-full ${
+              useReqBoxes
+                ? "text-green-700 bg-green-50 border-green-200"
+                : "text-slate-700 bg-slate-50 border-slate-200"
+            }`}>
+              Click box → select &amp; duplicate • Drag to move • Handles to resize • Delete from toolbar
             </span>
           )}
           <div className="flex items-center gap-1">
@@ -834,7 +1038,11 @@ const VisualDiffViewer = ({
                 wrapperStyle={{ width: "100%", height: "100%" }}
                 contentStyle={{ width: "100%", height: "100%", display: "flex", alignItems: "center", justifyContent: "center" }}
               >
-                <img src={baseImage} alt="Current version label" className="max-w-full max-h-full object-contain" />
+                {isBasePdf ? (
+                  <embed src={baseImage} type="application/pdf" className="w-full h-full" style={{ minHeight: "448px" }} />
+                ) : (
+                  <img src={baseImage} alt="Current version label" className="max-w-full max-h-full object-contain" />
+                )}
               </TransformComponent>
             </TransformWrapper>
           </div>
@@ -867,27 +1075,38 @@ const VisualDiffViewer = ({
                   ref={wrapperRef}
                   style={{ position: "relative", display: "inline-block", lineHeight: 0, overflow: "hidden" }}
                 >
-                  <img
-                    src={childImage}
-                    alt="New version label"
-                    className="max-w-full max-h-full object-contain"
-                    style={{ maxHeight: "448px" }}
-                    onLoad={e => {
-                      const img = e.currentTarget;
-                      setChildNatural({ w: img.naturalWidth, h: img.naturalHeight });
-                    }}
-                  />
+                  {isChildPdf ? (
+                    <embed
+                      src={childImage}
+                      type="application/pdf"
+                      className="w-full"
+                      style={{ height: "448px" }}
+                    />
+                  ) : (
+                    <img
+                      src={childImage}
+                      alt="New version label"
+                      className="max-w-full max-h-full object-contain"
+                      style={{ maxHeight: "448px" }}
+                      onLoad={e => {
+                        const img = e.currentTarget;
+                        setChildNatural({ w: img.naturalWidth, h: img.naturalHeight });
+                      }}
+                    />
+                  )}
 
-                  {useReqBoxes ? (
+                  {(useReqBoxes || annotations.length > 0) && (
                     <DraggableBoxOverlay
-                      initialBoxes={requirementBoxes}
+                      initialBoxes={useReqBoxes ? requirementBoxes : editableAnnotationBoxes}
                       containerRef={wrapperRef}
-                      onBoxesChange={onBoxesChange}
-                      onAddBox={onAddBox}
+                      onBoxesChange={useReqBoxes ? onBoxesChange : handleAnnotationBoxesChange}
+                      onAddBox={useReqBoxes ? onAddBox : handleAddAnnotation}
+                      onDeleteBox={useReqBoxes ? onDeleteBox : handleDeleteAnnotation}
                       onRequestPlacement={handleRequestPlacement}
                       placingGhost={placing && ghostPos ? { ...placing, ...ghostPos } : null}
                     />
-                  ) : (
+                  )}
+                  {annotations.length > 0 && !useReqBoxes && false && (
                     <AnnotationOverlay annotations={annotations} naturalW={childNatural.w} naturalH={childNatural.h} />
                   )}
                 </div>
@@ -921,9 +1140,10 @@ const VisualDiffViewer = ({
       {isExpanded && childImage && (
         <ExpandedLabelModal
           childImage={childImage}
-          requirementBoxes={requirementBoxes}
-          onBoxesChange={onBoxesChange}
-          onAddBox={onAddBox}
+          requirementBoxes={useReqBoxes ? requirementBoxes : editableAnnotationBoxes}
+          onBoxesChange={useReqBoxes ? onBoxesChange : handleAnnotationBoxesChange}
+          onAddBox={useReqBoxes ? onAddBox : handleAddAnnotation}
+          onDeleteBox={useReqBoxes ? onDeleteBox : handleDeleteAnnotation}
           onClose={() => setIsExpanded(false)}
         />
       )}

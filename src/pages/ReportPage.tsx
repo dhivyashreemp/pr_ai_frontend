@@ -72,6 +72,19 @@ function buildRequirements(
   ];
 }
 
+function buildManualExpectedRequirements(items: any[], startId: number): Requirement[] {
+  let id = startId;
+  return items.map((item) => ({
+    id: id++,
+    elementType: (item.elementType ?? 'Text') as Requirement['elementType'],
+    changeType: (item.type ?? 'Modified') as Requirement['changeType'],
+    description: item.text || 'Reviewer-marked expected change',
+    expectedValue: item.text || '—',
+    actualValue: item.text || '—',
+    status: 'Match' as const,
+  }));
+}
+
 function _isBarcodeDataMatrix(barcodeType: string): boolean {
   const t = barcodeType.toLowerCase();
   return t.includes('datamatrix') || t.includes('data_matrix') || t.includes('matrix');
@@ -163,6 +176,7 @@ function buildAnnotationBoxes(
         width:  box.width  * 100,
         height: box.height * 100,
         text:   box.label,
+        elementType: box.category,
       };
     });
   } else {
@@ -174,12 +188,20 @@ function buildAnnotationBoxes(
       width:  ann.width  * 100,
       height: ann.height * 100,
       text:   ann.label,
+      elementType: ann.category,
+      linkedRowId: `ai-${i}`,
     }));
   }
 
   // Append user-drawn annotations from the preview page
   if (userBoxes && userBoxes.length > 0) {
-    base = [...base, ...userBoxes];
+    base = [
+      ...base,
+      ...userBoxes.map((box) => ({
+        ...box,
+        linkedRowId: box.linkedRowId ?? (box.groupId ? `user-${box.groupId}` : undefined),
+      })),
+    ];
   }
 
   return base;
@@ -213,20 +235,35 @@ const ReportPageInner = () => {
   const userBoxesBase: DrawnBox[] = location.state?.userAnnotationsBase ?? [];
   const userBoxesNew:  DrawnBox[] = location.state?.userAnnotationsNew  ?? [];
 
-  // Deduplicated annotations (one per group) → Unexpected Changes table
-  // PreviewPage sends userAnnotationsUnique; fall back to all boxes if not present
-  const userAnnotationsUnique: DrawnBox[] =
+  // Deduplicated annotations (one per group) from preview decisions
+  const userAnnotationsUnique: any[] =
     location.state?.userAnnotationsUnique ?? [...userBoxesBase, ...userBoxesNew];
+  const userExpectedUnique: any[] =
+    location.state?.userExpectedUnique ?? userAnnotationsUnique.filter((b: any) => b.disposition === 'Expected');
+  const userUnexpectedUnique: any[] =
+    location.state?.userUnexpectedUnique ?? userAnnotationsUnique.filter((b: any) => b.disposition !== 'Expected');
 
-  const userUnexpected: UnexpectedChange[] = userAnnotationsUnique.map((b, i) => ({
-    id:          1000 + i,
-    elementType: 'Reviewer Note',
+  const userUnexpected: UnexpectedChange[] = userUnexpectedUnique.map((b, i) => ({
+    id:          `user-${b.groupId ?? i}`,
+    elementType: b.elementType ?? 'Reviewer Note',
     changeType:  b.type,
     actual:      b.text || b.type,
+    linkedBoxIds: [`user-${b.groupId ?? i}`],
+    source: 'reviewer',
+  }));
+
+  const aiUnexpected: UnexpectedChange[] = annotations.map((ann: any, i: number) => ({
+    id: `ai-${i}`,
+    elementType: ann.category ?? 'Text',
+    changeType: ann.change_type ?? 'Modified',
+    actual: ann.label || ann.value || ann.change_type || 'AI-detected unexpected change',
+    linkedBoxIds: [`ai-${i}`],
+    source: 'ai',
   }));
 
   const [baseUrl,  setBaseUrl]  = useState('');
   const [childUrl, setChildUrl] = useState('');
+  const [discardedUnexpectedIds, setDiscardedUnexpectedIds] = useState<(string | number)[]>([]);
 
   useEffect(() => {
     if (!baseFile) return;
@@ -242,17 +279,24 @@ const ReportPageInner = () => {
     return () => URL.revokeObjectURL(url);
   }, [childFile]);
 
-  const requirements          = buildRequirements(satisfiedItems, missingItems);
+  const baseRequirements = buildRequirements(satisfiedItems, missingItems);
+  const requirements     = [
+    ...baseRequirements,
+    ...buildManualExpectedRequirements(userExpectedUnique, baseRequirements.length + 1),
+  ];
   const discrepancyCategories = buildDiscrepancyCategories(parsedItems, barcodeSummary);
 
-  // Unexpected = only user-drawn reviewer annotations
-  const allUnexpected = [...userUnexpected];
+  const allUnexpected = [...aiUnexpected, ...userUnexpected].filter(
+    (item) => !discardedUnexpectedIds.includes(item.id)
+  );
 
   const summaryData           = buildSummaryData(requirements, allUnexpected);
 
   // Annotation boxes for the label comparison images
-  const newBoxes     = buildAnnotationBoxes(annotations, formData ? reqBoxes : undefined, userBoxesNew);
-  const currentBoxes = buildAnnotationBoxes([], undefined, userBoxesBase);
+  const newBoxes     = buildAnnotationBoxes(annotations, formData ? reqBoxes : undefined, userBoxesNew)
+    .filter((box) => !box.linkedRowId || !discardedUnexpectedIds.includes(box.linkedRowId));
+  const currentBoxes = buildAnnotationBoxes([], undefined, userBoxesBase)
+    .filter((box) => !box.linkedRowId || !discardedUnexpectedIds.includes(box.linkedRowId));
 
   const labelVersion = formData?.metadata?.label_version ?? '';
   const revParts     = labelVersion.includes('→')
@@ -297,7 +341,11 @@ const ReportPageInner = () => {
         ) : (
           <>
             {activeScenario === 'A' && (
-              <FrameA data={reportData} summaryData={summaryData} />
+              <FrameA
+                data={reportData}
+                summaryData={summaryData}
+                onDiscardUnexpected={(id) => setDiscardedUnexpectedIds((prev) => prev.includes(id) ? prev : [...prev, id])}
+              />
             )}
             {activeScenario === 'B' && (
               <FrameB formData={formData} summaryData={summaryData} />
@@ -309,6 +357,7 @@ const ReportPageInner = () => {
                 summaryData={summaryData}
                 satisfiedItems={satisfiedItems}
                 missingItems={missingItems}
+                onDiscardUnexpected={(id) => setDiscardedUnexpectedIds((prev) => prev.includes(id) ? prev : [...prev, id])}
               />
             )}
           </>
