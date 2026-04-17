@@ -359,7 +359,7 @@ function DrawableImagePanel({
                   </button>
                   <div style={{ width: 1, height: 12, background: '#e2e8f0' }} />
                   <button
-                    title="Delete this AI box"
+                    title="Delete this box"
                     onClick={(e) => { e.stopPropagation(); onDeleteAiBox?.(box.id); setSelectedBoxId(null); }}
                     style={{
                       display: 'flex', alignItems: 'center', color: '#ef4444',
@@ -1107,7 +1107,7 @@ const PreviewPage = () => {
               <p className="text-xs text-gray-500">
                 Toggle <strong>Draw Mode</strong> and click-drag to add annotations.
                 Use <strong>Add Location</strong> on any annotation to mark the same change in multiple places — they share a single report entry.
-                AI-detected boxes can be <strong>clicked to select</strong>, then <strong>dragged to reposition</strong> or resized via corner handles.
+                Detected change boxes can be <strong>clicked to select</strong>, then <strong>dragged to reposition</strong> or resized via corner handles.
               </p>
             </div>
             <div className="flex items-center gap-3">

@@ -1,3 +1,24 @@
+export interface DiscrepancyBoundingBox {
+  x: number;
+  y: number;
+  width: number;
+  height: number;
+  confidence?: "high" | "medium" | "low";
+}
+
+export interface DiscrepancyDetail {
+  field_id?: string;
+  field_label?: string;
+  old_value?: string;
+  new_value?: string;
+  value?: string;
+  symbol_id?: string | null;
+  iso_name?: string;
+  description?: string;
+  standard?: string;
+  regions?: Array<{ x: number; y: number; width: number; height: number }>;
+}
+
 export interface DiscrepancyItem {
   id: string;
   category: "Text" | "Symbol" | "Barcode" | "Image";
@@ -6,6 +27,9 @@ export interface DiscrepancyItem {
   oldText?: string;
   newText?: string;
   isValid?: boolean; // true = expected by form, false = unexpected change
+  bounding_box?: DiscrepancyBoundingBox | null;
+  detail?: DiscrepancyDetail | null;
+  summary?: string | null;
 }
 
 export interface ProofRequestMissingItem {

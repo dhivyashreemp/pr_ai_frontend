@@ -196,19 +196,47 @@ const DiffView = ({ oldText, newText }: { oldText: string; newText: string }) =>
   </span>
 );
 
+// Label row for a Before/After breakdown line
 // Single row
 const DiscrepancyRow = ({ item, status, showValidity }: { item: DiscrepancyItem; status: Status; showValidity?: boolean }) => {
   const config = statusConfig[status];
   const CatIcon = categoryIcons[item.category] || Type;
-  const showDiff = status === "Modified" && item.oldText && item.newText;
+
+  // Resolve old/new — prefer structured detail fields, fall back to value string parsing
+  const oldText = item.detail?.old_value ?? item.oldText;
+  const newText = item.detail?.new_value ?? item.newText;
+
+  let resolvedOld = oldText;
+  let resolvedNew = newText;
+  if (!resolvedOld && !resolvedNew && status === "Modified") {
+    // "From: 'X' ➔ To: 'Y'" (Text)
+    const m1 = item.value.match(/From:\s*'([\s\S]*?)'\s*➔\s*To:\s*'([\s\S]*?)'/);
+    if (m1) { resolvedOld = m1[1]; resolvedNew = m1[2]; }
+    else {
+      // "A → B" or "A ➔ B" (Symbol / Barcode AI descriptions)
+      const m2 = item.value.match(/^([\s\S]+?)\s*[→➔]\s*([\s\S]+)$/);
+      if (m2) { resolvedOld = m2[1].trim(); resolvedNew = m2[2].trim(); }
+    }
+  }
+
+  // For Added/Deleted: resolve what the single-side content is
+  const baseContent = (item.detail?.old_value ?? item.detail?.value ?? item.detail?.iso_name ?? item.detail?.description ?? item.value) || "";
+  const childContent = (item.detail?.new_value ?? item.detail?.value ?? item.detail?.iso_name ?? item.detail?.description ?? item.value) || "";
+
+  const regionCount = item.detail?.regions?.length ?? 0;
+  const isUnexpected = showValidity && item.isValid === false;
+  // Show structured breakdown when: unexpected (form mode) OR direct comparison (no form, detail available)
+  const showBreakdown = isUnexpected || (!showValidity && !!item.detail);
 
   return (
-    <div className={`border-l-2 ${config.borderClass} pl-3 pr-4 py-2`}>
+    <div className={`border-l-2 ${config.borderClass} pl-3 pr-4 py-2.5`}>
       <div className="flex items-start gap-2.5">
         <CatIcon className={`h-3.5 w-3.5 mt-0.5 ${config.textClass} shrink-0`} />
         <div className="min-w-0 flex-1">
+
+          {/* ── Header ── */}
           <div className="flex items-start justify-between gap-2">
-            <span className="text-sm text-foreground">{item.value}</span>
+            <span className="text-sm font-medium text-foreground leading-snug">{item.value}</span>
             {showValidity && item.isValid !== undefined && (
               <span className={`shrink-0 text-[10px] font-bold uppercase tracking-wider px-2 py-0.5 rounded-full border ${
                 item.isValid
@@ -219,11 +247,155 @@ const DiscrepancyRow = ({ item, status, showValidity }: { item: DiscrepancyItem;
               </span>
             )}
           </div>
-          {showDiff && (
-            <div>
-              <DiffView oldText={item.oldText!} newText={item.newText!} />
+
+          {/* Inline diff (quick visual) for Modified — always show when available */}
+          {resolvedOld && resolvedNew && (
+            <div className="mt-1">
+              <DiffView oldText={resolvedOld} newText={resolvedNew} />
             </div>
           )}
+
+          {/* ══ From / To breakdown ══ */}
+          {showBreakdown && (
+            <div className="mt-1.5 space-y-1 text-[11px]">
+
+              {/* Type badge */}
+              <div className="flex items-center gap-1.5 mb-0.5">
+                <span className={`text-[10px] font-bold uppercase tracking-wider px-1.5 py-0.5 rounded ${config.textClass} bg-current/10`}
+                  style={{ backgroundColor: "transparent" }}>
+                  <span className={`${config.textClass}`}>{status}</span>
+                </span>
+                <span className="text-muted-foreground">·</span>
+                <span className="text-muted-foreground capitalize">{item.category}</span>
+                {item.detail?.field_label && item.category === "Text" && (
+                  <><span className="text-muted-foreground">·</span>
+                  <span className="text-muted-foreground font-mono">{item.detail.field_label}</span></>
+                )}
+              </div>
+
+              {/* ── Image / background: show location + region proof ── */}
+              {item.category === "Image" ? (
+                <>
+                  {item.bounding_box && item.bounding_box.width > 0 ? (
+                    <div className="flex items-start gap-2">
+                      <span className="font-bold text-blue-500 w-14 shrink-0 pt-0.5">Location:</span>
+                      <span className="font-mono text-foreground">
+                        x {(item.bounding_box.x * 100).toFixed(1)}%,
+                        {" "}y {(item.bounding_box.y * 100).toFixed(1)}%
+                        {" "}— {(item.bounding_box.width * 100).toFixed(1)}w × {(item.bounding_box.height * 100).toFixed(1)}h%
+                        {item.bounding_box.confidence && (
+                          <span className={`ml-1.5 ${item.bounding_box.confidence === "high" ? "text-green-600" : "text-yellow-600"}`}>
+                            [{item.bounding_box.confidence}]
+                          </span>
+                        )}
+                      </span>
+                    </div>
+                  ) : (
+                    <div className="flex items-start gap-2">
+                      <span className="font-bold text-blue-500 w-14 shrink-0 pt-0.5">Location:</span>
+                      <span className="italic text-muted-foreground">bounding box not available</span>
+                    </div>
+                  )}
+                  {regionCount > 0 ? (
+                    <div className="flex items-start gap-2">
+                      <span className="font-bold text-blue-500 w-14 shrink-0 pt-0.5">Proof:</span>
+                      <div className="flex-1 space-y-0.5">
+                        <span className="text-foreground">
+                          {regionCount} pixel-level region{regionCount !== 1 ? "s" : ""} differ between base and revised label
+                        </span>
+                        {item.detail?.regions?.slice(0, 3).map((r, i) => (
+                          <div key={i} className="font-mono text-muted-foreground">
+                            Region {i + 1}: x {(r.x * 100).toFixed(1)}%, y {(r.y * 100).toFixed(1)}%
+                            {" "}— {(r.width * 100).toFixed(1)}w × {(r.height * 100).toFixed(1)}h%
+                          </div>
+                        ))}
+                        {regionCount > 3 && (
+                          <div className="text-muted-foreground">+{regionCount - 3} more region{regionCount - 3 !== 1 ? "s" : ""}…</div>
+                        )}
+                      </div>
+                    </div>
+                  ) : (
+                    <div className="flex items-start gap-2">
+                      <span className="font-bold text-blue-500 w-14 shrink-0 pt-0.5">Proof:</span>
+                      <span className="text-foreground">
+                        Visual difference detected — a {status.toLowerCase()} background or image element was found between the two labels
+                      </span>
+                    </div>
+                  )}
+                </>
+              ) : (
+                /* ── Text / Symbol / Barcode: unified From / To ── */
+                <>
+                  <div className="flex items-start gap-2">
+                    <span className="font-bold text-red-500 w-10 shrink-0 pt-0.5">From:</span>
+                    <span className={`break-all ${item.category === "Text" ? "font-mono" : ""} text-foreground`}>
+                      {status === "Added"
+                        ? <span className="italic text-muted-foreground">— not present on base label</span>
+                        : (resolvedOld || baseContent || <span className="italic text-muted-foreground">—</span>)}
+                    </span>
+                  </div>
+                  <div className="flex items-start gap-2">
+                    <span className="font-bold text-green-600 w-10 shrink-0 pt-0.5">To:</span>
+                    <span className={`break-all ${item.category === "Text" ? "font-mono" : ""} text-foreground`}>
+                      {status === "Deleted"
+                        ? <span className="italic text-muted-foreground">— removed from revised label</span>
+                        : (resolvedNew || childContent || <span className="italic text-muted-foreground">—</span>)}
+                    </span>
+                  </div>
+                </>
+              )}
+
+              {/* AI summary */}
+              {item.summary && (
+                <div className="flex items-start gap-1.5 pt-1 border-t border-gray-200 mt-1">
+                  <span className="text-muted-foreground leading-snug">{item.summary}</span>
+                </div>
+              )}
+
+              {/* Why flagged (unexpected only, shown when no AI summary) */}
+              {isUnexpected && !item.summary && (
+                <div className="flex items-start gap-1.5 pt-1 border-t border-orange-200 mt-1">
+                  <AlertCircle className="h-3 w-3 text-orange-500 shrink-0 mt-0.5" />
+                  <span className="text-orange-700">
+                    {status === "Added"
+                      ? `This ${item.category.toLowerCase()} was added on the revised label but was not listed in the proof request.`
+                      : status === "Deleted"
+                      ? `This ${item.category.toLowerCase()} was removed on the revised label but was not listed in the proof request.`
+                      : `This ${item.category.toLowerCase()} was ${status.toLowerCase()} but was not listed in the proof request.`}
+                  </span>
+                </div>
+              )}
+
+            </div>
+          )}
+
+          {/* ── Compact fallback detail (items without backend detail data) ── */}
+          {!showBreakdown && item.detail && (
+            <div className="mt-1.5 space-y-0.5 text-[11px]">
+              {item.category === "Text" && status === "Deleted" && item.detail.value && (
+                <p className="text-muted-foreground font-mono">
+                  Was: <span className="text-red-600">{item.detail.value}</span>
+                </p>
+              )}
+              {item.category === "Text" && status === "Added" && item.detail.value && (
+                <p className="text-muted-foreground font-mono">
+                  Now: <span className="text-green-600">{item.detail.value}</span>
+                </p>
+              )}
+              {item.category === "Symbol" && item.detail.description && (
+                <p className="text-muted-foreground leading-snug">{item.detail.description}</p>
+              )}
+              {item.category === "Symbol" && item.detail.standard && (
+                <p className="text-muted-foreground font-mono">Standard: {item.detail.standard}</p>
+              )}
+              {item.category === "Image" && regionCount > 0 && (
+                <p className="text-muted-foreground">
+                  {regionCount} changed region{regionCount !== 1 ? "s" : ""} detected
+                </p>
+              )}
+            </div>
+          )}
+
         </div>
       </div>
     </div>

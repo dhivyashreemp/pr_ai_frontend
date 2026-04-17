@@ -129,7 +129,17 @@ const Index = () => {
                   const match = value.match(/From:\s*'(.*?)'\s*➔\s*To:\s*'(.*?)'/);
                   if (match) { oldText = match[1]; newText = match[2]; }
                 }
-                parsedItems.push({ id: `api-d${index}-${idCounter++}`, category: item.Category, status, value, oldText, newText });
+                parsedItems.push({
+                  id: `api-d${index}-${idCounter++}`,
+                  category: item.Category,
+                  status,
+                  value,
+                  oldText,
+                  newText,
+                  bounding_box: item.bounding_box ?? null,
+                  detail: item.detail ?? null,
+                  summary: item.summary ?? null,
+                });
               });
             }
           }
@@ -158,15 +168,16 @@ const Index = () => {
   // each LRF requirement is satisfied by what was detected on the label.
   // Produces:
   //   validatedParsedItems — parsedItems enriched with isValid flag (null in lrfOnly)
-  const { validatedParsedItems, missingItems, satisfiedItems, requirementBoxes, unexpectedAnnotations } = useMemo<{
+  const { validatedParsedItems, missingItems, satisfiedItems, requirementBoxes, unexpectedRequirementBoxes, unexpectedAnnotations } = useMemo<{
     validatedParsedItems: any[] | undefined;
     missingItems: ProofRequestMissingItem[];
     requirementBoxes: RequirementBox[];
+    unexpectedRequirementBoxes: RequirementBox[];
     satisfiedItems: ProofRequestMissingItem[];
     unexpectedAnnotations: any[];
   }>(() => {
     if (!formData || !analysisRun) {
-      return { validatedParsedItems: undefined, missingItems: [], satisfiedItems: [], requirementBoxes: [], unexpectedAnnotations: [] };
+      return { validatedParsedItems: undefined, missingItems: [], satisfiedItems: [], requirementBoxes: [], unexpectedRequirementBoxes: [], unexpectedAnnotations: [] };
     }
 
     // ── LRF-only mode ────────────────────────────────────────────────────────
@@ -304,15 +315,15 @@ const Index = () => {
           };
         });
 
-      return { validatedParsedItems: undefined, missingItems, satisfiedItems, requirementBoxes: [], unexpectedAnnotations: [] };
+      return { validatedParsedItems: undefined, missingItems, satisfiedItems, requirementBoxes: [], unexpectedRequirementBoxes: [], unexpectedAnnotations: [] };
     }
 
     // ── Full diff mode ───────────────────────────────────────────────────────
     if (apiResults.length === 0) {
-      return { validatedParsedItems: undefined, missingItems: [], satisfiedItems: [], requirementBoxes: [], unexpectedAnnotations: [] };
+      return { validatedParsedItems: undefined, missingItems: [], satisfiedItems: [], requirementBoxes: [], unexpectedRequirementBoxes: [], unexpectedAnnotations: [] };
     }
     const result = apiResults[selectedResultIndex];
-    if (!result) return { validatedParsedItems: undefined, missingItems: [], satisfiedItems: [], requirementBoxes: [], unexpectedAnnotations: [] };
+    if (!result) return { validatedParsedItems: undefined, missingItems: [], satisfiedItems: [], requirementBoxes: [], unexpectedRequirementBoxes: [], unexpectedAnnotations: [] };
 
     const parsedItems: any[] = result.parsedItems ?? [];
 
@@ -684,29 +695,61 @@ const Index = () => {
       return pos;
     });
 
+    // Build flexible RequirementBoxes for unexpected change items using backend bounding_box
+    const unexpectedParsedItems = validatedParsedItems?.filter((pi: any) => pi.isValid === false) ?? [];
+    let uxFallbackIdx = 0;
+    const unexpectedRequirementBoxes: RequirementBox[] = unexpectedParsedItems.map((pi: any) => {
+      const lbl = (pi.detail?.field_label ?? pi.detail?.iso_name ?? pi.value ?? 'Unexpected Change').slice(0, 40);
+      if (pi.bounding_box && pi.bounding_box.width > 0) {
+        return {
+          id: `ux-${pi.id}`,
+          label: lbl,
+          changeType: pi.status,
+          category: pi.category,
+          satisfied: false,
+          x: pi.bounding_box.x,
+          y: pi.bounding_box.y,
+          width: pi.bounding_box.width,
+          height: pi.bounding_box.height,
+        };
+      }
+      // Fallback: try AI annotation matching then stack at right edge
+      const ann = findAnn(lbl, pi.status);
+      if (ann) {
+        return {
+          id: `ux-${pi.id}`, label: lbl, changeType: pi.status, category: pi.category, satisfied: false,
+          x: ann.x, y: ann.y, width: ann.width > 0 ? ann.width : DEFAULT_W, height: ann.height > 0 ? ann.height : DEFAULT_H,
+        };
+      }
+      const pos = {
+        id: `ux-${pi.id}`, label: lbl, changeType: pi.status, category: pi.category, satisfied: false,
+        x: 0.73, y: 0.01 + uxFallbackIdx * (DEFAULT_H + GAP), width: DEFAULT_W, height: DEFAULT_H,
+      };
+      uxFallbackIdx++;
+      return pos;
+    });
+
+    // Fallback annotations: unmatched AI annotations (for items with no bounding_box)
     const unexpectedAnnotations = aiAnnotations.filter((_, idx) => !usedAnnIdx.has(idx));
 
-    return { validatedParsedItems, missingItems, satisfiedItems, requirementBoxes, unexpectedAnnotations };
+    return { validatedParsedItems, missingItems, satisfiedItems, requirementBoxes, unexpectedRequirementBoxes, unexpectedAnnotations };
   }, [formData, analysisRun, lrfOnly, lrfAnalysis, apiResults, selectedResultIndex]);
 
   // Called when user duplicates a requirement box in VisualDiffViewer
   const handleAddBox = useCallback((newBox: RequirementBox) => {
     setAdjustedBoxes(prev => {
-      // If adjustedBoxes is empty the user hasn't moved anything yet —
-      // seed from the original requirementBoxes so positions are preserved
-      const current = prev.length > 0 ? prev : (requirementBoxes ?? []);
-      // Avoid adding the same id twice (safety guard)
+      const current = prev.length > 0 ? prev : [...(requirementBoxes ?? []), ...(unexpectedRequirementBoxes ?? [])];
       if (current.some(b => b.id === newBox.id)) return current;
       return [...current, newBox];
     });
-  }, [requirementBoxes]);
+  }, [requirementBoxes, unexpectedRequirementBoxes]);
 
   const handleDeleteBox = useCallback((boxId: string) => {
     setAdjustedBoxes(prev => {
-      const current = prev.length > 0 ? prev : (requirementBoxes ?? []);
+      const current = prev.length > 0 ? prev : [...(requirementBoxes ?? []), ...(unexpectedRequirementBoxes ?? [])];
       return current.filter(box => box.id !== boxId);
     });
-  }, [requirementBoxes]);
+  }, [requirementBoxes, unexpectedRequirementBoxes]);
 
   return (
     <div className="min-h-screen bg-[#f8f9fa] flex flex-col">
@@ -855,7 +898,13 @@ const Index = () => {
                   ? (adjustedAnnotations.length > 0 ? adjustedAnnotations : (apiResults[selectedResultIndex]?.annotations ?? []))
                   : []
             }
-            requirementBoxes={formData ? (adjustedBoxes.length > 0 ? adjustedBoxes : (requirementBoxes ?? [])) : []}
+            requirementBoxes={
+              formData
+                ? (adjustedBoxes.length > 0
+                    ? adjustedBoxes
+                    : [...(requirementBoxes ?? []), ...(unexpectedRequirementBoxes ?? [])])
+                : []
+            }
             onBoxesChange={formData ? setAdjustedBoxes : undefined}
             onAddBox={formData ? handleAddBox : undefined}
             onDeleteBox={formData ? handleDeleteBox : undefined}

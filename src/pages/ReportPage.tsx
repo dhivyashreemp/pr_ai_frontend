@@ -256,7 +256,7 @@ const ReportPageInner = () => {
     id: `ai-${i}`,
     elementType: ann.category ?? 'Text',
     changeType: ann.change_type ?? 'Modified',
-    actual: ann.label || ann.value || ann.change_type || 'AI-detected unexpected change',
+    actual: ann.label || ann.value || ann.change_type || 'Detected unexpected change',
     linkedBoxIds: [`ai-${i}`],
     source: 'ai',
   }));
