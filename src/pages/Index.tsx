@@ -104,9 +104,21 @@ const Index = () => {
     (location.state?.expandedChildPreviewUrls?.length ?? 0) > 0
   );
 
+  // Converts an image File to a data URL using FileReader.
+  // Data URLs are self-contained strings — unlike blob URLs they are never
+  // revoked, so they survive navigation and can be safely passed through
+  // location.state across multiple page hops (Index → Preview → Report).
+  const toDataUrl = (file: File): Promise<string> =>
+    new Promise((resolve, reject) => {
+      const reader = new FileReader();
+      reader.onload = () => resolve(reader.result as string);
+      reader.onerror = reject;
+      reader.readAsDataURL(file);
+    });
+
   // Create preview URLs from uploaded files.
-  // PDFs are rendered to PNG data URLs so the Visual Diff Viewer can display
-  // them as plain images (no browser PDF viewer widget).
+  // Both PDFs (via pdfToImage) and images (via FileReader) produce data URLs
+  // so no blob URL cleanup is needed and the URLs survive unmount.
   useEffect(() => {
     if (baseFile.length === 0) {
       if (!restoredBaseUrlRef.current) setBasePreviewUrl("");
@@ -116,26 +128,17 @@ const Index = () => {
     restoredBaseUrlRef.current = false;
     const file = baseFile[0];
     let cancelled = false;
-    let blobUrl: string | null = null;
 
     (async () => {
       try {
-        if (isPdfFile(file)) {
-          const dataUrl = await pdfToImage(file);
-          if (!cancelled) setBasePreviewUrl(dataUrl);
-        } else {
-          blobUrl = URL.createObjectURL(file);
-          if (!cancelled) setBasePreviewUrl(blobUrl);
-        }
+        const dataUrl = isPdfFile(file) ? await pdfToImage(file) : await toDataUrl(file);
+        if (!cancelled) setBasePreviewUrl(dataUrl);
       } catch (e) {
         console.error("Failed to build base preview:", e);
       }
     })();
 
-    return () => {
-      cancelled = true;
-      if (blobUrl) URL.revokeObjectURL(blobUrl);
-    };
+    return () => { cancelled = true; };
   }, [baseFile]);
 
   useEffect(() => {
@@ -146,19 +149,13 @@ const Index = () => {
     // Real File objects supersede any restored URLs.
     restoredChildUrlsRef.current = false;
     let cancelled = false;
-    const blobUrls: string[] = [];
 
     (async () => {
       try {
         const urls = await Promise.all(
-          expandedChildFiles.map(async (f) => {
-            if (isPdfFile(f)) {
-              return await pdfToImage(f);
-            }
-            const url = URL.createObjectURL(f);
-            blobUrls.push(url);
-            return url;
-          })
+          expandedChildFiles.map((f) =>
+            isPdfFile(f) ? pdfToImage(f) : toDataUrl(f)
+          )
         );
         if (!cancelled) setChildPreviewUrls(urls);
       } catch (e) {
@@ -166,10 +163,7 @@ const Index = () => {
       }
     })();
 
-    return () => {
-      cancelled = true;
-      blobUrls.forEach((u) => URL.revokeObjectURL(u));
-    };
+    return () => { cancelled = true; };
   }, [expandedChildFiles]);
 
   useEffect(() => {

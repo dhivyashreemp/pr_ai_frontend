@@ -25,18 +25,26 @@ const useThumbnailUrl = (
   const [state, setState] = useState<{ url: string | null; error: boolean }>({ url: null, error: false });
 
   useEffect(() => {
-    if (!file) {
-      setState({ url: null, error: false });
-      return;
-    }
+    // All preview URLs passed by parent pages are data URLs (never revocable).
+    // Use directly — no file processing needed.
     if (fallbackUrl) {
       setState({ url: fallbackUrl, error: false });
       return;
     }
-    if (!isPdfFile(file)) {
+
+    // No pre-rendered URL — generate from the File object on demand.
+    if (!file) {
       setState({ url: null, error: false });
       return;
     }
+
+    if (!isPdfFile(file)) {
+      const blobUrl = URL.createObjectURL(file);
+      setState({ url: blobUrl, error: false });
+      return () => URL.revokeObjectURL(blobUrl);
+    }
+
+    // PDF without a pre-rendered URL — render on demand.
     let cancelled = false;
     setState({ url: null, error: false });
     pdfToImage(file)

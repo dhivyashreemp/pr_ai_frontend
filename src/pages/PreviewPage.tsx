@@ -6,6 +6,7 @@ import StepIndicator from '@/components/StepIndicator';
 import type { DrawnBox } from '@/report/types';
 import type { RequirementBox } from '@/components/VisualDiffViewer';
 import { pdfToImage, isPdfFile } from '@/lib/pdfToImage';
+import LabelSidebar from '@/components/LabelSidebar';
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Types
@@ -809,13 +810,32 @@ const PreviewPage = () => {
   const baseFileName  = state.baseFileName  ?? (baseFileArr[0]?.name  ?? '');
   const childFileName = state.childFileName ?? (childFileArr[0]?.name ?? '');
 
+  // ── Multi-child sidebar state ────────────────────────────────────────────
+  const expandedChildPreviewUrls: string[] = state.expandedChildPreviewUrls ?? [];
+  const childFilesAll: File[] = state.childFiles ?? [];
+  const [selectedChildIndex, setSelectedChildIndex] = useState<number>(state.selectedResultIndex ?? 0);
+
   // ── Build existing AI / requirement boxes for overlay ────────────────────
   const annotations:      any[]            = state.annotations     ?? [];
   const requirementBoxes: RequirementBox[] = state.requirementBoxes ?? [];
   const [hiddenAiBoxIds, setHiddenAiBoxIds] = useState<string[]>([]);
 
+  // When the user picks a different child in the sidebar, show that child's
+  // AI annotations. Fall back to the originally-passed annotations for the
+  // child that was active when Index.tsx navigated here.
+  const activeAnnotations: any[] =
+    selectedChildIndex === (state.selectedResultIndex ?? 0)
+      ? annotations
+      : (state.apiResults?.[selectedChildIndex]?.annotations ?? []);
+
+  // Requirement boxes only apply to the originally-selected child (they are
+  // pre-computed by Index.tsx for that specific child). For other children
+  // we only show the raw AI annotations.
+  const activeRequirementBoxes: RequirementBox[] =
+    selectedChildIndex === (state.selectedResultIndex ?? 0) ? requirementBoxes : [];
+
   const existingNewBoxes: DrawnBox[] = useMemo(() => {
-    const requirementAiBoxes = requirementBoxes.map((b: any, i: number) => ({
+    const requirementAiBoxes = activeRequirementBoxes.map((b: any, i: number) => ({
       id:     `requirement-${i}`,
       type:   (b.changeType ?? 'Modified') as DrawnBox['type'],
       top:    (b.y ?? 0) * 100,
@@ -825,7 +845,7 @@ const PreviewPage = () => {
       text:   b.label ?? b.text ?? '',
     }));
 
-    const annotationAiBoxes = annotations.map((b: any, i: number) => ({
+    const annotationAiBoxes = activeAnnotations.map((b: any, i: number) => ({
       id:     `annotation-${i}`,
       type:   (b.change_type ?? 'Modified') as DrawnBox['type'],
       top:    (b.y ?? b.top ?? 0) * (b.y !== undefined ? 100 : 1),
@@ -836,7 +856,7 @@ const PreviewPage = () => {
     }));
 
     return [...requirementAiBoxes, ...annotationAiBoxes].filter(box => !hiddenAiBoxIds.includes(box.id));
-  }, [annotations, hiddenAiBoxIds, requirementBoxes]);
+  }, [activeAnnotations, activeRequirementBoxes, hiddenAiBoxIds]);
 
   // ── AI box position adjustments (human-in-the-loop fine-tuning) ─────────
   const [aiBoxAdjustments, setAiBoxAdjustments] = useState<Record<string, { top: number; left: number; width: number; height: number }>>({});
@@ -986,10 +1006,26 @@ const PreviewPage = () => {
   }, [userAnnotations]);
 
   const hasBase = !!baseUrl;
-  const hasNew  = !!childUrl;
+
+  // Prefer the pre-rendered URL for the selected child (survives navigation);
+  // fall back to the URL built from childFileArr[0] for the no-sidebar path.
+  const activeChildUrl = expandedChildPreviewUrls[selectedChildIndex] || childUrl;
+  const hasNew  = !!activeChildUrl;
+
+  // Subtitle shown in the "New Version" panel header
+  const activeChildFileName =
+    childFilesAll[selectedChildIndex]?.name ?? childFileName;
 
   const userBaseBoxes = userAnnotations.filter(a => a.target === 'base');
   const userNewBoxes  = userAnnotations.filter(a => a.target === 'new');
+
+  // ── Child switching ──────────────────────────────────────────────────────
+  const handleSelectChild = useCallback((index: number) => {
+    setSelectedChildIndex(index);
+    // Reset per-panel state so it doesn't bleed across children
+    setHiddenAiBoxIds([]);
+    setAiBoxAdjustments({});
+  }, []);
 
   // ── Navigate to report ───────────────────────────────────────────────────
   const handleGenerateReport = () => {
@@ -1055,7 +1091,7 @@ const PreviewPage = () => {
         // rebuilding from File objects, which may not survive the full
         // Index → Preview → Report navigation chain.
         basePreviewUrl:  baseUrl  || state.basePreviewUrl  || '',
-        childPreviewUrl: childUrl || state.expandedChildPreviewUrls?.[state.selectedResultIndex ?? 0] || '',
+        childPreviewUrl: activeChildUrl || '',
         userAnnotationsBase,
         userAnnotationsNew,
         userAnnotationsUnique,
@@ -1081,7 +1117,7 @@ const PreviewPage = () => {
         basePreviewUrl:           state.basePreviewUrl           ?? '',
         expandedChildPreviewUrls: state.expandedChildPreviewUrls ?? [],
         analysisRun:              state.analysisRun              ?? true,
-        selectedResultIndex:      state.selectedResultIndex      ?? 0,
+        selectedResultIndex:      selectedChildIndex,
         apiResults:   state.apiResults  ?? [],
         lrfAnalysis:  state.lrfAnalysis ?? null,
       },
@@ -1155,7 +1191,20 @@ const PreviewPage = () => {
       )}
 
       {/* Main content */}
-      <main className="flex-1 overflow-y-auto">
+      <main className="flex-1 overflow-hidden flex flex-row">
+
+        <LabelSidebar
+          baseFile={baseFileArr[0] ?? null}
+          basePreviewUrl={baseUrl || null}
+          childFiles={childFilesAll}
+          childPreviewUrls={expandedChildPreviewUrls}
+          apiResults={state.apiResults ?? []}
+          selectedIndex={selectedChildIndex}
+          onSelectChild={handleSelectChild}
+          analysisRun={true}
+        />
+
+        <div className="flex-1 overflow-y-auto">
         <div className="max-w-[1600px] mx-auto px-6 py-5 space-y-4">
 
           {/* Instructions + controls bar */}
@@ -1263,9 +1312,9 @@ const PreviewPage = () => {
             )}
             {hasNew && (
               <DrawableImagePanel
-                src={childUrl}
+                src={activeChildUrl}
                 title="New Version"
-                subtitle={childFileName}
+                subtitle={activeChildFileName}
                 target="new"
                 aiBoxes={existingNewBoxes}
                 userBoxes={userNewBoxes}
@@ -1392,6 +1441,7 @@ const PreviewPage = () => {
             </div>
           )}
         </div>
+        </div>{/* end flex-1 overflow-y-auto */}
       </main>
 
       {/* Footer action bar */}
