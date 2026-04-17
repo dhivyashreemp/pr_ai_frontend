@@ -1,9 +1,11 @@
-import { useState, useEffect, useMemo, useCallback } from "react";
+import { useState, useEffect, useMemo, useCallback, useRef } from "react";
 import { Download, RefreshCw, FileText, Activity, AlertCircle, Play, ScanLine, ArrowLeft } from "lucide-react";
 import { useLocation, useNavigate } from "react-router-dom";
 import Dropzone from "@/components/Dropzone";
 import VisualDiffViewer, { type RequirementBox, type Annotation } from "@/components/VisualDiffViewer";
 import DataTables from "@/components/DataTables";
+import LabelSidebar from "@/components/LabelSidebar";
+import { pdfToImage, pdfToImageFiles, isPdfFile } from "@/lib/pdfToImage";
 import ProfileDropdown from "@/components/ProfileDropdown";
 import StepIndicator from "@/components/StepIndicator";
 import { toast } from "sonner";
@@ -17,7 +19,11 @@ const Index = () => {
   const submissionId: string | null = location.state?.submissionId ?? null;
 
   const [baseFile, setBaseFile] = useState<File[]>(location.state?.baseFile || []);
-  const [childFiles, setChildFiles] = useState<File[]>(location.state?.childFile || []);
+  const [childFiles, setChildFiles] = useState<File[]>(location.state?.childFiles || []);
+  // Derived from childFiles: every child PDF is exploded into its N pages as
+  // PNG File objects. All downstream usage (preview URLs, FormData, sidebar,
+  // apiResults indexing) works off this expanded array.
+  const [expandedChildFiles, setExpandedChildFiles] = useState<File[]>([]);
 
   // Restored from location state when navigating back from the report page
   const [apiResults, setApiResults] = useState<any[]>(location.state?.apiResults || []);
@@ -34,35 +40,137 @@ const Index = () => {
   // so barcode_summary.comparison is populated for barcode requirement validation.
   const lrfOnly = !!formData && baseFile.length === 0;
 
+  // Expand child files: each PDF is exploded into N per-page PNG Files.
+  // Images pass through unchanged. The resulting array is what all downstream
+  // usage (previews, FormData, sidebar) works off of.
+  useEffect(() => {
+    if (childFiles.length === 0) {
+      setExpandedChildFiles([]);
+      return;
+    }
+    let cancelled = false;
+
+    (async () => {
+      try {
+        const expanded: File[] = [];
+        for (const file of childFiles) {
+          if (isPdfFile(file)) {
+            const pages = await pdfToImageFiles(file);
+            expanded.push(...pages);
+          } else {
+            expanded.push(file);
+          }
+        }
+        if (!cancelled) setExpandedChildFiles(expanded);
+      } catch (e) {
+        console.error("Failed to expand child PDF pages:", e);
+        if (!cancelled) toast.error("Failed to process PDF pages.");
+      }
+    })();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [childFiles]);
+
   // Auto-run analysis for Scenario 3 (only when results are not already restored)
   useEffect(() => {
-    if (formData && childFiles.length > 0 && !analysisRun && !loading) {
+    if (formData && expandedChildFiles.length > 0 && !analysisRun && !loading) {
       handleRunAnalysis();
     }
-  }, [formData, baseFile, childFiles, analysisRun, loading]);
+  }, [formData, baseFile, expandedChildFiles, analysisRun, loading]);
 
   const [progress, setProgress] = useState(0);
-  const [selectedResultIndex, setSelectedResultIndex] = useState(0);
+  const [selectedResultIndex, setSelectedResultIndex] = useState<number>(
+    location.state?.selectedResultIndex ?? 0
+  );
   // Tracks requirement box positions after user drags/resizes/duplicates them in VisualDiffViewer
   const [adjustedBoxes, setAdjustedBoxes] = useState<RequirementBox[]>([]);
   const [adjustedAnnotations, setAdjustedAnnotations] = useState<Annotation[]>([]);
-  const [basePreviewUrl, setBasePreviewUrl] = useState<string>("");
-  const [childPreviewUrls, setChildPreviewUrls] = useState<string[]>([]);
+  const [basePreviewUrl, setBasePreviewUrl] = useState<string>(
+    location.state?.basePreviewUrl || ""
+  );
+  const [childPreviewUrls, setChildPreviewUrls] = useState<string[]>(
+    location.state?.expandedChildPreviewUrls || []
+  );
 
-  // Create object URLs from uploaded files for preview
+  // File objects may not survive location.state on some remount paths, but the
+  // derived preview URLs (data URLs from PDF rendering, blob URLs otherwise) are
+  // plain strings that persist. When URLs were restored from location.state,
+  // hold them until a real expansion replaces them — otherwise the first run of
+  // the rebuild effects (with empty File arrays) would clobber them to "".
+  const restoredBaseUrlRef = useRef<boolean>(!!location.state?.basePreviewUrl);
+  const restoredChildUrlsRef = useRef<boolean>(
+    (location.state?.expandedChildPreviewUrls?.length ?? 0) > 0
+  );
+
+  // Create preview URLs from uploaded files.
+  // PDFs are rendered to PNG data URLs so the Visual Diff Viewer can display
+  // them as plain images (no browser PDF viewer widget).
   useEffect(() => {
-    if (baseFile.length > 0) {
-      const url = URL.createObjectURL(baseFile[0]);
-      setBasePreviewUrl(url);
-      return () => URL.revokeObjectURL(url);
+    if (baseFile.length === 0) {
+      if (!restoredBaseUrlRef.current) setBasePreviewUrl("");
+      return;
     }
+    // A real File object supersedes any restored URL.
+    restoredBaseUrlRef.current = false;
+    const file = baseFile[0];
+    let cancelled = false;
+    let blobUrl: string | null = null;
+
+    (async () => {
+      try {
+        if (isPdfFile(file)) {
+          const dataUrl = await pdfToImage(file);
+          if (!cancelled) setBasePreviewUrl(dataUrl);
+        } else {
+          blobUrl = URL.createObjectURL(file);
+          if (!cancelled) setBasePreviewUrl(blobUrl);
+        }
+      } catch (e) {
+        console.error("Failed to build base preview:", e);
+      }
+    })();
+
+    return () => {
+      cancelled = true;
+      if (blobUrl) URL.revokeObjectURL(blobUrl);
+    };
   }, [baseFile]);
 
   useEffect(() => {
-    const urls = childFiles.map(f => URL.createObjectURL(f));
-    setChildPreviewUrls(urls);
-    return () => urls.forEach(u => URL.revokeObjectURL(u));
-  }, [childFiles]);
+    if (expandedChildFiles.length === 0) {
+      if (!restoredChildUrlsRef.current) setChildPreviewUrls([]);
+      return;
+    }
+    // Real File objects supersede any restored URLs.
+    restoredChildUrlsRef.current = false;
+    let cancelled = false;
+    const blobUrls: string[] = [];
+
+    (async () => {
+      try {
+        const urls = await Promise.all(
+          expandedChildFiles.map(async (f) => {
+            if (isPdfFile(f)) {
+              return await pdfToImage(f);
+            }
+            const url = URL.createObjectURL(f);
+            blobUrls.push(url);
+            return url;
+          })
+        );
+        if (!cancelled) setChildPreviewUrls(urls);
+      } catch (e) {
+        console.error("Failed to build child previews:", e);
+      }
+    })();
+
+    return () => {
+      cancelled = true;
+      blobUrls.forEach((u) => URL.revokeObjectURL(u));
+    };
+  }, [expandedChildFiles]);
 
   useEffect(() => {
     setAdjustedBoxes([]);
@@ -70,7 +178,7 @@ const Index = () => {
   }, [selectedResultIndex]);
 
   const handleRunAnalysis = async () => {
-    if (childFiles.length === 0) {
+    if (expandedChildFiles.length === 0) {
       toast.error("Please upload the new version label.");
       return;
     }
@@ -96,7 +204,7 @@ const Index = () => {
       if (lrfOnly) {
         // ── LRF-only mode: single-label analysis ────────────────────────────
         const data = new FormData();
-        data.append("child_file", childFiles[0]);
+        data.append("child_file", expandedChildFiles[0]);
         const response = await fetch(`${API_URL}/api/analyze-label`, { method: "POST", body: data });
         if (!response.ok) throw new Error(`Analysis failed: ${response.statusText}`);
         const rawData = await response.json();
@@ -109,7 +217,7 @@ const Index = () => {
         // ── Full diff mode ──────────────────────────────────────────────────
         const data = new FormData();
         data.append("base_file", baseFile[0]);
-        childFiles.forEach(file => data.append("child_files", file));
+        expandedChildFiles.forEach(file => data.append("child_files", file));
         if (submissionId) data.append("submission_id", submissionId);
         const response = await fetch(`${API_URL}/api/compare`, { method: "POST", body: data });
         if (!response.ok) throw new Error(`Analysis failed: ${response.statusText}`);
@@ -787,25 +895,20 @@ const Index = () => {
       )}
 
       {/* Main Content */}
-      <main className="flex-1 overflow-y-auto">
+      <main className="flex-1 overflow-hidden flex flex-row">
 
-        {/* Result Tabs — only when multiple child results */}
-        {analysisRun && apiResults.length > 1 && (
-          <div className="bg-white border-b border-gray-200 px-6 py-3 flex gap-2 overflow-x-auto">
-            {apiResults.map((res, idx) => (
-              <button
-                key={idx}
-                onClick={() => setSelectedResultIndex(idx)}
-                className={`px-4 py-2 text-[11px] font-bold uppercase tracking-wider transition-all border shrink-0 ${selectedResultIndex === idx
-                  ? "bg-[#d51900] text-white border-[#d51900] shadow-sm"
-                  : "bg-white text-slate-500 border-slate-200 hover:border-slate-400 hover:bg-slate-50"
-                  }`}
-              >
-                {res.filename || `Label ${idx + 1}`}
-              </button>
-            ))}
-          </div>
-        )}
+        <LabelSidebar
+          baseFile={baseFile[0] ?? null}
+          basePreviewUrl={basePreviewUrl || null}
+          childFiles={expandedChildFiles}
+          childPreviewUrls={childPreviewUrls}
+          apiResults={apiResults}
+          selectedIndex={selectedResultIndex}
+          onSelectChild={setSelectedResultIndex}
+          analysisRun={analysisRun}
+        />
+
+        <div className="flex-1 overflow-y-auto">
 
         <div className="px-6 py-6 space-y-6 pb-16 max-w-[1600px] mx-auto w-full">
 
@@ -844,8 +947,6 @@ const Index = () => {
           <VisualDiffViewer
             baseImage={basePreviewUrl || undefined}
             childImage={childPreviewUrls[selectedResultIndex] || childPreviewUrls[0] || undefined}
-            isBasePdf={baseFile[0]?.type === "application/pdf"}
-            isChildPdf={(childFiles[selectedResultIndex] || childFiles[0])?.type === "application/pdf"}
             annotations={
               // In form mode (formData present), show Unexpected Changes AI annotations.
               // In single label mode, analysisRun && !lrfOnly shows everything.
@@ -878,6 +979,7 @@ const Index = () => {
           />
 
         </div>
+        </div>
       </main>
 
       {/* Footer action bar — sticky */}
@@ -908,12 +1010,19 @@ const Index = () => {
             barcode_summary: analysisRun && apiResults.length > 0 ? apiResults[selectedResultIndex]?.barcode_summary ?? null : null,
             // Pass as arrays — PreviewPage unpacks [0] for display, passes single File to ReportPage
             baseFile:  baseFile[0] ? [baseFile[0]] : [],
-            childFile: childFiles[selectedResultIndex] ? [childFiles[selectedResultIndex]] : [],
+            childFile: expandedChildFiles[selectedResultIndex] ? [expandedChildFiles[selectedResultIndex]] : [],
             baseFileName: baseFile[0]?.name ?? '',
-            childFileName: childFiles[selectedResultIndex]?.name ?? '',
-            // Stored so compare page can be fully restored when navigating back
+            childFileName: expandedChildFiles[selectedResultIndex]?.name ?? '',
+            // Stored so compare page can be fully restored when navigating back.
+            // Preview URLs (strings) are the source of truth on remount because
+            // File objects may not survive location.state across all remount paths.
             apiResults,
             lrfAnalysis,
+            childFiles: expandedChildFiles,
+            basePreviewUrl,
+            expandedChildPreviewUrls: childPreviewUrls,
+            analysisRun,
+            selectedResultIndex,
           },
         })}
           className="flex items-center gap-2 bg-[#d51900] text-white px-8 py-3 text-[13px] font-bold uppercase tracking-widest hover:bg-[#b01300] transition-colors rounded-lg shadow-md"

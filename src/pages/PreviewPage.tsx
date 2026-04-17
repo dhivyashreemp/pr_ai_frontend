@@ -5,6 +5,7 @@ import ProfileDropdown from '@/components/ProfileDropdown';
 import StepIndicator from '@/components/StepIndicator';
 import type { DrawnBox } from '@/report/types';
 import type { RequirementBox } from '@/components/VisualDiffViewer';
+import { pdfToImage, isPdfFile } from '@/lib/pdfToImage';
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Types
@@ -748,19 +749,61 @@ const PreviewPage = () => {
   const [childUrl, setChildUrl] = useState('');
 
   useEffect(() => {
-    if (baseFileArr[0]) {
-      const url = URL.createObjectURL(baseFileArr[0]);
-      setBaseUrl(url);
-      return () => URL.revokeObjectURL(url);
+    const file = baseFileArr[0];
+    if (!file) {
+      setBaseUrl('');
+      return;
     }
+    let cancelled = false;
+    let blobUrl: string | null = null;
+
+    (async () => {
+      try {
+        if (isPdfFile(file)) {
+          const dataUrl = await pdfToImage(file);
+          if (!cancelled) setBaseUrl(dataUrl);
+        } else {
+          blobUrl = URL.createObjectURL(file);
+          if (!cancelled) setBaseUrl(blobUrl);
+        }
+      } catch (e) {
+        console.error('Failed to build base preview:', e);
+      }
+    })();
+
+    return () => {
+      cancelled = true;
+      if (blobUrl) URL.revokeObjectURL(blobUrl);
+    };
   }, [baseFileArr[0]]);
 
   useEffect(() => {
-    if (childFileArr[0]) {
-      const url = URL.createObjectURL(childFileArr[0]);
-      setChildUrl(url);
-      return () => URL.revokeObjectURL(url);
+    const file = childFileArr[0];
+    if (!file) {
+      setChildUrl('');
+      return;
     }
+    let cancelled = false;
+    let blobUrl: string | null = null;
+
+    (async () => {
+      try {
+        if (isPdfFile(file)) {
+          const dataUrl = await pdfToImage(file);
+          if (!cancelled) setChildUrl(dataUrl);
+        } else {
+          blobUrl = URL.createObjectURL(file);
+          if (!cancelled) setChildUrl(blobUrl);
+        }
+      } catch (e) {
+        console.error('Failed to build child preview:', e);
+      }
+    })();
+
+    return () => {
+      cancelled = true;
+      if (blobUrl) URL.revokeObjectURL(blobUrl);
+    };
   }, [childFileArr[0]]);
 
   const baseFileName  = state.baseFileName  ?? (baseFileArr[0]?.name  ?? '');
@@ -1007,6 +1050,12 @@ const PreviewPage = () => {
         requirementBoxes: adjustedRequirementBoxes,
         baseFile:  baseFileArr[0]  ?? null,
         childFile: childFileArr[0] ?? null,
+        // Forward the already-rendered preview URLs (data URLs for PDFs,
+        // blob URLs for images). ReportPage uses these directly instead of
+        // rebuilding from File objects, which may not survive the full
+        // Index → Preview → Report navigation chain.
+        basePreviewUrl:  baseUrl  || state.basePreviewUrl  || '',
+        childPreviewUrl: childUrl || state.expandedChildPreviewUrls?.[state.selectedResultIndex ?? 0] || '',
         userAnnotationsBase,
         userAnnotationsNew,
         userAnnotationsUnique,
@@ -1024,6 +1073,15 @@ const PreviewPage = () => {
         submissionId: state.submissionId,
         baseFile:     baseFileArr,
         childFile:    childFileArr,
+        // Pass back the full expanded child array + preview URLs + UI state so
+        // /compare can fully restore its sidebar, selected child, and analysed
+        // badges on remount (File objects alone are not sufficient — preview
+        // URLs carry the visual state through location.state as plain strings).
+        childFiles:               state.childFiles               ?? [],
+        basePreviewUrl:           state.basePreviewUrl           ?? '',
+        expandedChildPreviewUrls: state.expandedChildPreviewUrls ?? [],
+        analysisRun:              state.analysisRun              ?? true,
+        selectedResultIndex:      state.selectedResultIndex      ?? 0,
         apiResults:   state.apiResults  ?? [],
         lrfAnalysis:  state.lrfAnalysis ?? null,
       },

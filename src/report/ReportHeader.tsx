@@ -51,23 +51,42 @@ export function ReportHeader({
     : currentRevision || newRevision || '';
 
   const handleBack = () => {
-    const s = location.state;
+    const s: any = location.state ?? {};
+    // Reconstruct the expanded-preview-URL array from whatever ReportPage
+    // received. ReportPage may have only the single selected childPreviewUrl
+    // (string), so fall back to a 1-element array if the full list isn't
+    // present.
+    const expandedChildPreviewUrls: string[] =
+      s.expandedChildPreviewUrls ??
+      (s.childPreviewUrl ? [s.childPreviewUrl] : []);
     navigate('/preview', {
       state: {
-        formData:     s?.formData,
-        submissionId: s?.submissionId,
-        baseFile:     s?.baseFile  ? [s.baseFile]  : [],
-        childFile:    s?.childFile ? [s.childFile] : [],
-        apiResults:   s?.apiResults   ?? [],
-        lrfAnalysis:  s?.lrfAnalysis  ?? null,
-        parsedItems:  s?.parsedItems  ?? [],
-        missingItems: s?.missingItems ?? [],
-        satisfiedItems: s?.satisfiedItems ?? [],
-        annotations:  s?.annotations  ?? [],
-        requirementBoxes: s?.requirementBoxes ?? [],
-        barcode_summary:  s?.barcode_summary ?? null,
-        baseFileName: s?.baseFileName ?? '',
-        childFileName: s?.childFileName ?? '',
+        // Spread first so any state that flowed through the
+        // /compare → /preview → /report chain is preserved, then override the
+        // specific keys we care about below.
+        ...s,
+        formData:     s.formData,
+        submissionId: s.submissionId,
+        scenario:     s.scenario,
+        baseFile:     s.baseFile  ? [s.baseFile]  : (s.baseFile  ?? []),
+        childFile:    s.childFile ? [s.childFile] : (s.childFile ?? []),
+        // Full expanded child array + preview URLs + UI state needed to restore
+        // the /compare sidebar and main viewer when the user hits Back again.
+        childFiles:               s.childFiles               ?? [],
+        basePreviewUrl:           s.basePreviewUrl           ?? '',
+        expandedChildPreviewUrls,
+        analysisRun:              s.analysisRun              ?? true,
+        selectedResultIndex:      s.selectedResultIndex      ?? 0,
+        apiResults:   s.apiResults   ?? [],
+        lrfAnalysis:  s.lrfAnalysis  ?? null,
+        parsedItems:  s.parsedItems  ?? [],
+        missingItems: s.missingItems ?? [],
+        satisfiedItems:   s.satisfiedItems   ?? [],
+        annotations:      s.annotations      ?? [],
+        requirementBoxes: s.requirementBoxes ?? [],
+        barcode_summary:  s.barcode_summary  ?? null,
+        baseFileName:     s.baseFileName     ?? '',
+        childFileName:    s.childFileName    ?? '',
       },
     });
   };
