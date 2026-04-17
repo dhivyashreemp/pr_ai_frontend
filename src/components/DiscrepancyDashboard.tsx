@@ -276,26 +276,6 @@ const DiscrepancyRow = ({ item, status, showValidity }: { item: DiscrepancyItem;
               {/* ── Image / background: show location + region proof ── */}
               {item.category === "Image" ? (
                 <>
-                  {item.bounding_box && item.bounding_box.width > 0 ? (
-                    <div className="flex items-start gap-2">
-                      <span className="font-bold text-blue-500 w-14 shrink-0 pt-0.5">Location:</span>
-                      <span className="font-mono text-foreground">
-                        x {(item.bounding_box.x * 100).toFixed(1)}%,
-                        {" "}y {(item.bounding_box.y * 100).toFixed(1)}%
-                        {" "}— {(item.bounding_box.width * 100).toFixed(1)}w × {(item.bounding_box.height * 100).toFixed(1)}h%
-                        {item.bounding_box.confidence && (
-                          <span className={`ml-1.5 ${item.bounding_box.confidence === "high" ? "text-green-600" : "text-yellow-600"}`}>
-                            [{item.bounding_box.confidence}]
-                          </span>
-                        )}
-                      </span>
-                    </div>
-                  ) : (
-                    <div className="flex items-start gap-2">
-                      <span className="font-bold text-blue-500 w-14 shrink-0 pt-0.5">Location:</span>
-                      <span className="italic text-muted-foreground">bounding box not available</span>
-                    </div>
-                  )}
                   {regionCount > 0 ? (
                     <div className="flex items-start gap-2">
                       <span className="font-bold text-blue-500 w-14 shrink-0 pt-0.5">Proof:</span>
