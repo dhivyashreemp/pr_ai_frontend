@@ -982,12 +982,16 @@ const VisualDiffViewer = ({
       {/* Column headers */}
       <div className={`grid ${singlePanel ? "grid-cols-1" : "grid-cols-2"} border-b border-border bg-white`}>
         {!singlePanel && (
-          <div className="px-4 py-1.5 border-r border-border flex items-center justify-center">
-            <span className="text-[11px] font-semibold uppercase tracking-widest text-muted-foreground">Current Version Label</span>
+          <div className="px-4 py-1.5 border-r border-border border-b-2 border-b-blue-200 flex items-center justify-center gap-2">
+            <span className="w-2 h-2 rounded-full bg-blue-500 flex-shrink-0" />
+            <span className="text-[11px] font-semibold uppercase tracking-widest text-blue-700">Current Version Label</span>
           </div>
         )}
-        <div className="px-4 py-1.5 flex items-center justify-center relative">
-          <span className="text-[11px] font-semibold uppercase tracking-widest text-muted-foreground">New Version Label</span>
+        <div className="px-4 py-1.5 flex items-center justify-center relative border-b-2 border-b-red-200">
+          <div className="flex items-center gap-2">
+            <span className="w-2 h-2 rounded-full bg-[#d51900] flex-shrink-0" />
+            <span className="text-[11px] font-semibold uppercase tracking-widest text-[#d51900]">New Version Label</span>
+          </div>
           <div className="absolute right-3 flex items-center gap-2">
             {!useReqBoxes && annotations.length > 0 && (
               <span className="text-[10px] font-bold uppercase tracking-wider text-primary bg-primary/10 border border-primary/20 px-2 py-0.5">

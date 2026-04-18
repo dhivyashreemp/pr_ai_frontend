@@ -91,7 +91,7 @@ const StatusBadge = ({ analysed }: { analysed: boolean }) => (
 );
 
 const BaseBadge = () => (
-  <span className="inline-flex items-center text-[10px] font-medium px-1.5 py-0.5 rounded-full bg-gray-200 text-gray-600 shrink-0">
+  <span className="inline-flex items-center text-[10px] font-medium px-1.5 py-0.5 rounded-full bg-blue-100 text-blue-700 shrink-0">
     Base
   </span>
 );
@@ -110,18 +110,23 @@ const formatDisplayName = (filename: string): string => {
 const CardFooter = ({
   filename,
   badge,
+  dotColor,
 }: {
   filename: string;
   badge: React.ReactNode;
+  dotColor?: string;
 }) => {
   const display = formatDisplayName(filename);
   return (
     <div className="bg-gray-50 px-2 py-1.5 border-t border-gray-100 rounded-b-lg flex items-center justify-between gap-2">
-      <div
-        className="text-[11px] font-medium text-gray-600 truncate flex-1 min-w-0"
-        title={filename}
-      >
-        {display}
+      <div className="flex items-center gap-1.5 flex-1 min-w-0">
+        {dotColor && <span className={`w-2 h-2 rounded-full flex-shrink-0 ${dotColor}`} />}
+        <div
+          className="text-[11px] font-medium text-gray-600 truncate min-w-0"
+          title={filename}
+        >
+          {display}
+        </div>
       </div>
       {badge}
     </div>
@@ -153,16 +158,17 @@ const LabelSidebar = ({
               key={`${file.name}-${idx}`}
               type="button"
               onClick={() => onSelectChild(idx)}
-              className={`w-full text-left bg-white rounded-lg overflow-hidden transition-all duration-150 transform-gpu ${
+              className={`w-full text-left rounded-lg overflow-hidden transition-all duration-150 transform-gpu ${
                 isActive
-                  ? "border-2 border-[#d51900] shadow-md"
-                  : "border border-gray-200 shadow-sm hover:shadow-md hover:scale-[1.02]"
+                  ? "border-2 border-[#d51900] bg-red-50 shadow-md"
+                  : "border border-gray-200 bg-white shadow-sm hover:shadow-md hover:scale-[1.02]"
               }`}
             >
               <CardThumbnail file={file} url={childPreviewUrls[idx] ?? null} />
               <CardFooter
                 filename={file.name}
                 badge={<StatusBadge analysed={analysed} />}
+                dotColor={isActive ? "bg-[#d51900]" : "bg-gray-300"}
               />
             </button>
           );
@@ -187,9 +193,9 @@ const LabelSidebar = ({
         {baseFile ? (
           <>
             {/* ── Base card — non-clickable ─────────────── */}
-            <div className="bg-white rounded-lg overflow-hidden border border-gray-200 shadow-sm">
+            <div className="bg-blue-50 rounded-lg overflow-hidden border border-blue-200 shadow-sm">
               <CardThumbnail file={baseFile} url={basePreviewUrl} />
-              <CardFooter filename={baseFile.name} badge={<BaseBadge />} />
+              <CardFooter filename={baseFile.name} badge={<BaseBadge />} dotColor="bg-blue-500" />
             </div>
 
             {/* ── Child label section header ────────────── */}

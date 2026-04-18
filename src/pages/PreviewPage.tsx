@@ -234,7 +234,10 @@ function DrawableImagePanel({
         style={{ backgroundColor: isDrawingMode ? '#eff6ff' : '#f9fafb' }}
       >
         <div>
-          <div className="text-xs font-bold uppercase tracking-wide text-gray-700">{title}</div>
+          <div className="flex items-center gap-1.5">
+            <span className={`w-2 h-2 rounded-full flex-shrink-0 ${target === 'base' ? 'bg-blue-500' : 'bg-[#d51900]'}`} />
+            <div className={`text-xs font-bold uppercase tracking-wide ${target === 'base' ? 'text-blue-700' : 'text-[#d51900]'}`}>{title}</div>
+          </div>
           {subtitle && <div className="text-[10px] text-gray-400 mt-0.5 truncate max-w-xs">{subtitle}</div>}
         </div>
         {isDrawingMode && (
