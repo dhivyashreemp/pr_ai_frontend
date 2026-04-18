@@ -144,6 +144,81 @@ const Index = () => {
             }
           }
 
+          // ── Barcode scanner results (safety net) ──────────────────────────
+          // Backend includes barcode changes in discrepancies from the latest version.
+          // This block ensures they also appear when the backend response omits them,
+          // so barcode service results are always visible to the reviewer.
+          if (!parsedItems.some((pi: any) => pi.category === "Barcode")) {
+            const barcodeChanges: any[] = result.barcode_summary?.comparison?.changes ?? [];
+            for (const bc of barcodeChanges) {
+              const st = (bc.change_type || "").toLowerCase() === "removed" ? "Deleted"
+                       : (bc.change_type || "").toLowerCase() === "added"   ? "Added"
+                       : "Modified";
+              const ov = bc.old_value || bc.old_printed || "";
+              const nv = bc.new_value || bc.new_printed || "";
+              const bl = bc.barcode_type || "Barcode";
+              parsedItems.push({
+                id: `api-d${index}-bc-${idCounter++}`,
+                category: "Barcode",
+                status: st,
+                value: st === "Modified" ? `From: '${ov}' ➔ To: '${nv}'`
+                     : st === "Added"    ? (nv || bl)
+                     :                     (ov || bl),
+                oldText: st === "Modified" ? ov : undefined,
+                newText: st === "Modified" ? nv : undefined,
+                bounding_box: null,
+                detail: { field_label: bl, old_value: ov || undefined, new_value: nv || undefined },
+                summary: `Barcode scanner detected change (${bl})`,
+              });
+            }
+          }
+
+          // ── OCR text extraction results ────────────────────────────────────
+          // Surface line-level changes from the multi-engine OCR ensemble that
+          // the LLM structured extraction did not capture as named fields.
+          // LLM results take precedence — OCR entries are skipped when the same
+          // text is already covered by a structured LLM text discrepancy.
+          const llmTextSet = new Set<string>(
+            parsedItems
+              .filter((pi: any) => pi.category === "Text")
+              .flatMap((pi: any) =>
+                [pi.oldText, pi.newText, pi.value].filter(Boolean)
+                  .map((s: string) => s.toLowerCase().replace(/\s+/g, " ").trim())
+              )
+          );
+          const ocrDiff: any[] = result.ocr_text_diff ?? [];
+          for (const entry of ocrDiff) {
+            if (entry.type === "equal") continue;
+            const bt = (entry.base?.text    || "").trim();
+            const rt = (entry.revised?.text || "").trim();
+            if (!bt && !rt) continue;
+            const btLow = bt.toLowerCase();
+            const rtLow = rt.toLowerCase();
+            // Skip if LLM already captured this text change
+            const captured = [...llmTextSet].some(v =>
+              (btLow.length > 5 && v.includes(btLow)) ||
+              (rtLow.length > 5 && v.includes(rtLow)) ||
+              (btLow.length > 5 && btLow.includes(v.slice(0, Math.min(v.length, 20))))
+            );
+            if (captured) continue;
+            const st = entry.type === "add"    ? "Added"
+                     : entry.type === "delete" ? "Deleted"
+                     :                           "Modified";
+            parsedItems.push({
+              id: `api-d${index}-ocr-${idCounter++}`,
+              category: "Text",
+              status: st,
+              value: st === "Modified" ? `From: '${bt}' ➔ To: '${rt}'`
+                   : st === "Added"    ? rt
+                   :                     bt,
+              oldText: st === "Modified" ? bt : undefined,
+              newText: st === "Modified" ? rt : undefined,
+              bounding_box: null,
+              detail: { field_label: "OCR Extracted Text", old_value: bt || undefined, new_value: rt || undefined },
+              summary: `Text extraction service (OCR — ${entry.revised?.engines?.join(", ") || entry.base?.engines?.join(", ") || "multi-engine"})`,
+            });
+          }
+
           return { ...result, parsedItems };
         });
 
