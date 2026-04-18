@@ -221,6 +221,7 @@ const Index = () => {
           const apiDiscrepancies = result.discrepancies || {};
           const parsedItems: any[] = [];
           let idCounter = 1;
+          let discrepancyIdx = 0;
 
           for (const status of ["Added", "Deleted", "Modified", "Repositioned"]) {
             if (apiDiscrepancies[status]) {
@@ -231,12 +232,32 @@ const Index = () => {
                   const match = value.match(/From:\s*'(.*?)'\s*➔\s*To:\s*'(.*?)'/);
                   if (match) { oldText = match[1]; newText = match[2]; }
                 }
-                parsedItems.push({ id: `api-d${index}-${idCounter++}`, category: item.Category, status, value, oldText, newText });
+                // Find the annotation whose discrepancy_id matches this item's position
+                const ann = (result.annotations ?? []).find(
+                  (a: any) => a.discrepancy_id === discrepancyIdx
+                );
+                parsedItems.push({
+                  id:         `api-d${index}-${idCounter++}`,
+                  category:   item.Category,
+                  status,
+                  value,
+                  oldText,
+                  newText,
+                  detail:     item.detail ?? null,
+                  aiSummary:  ann?.summary ?? null,
+                  confidence: ann?.confidence ?? null,
+                });
+                discrepancyIdx++;
               });
             }
           }
 
-          return { ...result, parsedItems };
+          return {
+            ...result,
+            parsedItems,
+            yolo_review:  result.yolo_review  ?? [],
+            child_fields: result.child_fields ?? {},
+          };
         });
 
         setLrfAnalysis(null);
@@ -970,6 +991,8 @@ const Index = () => {
             }
             missingItems={missingItems}
             satisfiedItems={satisfiedItems}
+            yoloReview={apiResults[selectedResultIndex]?.yolo_review ?? []}
+            childFields={apiResults[selectedResultIndex]?.child_fields ?? {}}
           />
 
         </div>

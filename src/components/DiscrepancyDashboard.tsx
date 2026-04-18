@@ -13,6 +13,7 @@ import {
   X,
   CheckCircle2,
   AlertCircle,
+  AlertTriangle,
 } from "lucide-react";
 import { useState } from "react";
 import { type DiscrepancyItem, type ProofRequestMissingItem } from "@/data/dummyData";
@@ -196,11 +197,20 @@ const DiffView = ({ oldText, newText }: { oldText: string; newText: string }) =>
   </span>
 );
 
+const confidenceConfig: Record<string, string> = {
+  high:   "bg-green-100 text-green-700",
+  medium: "bg-yellow-100 text-yellow-700",
+  low:    "bg-red-100 text-red-600",
+};
+
 // Single row
 const DiscrepancyRow = ({ item, status, showValidity }: { item: DiscrepancyItem; status: Status; showValidity?: boolean }) => {
   const config = statusConfig[status];
   const CatIcon = categoryIcons[item.category] || Type;
   const showDiff = status === "Modified" && item.oldText && item.newText;
+  const fieldLabel  = (item as any).detail?.field_label ?? null;
+  const aiSummary   = (item as any).aiSummary  ?? null;
+  const confidence  = (item as any).confidence ?? null;
 
   return (
     <div className={`border-l-2 ${config.borderClass} pl-3 pr-4 py-2`}>
@@ -208,16 +218,31 @@ const DiscrepancyRow = ({ item, status, showValidity }: { item: DiscrepancyItem;
         <CatIcon className={`h-3.5 w-3.5 mt-0.5 ${config.textClass} shrink-0`} />
         <div className="min-w-0 flex-1">
           <div className="flex items-start justify-between gap-2">
-            <span className="text-sm text-foreground">{item.value}</span>
-            {showValidity && item.isValid !== undefined && (
-              <span className={`shrink-0 text-[10px] font-bold uppercase tracking-wider px-2 py-0.5 rounded-full border ${
-                item.isValid
-                  ? "bg-green-50 text-green-700 border-green-300"
-                  : "bg-red-50 text-red-700 border-red-300"
-              }`}>
-                {item.isValid ? "Valid" : "Invalid"}
-              </span>
-            )}
+            <div className="min-w-0">
+              <span className="text-sm text-foreground">{item.value}</span>
+              {fieldLabel && (
+                <div className="text-[11px] text-gray-400 font-medium mt-0.5">{fieldLabel}</div>
+              )}
+              {aiSummary && (
+                <div className="text-xs italic text-gray-500 mt-0.5">{aiSummary}</div>
+              )}
+            </div>
+            <div className="flex items-center gap-1.5 shrink-0">
+              {confidence && confidenceConfig[confidence] && (
+                <span className={`text-[10px] font-medium px-1.5 py-0.5 rounded-full ${confidenceConfig[confidence]}`}>
+                  {confidence}
+                </span>
+              )}
+              {showValidity && item.isValid !== undefined && (
+                <span className={`text-[10px] font-bold uppercase tracking-wider px-2 py-0.5 rounded-full border ${
+                  item.isValid
+                    ? "bg-green-50 text-green-700 border-green-300"
+                    : "bg-red-50 text-red-700 border-red-300"
+                }`}>
+                  {item.isValid ? "Valid" : "Invalid"}
+                </span>
+              )}
+            </div>
           </div>
           {showDiff && (
             <div>
@@ -412,7 +437,104 @@ const UnexpectedChangesGroup = ({ items }: { items: DiscrepancyItem[] }) => {
   );
 };
 
-const DiscrepancyDashboard = ({ formData, passedDiscrepancies, missingItems = [], satisfiedItems = [] }: { formData?: FormDataContext, passedDiscrepancies?: DiscrepancyItem[], missingItems?: ProofRequestMissingItem[], satisfiedItems?: ProofRequestMissingItem[] }) => {
+// YOLO uncertain detections — needs manual review
+const YoloReviewGroup = ({ items }: { items: any[] }) => {
+  const [open, setOpen] = useState(false);
+  if (items.length === 0) return null;
+  return (
+    <div>
+      <button
+        onClick={() => setOpen(!open)}
+        className="w-full flex items-center gap-2 py-1.5 hover:bg-amber-50/40 transition-colors"
+      >
+        {open ? <ChevronDown className="h-3.5 w-3.5 text-muted-foreground" /> : <ChevronRight className="h-3.5 w-3.5 text-muted-foreground" />}
+        <AlertTriangle className="h-3.5 w-3.5 text-amber-500" />
+        <span className="text-xs font-semibold uppercase tracking-wider text-amber-600">Needs Manual Review</span>
+        <span className="ml-1 bg-amber-100 text-amber-700 text-xs rounded-full px-2 py-0.5 font-medium">
+          {items.length}
+        </span>
+      </button>
+      {open && (
+        <div className="ml-1 space-y-0.5 mt-0.5 mb-3">
+          {items.map((item, idx) => (
+            <div key={idx} className="border-l-2 border-amber-400 pl-3 pr-4 py-2">
+              <div className="flex items-start justify-between gap-2">
+                <div className="min-w-0 flex-1">
+                  <div className="flex items-center gap-1.5 flex-wrap mb-0.5">
+                    <span className="text-[10px] font-semibold bg-amber-100 text-amber-700 px-1.5 py-0.5 rounded-full capitalize">
+                      {item.change_type}
+                    </span>
+                    <span className="text-sm text-gray-700 font-medium">{item.name}</span>
+                  </div>
+                  {item.note && (
+                    <div className="text-xs italic text-gray-500 mt-0.5">{item.note}</div>
+                  )}
+                  <div className="flex items-center gap-1.5 mt-1 flex-wrap">
+                    {item.yolo_confidence != null && (
+                      <span className="text-[10px] bg-amber-50 text-amber-600 rounded-full px-1.5 py-0.5">
+                        {Math.round(item.yolo_confidence * 100)}% confidence
+                      </span>
+                    )}
+                    {item.yolo_class && (
+                      <span className="text-xs bg-gray-100 text-gray-500 rounded px-1.5 py-0.5">
+                        {item.yolo_class}
+                      </span>
+                    )}
+                  </div>
+                </div>
+              </div>
+            </div>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+};
+
+// Extracted label fields table
+const ChildFieldsSection = ({ fields }: { fields: Record<string, string> }) => {
+  const [open, setOpen] = useState(false);
+
+  const entries = Object.entries(fields).filter(
+    ([, v]) => v != null && v !== "" && v !== "null"
+  );
+  if (entries.length === 0) return null;
+
+  const toTitleCase = (key: string) =>
+    key
+      .replace(/_/g, " ")
+      .replace(/\b\w/g, (c) => c.toUpperCase());
+
+  return (
+    <div className="bg-card border border-border mt-4">
+      <button
+        onClick={() => setOpen(!open)}
+        className="w-full bg-secondary/50 px-4 py-2 border-b border-border flex items-center gap-2 hover:bg-secondary/70 transition-colors"
+      >
+        {open ? <ChevronDown className="h-3.5 w-3.5 text-muted-foreground" /> : <ChevronRight className="h-3.5 w-3.5 text-muted-foreground" />}
+        <span className="text-[11px] font-semibold uppercase tracking-widest text-muted-foreground">
+          Extracted Label Fields
+        </span>
+        <span className="ml-1 text-[10px] text-muted-foreground font-mono">({entries.length})</span>
+      </button>
+      {open && (
+        <div className="divide-y divide-gray-100">
+          {entries.map(([key, value], idx) => (
+            <div
+              key={key}
+              className={`flex items-baseline px-4 py-1.5 ${idx % 2 === 0 ? "bg-white" : "bg-gray-50"}`}
+            >
+              <span className="text-xs text-gray-500 w-1/3 shrink-0 pr-4">{toTitleCase(key)}</span>
+              <span className="text-sm text-gray-700 break-words min-w-0">{value}</span>
+            </div>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+};
+
+const DiscrepancyDashboard = ({ formData, passedDiscrepancies, missingItems = [], satisfiedItems = [], yoloReview = [], childFields = {} }: { formData?: FormDataContext, passedDiscrepancies?: DiscrepancyItem[], missingItems?: ProofRequestMissingItem[], satisfiedItems?: ProofRequestMissingItem[], yoloReview?: any[], childFields?: Record<string, string> }) => {
   const [isModalOpen, setIsModalOpen] = useState(false);
   const grouped: Record<Status, DiscrepancyItem[]> = { Deleted: [], Added: [], Modified: [], Repositioned: [] };
 
@@ -481,17 +603,28 @@ const DiscrepancyDashboard = ({ formData, passedDiscrepancies, missingItems = []
               <ProofRequestSatisfiedGroup items={satisfiedItems} />
               <ProofRequestMissingGroup items={missingItems} />
               <UnexpectedChangesGroup items={displayItems.filter((item) => item.isValid === false)} />
+              <YoloReviewGroup items={yoloReview} />
             </div>
           )}
           {/* In proof-request mode the satisfied/missing groups already cover all
               requirement status — the raw diff groups add noise, so hide them. */}
-          {!formData && statusOrder.map((status) => (
-            <div key={status} className="py-2 last:pb-0">
-              <StatusGroup status={status} items={grouped[status]} showValidity={false} />
-            </div>
-          ))}
+          {!formData && (
+            <>
+              {statusOrder.map((status) => (
+                <div key={status} className="py-2 last:pb-0">
+                  <StatusGroup status={status} items={grouped[status]} showValidity={false} />
+                </div>
+              ))}
+              {yoloReview.length > 0 && (
+                <div className="py-2 last:pb-0">
+                  <YoloReviewGroup items={yoloReview} />
+                </div>
+              )}
+            </>
+          )}
         </div>
       </div>
+      <ChildFieldsSection fields={childFields} />
     </div>
   );
 };
