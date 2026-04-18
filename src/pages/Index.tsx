@@ -1,5 +1,6 @@
 import { useState, useEffect, useMemo, useCallback, useRef } from "react";
-import { Download, RefreshCw, FileText, Activity, AlertCircle, Play, ScanLine, ArrowLeft } from "lucide-react";
+import { Download, RefreshCw, FileText, AlertCircle, Play, ScanLine, ArrowLeft } from "lucide-react";
+import AnalysisProgressModal from "@/components/AnalysisProgressModal";
 import { useLocation, useNavigate } from "react-router-dom";
 import Dropzone from "@/components/Dropzone";
 import VisualDiffViewer, { type RequirementBox, type Annotation } from "@/components/VisualDiffViewer";
@@ -80,7 +81,6 @@ const Index = () => {
     }
   }, [formData, baseFile, expandedChildFiles, analysisRun, loading]);
 
-  const [progress, setProgress] = useState(0);
   const [selectedResultIndex, setSelectedResultIndex] = useState<number>(
     location.state?.selectedResultIndex ?? 0
   );
@@ -182,15 +182,7 @@ const Index = () => {
     }
 
     setLoading(true);
-    setProgress(0);
     setAnalysisRun(false);
-
-    const progressInterval = setInterval(() => {
-      setProgress((prev) => {
-        if (prev >= 95) { clearInterval(progressInterval); return 95; }
-        return prev + 5;
-      });
-    }, 400);
 
     const API_URL = import.meta.env.VITE_API_BASE_URL || "https://label-comparator.azurewebsites.net";
 
@@ -205,7 +197,6 @@ const Index = () => {
         setLrfAnalysis(rawData);
         setApiResults([]);
         setSelectedResultIndex(0);
-        setProgress(100);
         setAnalysisRun(true);
       } else {
         // ── Full diff mode ──────────────────────────────────────────────────
@@ -263,14 +254,12 @@ const Index = () => {
         setLrfAnalysis(null);
         setApiResults(processedResults);
         setSelectedResultIndex(0);
-        setProgress(100);
         setAnalysisRun(true);
       }
     } catch (error) {
       console.error("Comparison error:", error);
       toast.error("Error running analysis. Please check your connection and try again.");
     } finally {
-      clearInterval(progressInterval);
       setTimeout(() => setLoading(false), 500);
     }
   };
@@ -834,27 +823,7 @@ const Index = () => {
   return (
     <div className="min-h-screen bg-[#f8f9fa] flex flex-col">
 
-      {/* Loading popup */}
-      {loading && (
-        <div className="fixed inset-0 bg-black/30 backdrop-blur-[2px] z-[100] flex items-center justify-center">
-          <div className="bg-white rounded-lg shadow-xl px-8 py-6 flex flex-col items-center gap-4 w-72">
-            <Activity className="h-8 w-8 text-[#d51900] animate-pulse" />
-            <div className="text-center space-y-1">
-              <div className="text-sm font-bold text-slate-800 uppercase tracking-wide">
-                Analysing Labels
-              </div>
-              <div className="text-xs text-slate-500">This may take a moment…</div>
-            </div>
-            <div className="w-full h-1.5 bg-slate-100 rounded-full overflow-hidden">
-              <div
-                className="h-full bg-[#d51900] transition-all duration-500 ease-out"
-                style={{ width: `${progress}%` }}
-              />
-            </div>
-            <span className="text-xs text-slate-400 font-mono">{progress}%</span>
-          </div>
-        </div>
-      )}
+      <AnalysisProgressModal isOpen={loading} />
 
       {/* Navbar */}
       <nav className="bg-primary text-white px-6 py-0 flex items-center justify-between shadow-md sticky top-0 z-40" style={{ minHeight: 52 }}>
