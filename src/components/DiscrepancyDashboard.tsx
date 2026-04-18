@@ -211,6 +211,13 @@ const DiscrepancyRow = ({ item, status, showValidity }: { item: DiscrepancyItem;
   const fieldLabel  = (item as any).detail?.field_label ?? null;
   const aiSummary   = (item as any).aiSummary  ?? null;
   const confidence  = (item as any).confidence ?? null;
+  const resolvedOld  = (item as any).detail?.old_value || item.oldText || null;
+  const resolvedNew  = (item as any).detail?.new_value || item.newText || null;
+  const baseContent  = (item as any).detail?.value ?? item.value ?? null;
+  const childContent = (item as any).detail?.new_value || item.newText || null;
+  const regionCount  = ((item as any).detail?.regions?.length) ?? 0;
+  const isUnexpected = showValidity && item.isValid === false;
+  const showBreakdown = !!item.detail;
 
   return (
     <div className={`border-l-2 ${config.borderClass} pl-3 pr-4 py-2.5`}>
@@ -233,15 +240,6 @@ const DiscrepancyRow = ({ item, status, showValidity }: { item: DiscrepancyItem;
               {confidence && confidenceConfig[confidence] && (
                 <span className={`text-[10px] font-medium px-1.5 py-0.5 rounded-full ${confidenceConfig[confidence]}`}>
                   {confidence}
-                </span>
-              )}
-              {showValidity && item.isValid !== undefined && (
-                <span className={`text-[10px] font-bold uppercase tracking-wider px-2 py-0.5 rounded-full border ${
-                  item.isValid
-                    ? "bg-green-50 text-green-700 border-green-300"
-                    : "bg-red-50 text-red-700 border-red-300"
-                }`}>
-                  {item.isValid ? "Valid" : "Invalid"}
                 </span>
               )}
             </div>
@@ -348,32 +346,6 @@ const DiscrepancyRow = ({ item, status, showValidity }: { item: DiscrepancyItem;
             </div>
           )}
 
-          {/* ── Compact fallback detail (items without backend detail data) ── */}
-          {!showBreakdown && item.detail && (
-            <div className="mt-1.5 space-y-0.5 text-[11px]">
-              {item.category === "Text" && status === "Deleted" && item.detail.value && (
-                <p className="text-muted-foreground font-mono">
-                  Was: <span className="text-red-600">{item.detail.value}</span>
-                </p>
-              )}
-              {item.category === "Text" && status === "Added" && item.detail.value && (
-                <p className="text-muted-foreground font-mono">
-                  Now: <span className="text-green-600">{item.detail.value}</span>
-                </p>
-              )}
-              {item.category === "Symbol" && item.detail.description && (
-                <p className="text-muted-foreground leading-snug">{item.detail.description}</p>
-              )}
-              {item.category === "Symbol" && item.detail.standard && (
-                <p className="text-muted-foreground font-mono">Standard: {item.detail.standard}</p>
-              )}
-              {item.category === "Image" && regionCount > 0 && (
-                <p className="text-muted-foreground">
-                  {regionCount} changed region{regionCount !== 1 ? "s" : ""} detected
-                </p>
-              )}
-            </div>
-          )}
 
         </div>
       </div>
