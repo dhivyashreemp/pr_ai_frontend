@@ -1,5 +1,7 @@
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
+import { ChevronLeft, ChevronRight } from "lucide-react";
 import { pdfToImage, isPdfFile } from "@/lib/pdfToImage";
+import { useSidebarState, MIN_WIDTH, MAX_WIDTH, COLLAPSED_WIDTH } from "@/hooks/useSidebarState";
 
 interface LabelSidebarProps {
   baseFile: File | null;
@@ -20,9 +22,12 @@ interface LabelSidebarProps {
  */
 const useThumbnailUrl = (
   file: File | null | undefined,
-  fallbackUrl: string | null | undefined
+  fallbackUrl: string | null | undefined,
 ): { url: string | null; error: boolean } => {
-  const [state, setState] = useState<{ url: string | null; error: boolean }>({ url: null, error: false });
+  const [state, setState] = useState<{ url: string | null; error: boolean }>({
+    url: null,
+    error: false,
+  });
 
   useEffect(() => {
     // All preview URLs passed by parent pages are data URLs (never revocable).
@@ -68,14 +73,32 @@ const CardThumbnail = ({ file, url }: { file: File; url: string | null }) => {
   const shell =
     "h-40 w-full bg-white flex items-center justify-center rounded-t-lg overflow-hidden";
   if (error) {
-    return <div className={`${shell} text-[10px] uppercase tracking-widest text-gray-400`}>PDF</div>;
+    return (
+      <div className={`${shell} text-[10px] uppercase tracking-widest text-gray-400`}>PDF</div>
+    );
   }
   if (!resolved) {
-    return <div className={`${shell} text-[10px] uppercase tracking-widest text-gray-300`}>…</div>;
+    return (
+      <div className={`${shell} text-[10px] uppercase tracking-widest text-gray-300`}>…</div>
+    );
   }
   return (
     <div className={shell}>
       <img src={resolved} alt="" className="max-w-full max-h-full object-contain" />
+    </div>
+  );
+};
+
+/** Small square thumbnail for collapsed filmstrip mode. */
+const FilmstripThumb = ({ file, url }: { file: File; url: string | null }) => {
+  const { url: resolved } = useThumbnailUrl(file, url);
+  return (
+    <div className="w-10 h-10 rounded-md overflow-hidden flex items-center justify-center bg-gray-100 shrink-0">
+      {resolved ? (
+        <img src={resolved} alt="" className="w-full h-full object-contain" />
+      ) : (
+        <span className="text-[8px] text-gray-400">…</span>
+      )}
     </div>
   );
 };
@@ -121,10 +144,7 @@ const CardFooter = ({
     <div className="bg-gray-50 px-2 py-1.5 border-t border-gray-100 rounded-b-lg flex items-center justify-between gap-2">
       <div className="flex items-center gap-1.5 flex-1 min-w-0">
         {dotColor && <span className={`w-2 h-2 rounded-full flex-shrink-0 ${dotColor}`} />}
-        <div
-          className="text-[11px] font-medium text-gray-600 truncate min-w-0"
-          title={filename}
-        >
+        <div className="text-[11px] font-medium text-gray-600 truncate min-w-0" title={filename}>
           {display}
         </div>
       </div>
@@ -143,12 +163,52 @@ const LabelSidebar = ({
   onSelectChild,
   analysisRun,
 }: LabelSidebarProps) => {
+  const { isCollapsed, width, toggleCollapse, setWidth } = useSidebarState();
+  const sidebarRef = useRef<HTMLElement>(null);
+  const dragWidthRef = useRef<number>(width);
+
+  const displayWidth = isCollapsed ? COLLAPSED_WIDTH : width;
+
+  // ── Resize drag logic ────────────────────────────────────────────────────────
+  // Direct DOM manipulation during drag — zero React re-renders mid-drag.
+  // One setState (via setWidth) fires only on mouseup.
+  const handleResizeMouseDown = useCallback(
+    (e: React.MouseEvent) => {
+      e.preventDefault();
+      if (!sidebarRef.current) return;
+
+      // Initialise from the current rendered width so drag starts from actual position.
+      dragWidthRef.current = sidebarRef.current.getBoundingClientRect().width;
+      // Disable CSS transition while dragging for instant feedback.
+      sidebarRef.current.style.transition = "none";
+
+      const onMouseMove = (ev: MouseEvent) => {
+        if (!sidebarRef.current) return;
+        const rect = sidebarRef.current.getBoundingClientRect();
+        const newWidth = Math.max(MIN_WIDTH, Math.min(MAX_WIDTH, ev.clientX - rect.left));
+        dragWidthRef.current = newWidth;
+        sidebarRef.current.style.width = `${newWidth}px`;
+      };
+
+      const onMouseUp = () => {
+        if (sidebarRef.current) sidebarRef.current.style.transition = "";
+        document.removeEventListener("mousemove", onMouseMove);
+        document.removeEventListener("mouseup", onMouseUp);
+        // One React state update + localStorage persist at drag end.
+        setWidth(dragWidthRef.current);
+      };
+
+      document.addEventListener("mousemove", onMouseMove);
+      document.addEventListener("mouseup", onMouseUp);
+    },
+    [setWidth],
+  );
+
+  // ── Child card list (expanded mode) ─────────────────────────────────────────
   const childrenList = (
     <div className="flex flex-col gap-3">
       {childFiles.length === 0 ? (
-        <div className="text-[11px] text-gray-400 italic py-2 text-center">
-          No child labels
-        </div>
+        <div className="text-[11px] text-gray-400 italic py-2 text-center">No child labels</div>
       ) : (
         childFiles.map((file, idx) => {
           const analysed = analysisRun && !!apiResults[idx];
@@ -177,39 +237,29 @@ const LabelSidebar = ({
     </div>
   );
 
-  return (
-    <aside
-      className="w-[280px] shrink-0 bg-gray-50 border-r border-gray-200 overflow-y-auto"
-      style={{ height: "100%" }}
-    >
-      {/* ── Section header ──────────────────────────────── */}
+  // ── Expanded sidebar content ─────────────────────────────────────────────────
+  const expandedContent = (
+    <>
       <div className="px-3 pt-3 pb-2">
-        <div className="text-xs font-semibold text-gray-400 uppercase tracking-wider">
-          Labels
-        </div>
+        <div className="text-xs font-semibold text-gray-400 uppercase tracking-wider">Labels</div>
       </div>
-
       <div className="p-3 pt-0">
         {baseFile ? (
           <>
-            {/* ── Base card — non-clickable ─────────────── */}
             <div className="bg-blue-50 rounded-lg overflow-hidden border border-blue-200 shadow-sm">
               <CardThumbnail file={baseFile} url={basePreviewUrl} />
-              <CardFooter filename={baseFile.name} badge={<BaseBadge />} dotColor="bg-blue-500" />
+              <CardFooter
+                filename={baseFile.name}
+                badge={<BaseBadge />}
+                dotColor="bg-blue-500"
+              />
             </div>
-
-            {/* ── Child label section header ────────────── */}
             <div className="text-[10px] font-semibold text-gray-400 uppercase tracking-wider mt-3 mb-1">
               Child Labels
             </div>
-
-            {/* ── Indented child list with left rail ────── */}
-            <div className="pl-3 border-l border-gray-300 ml-1">
-              {childrenList}
-            </div>
+            <div className="pl-3 border-l border-gray-300 ml-1">{childrenList}</div>
           </>
         ) : (
-          // No base — render children flat without the rail
           <>
             <div className="text-[10px] font-semibold text-gray-400 uppercase tracking-wider mb-1">
               Child Labels
@@ -218,6 +268,71 @@ const LabelSidebar = ({
           </>
         )}
       </div>
+    </>
+  );
+
+  // ── Collapsed filmstrip content ──────────────────────────────────────────────
+  const collapsedContent = (
+    <div className="flex flex-col items-center gap-2 pt-3 pb-3 px-1">
+      {baseFile && (
+        <div title={baseFile.name} className="rounded-md ring-2 ring-blue-400 cursor-default">
+          <FilmstripThumb file={baseFile} url={basePreviewUrl} />
+        </div>
+      )}
+      {baseFile && childFiles.length > 0 && (
+        <div className="w-5 h-px bg-gray-200" />
+      )}
+      {childFiles.map((file, idx) => {
+        const isActive = idx === selectedIndex;
+        return (
+          <button
+            key={`${file.name}-${idx}`}
+            type="button"
+            title={file.name}
+            onClick={() => onSelectChild(idx)}
+            className={`rounded-md focus:outline-none focus-visible:ring-2 focus-visible:ring-[#d51900] ${
+              isActive ? "ring-2 ring-[#d51900]" : "ring-1 ring-gray-200"
+            }`}
+          >
+            <FilmstripThumb file={file} url={childPreviewUrls[idx] ?? null} />
+          </button>
+        );
+      })}
+    </div>
+  );
+
+  return (
+    <aside
+      ref={sidebarRef as React.RefObject<HTMLElement>}
+      className="relative shrink-0 bg-gray-50 border-r border-gray-200 flex flex-col transition-[width] duration-200 ease-in-out"
+      style={{ width: displayWidth, height: "100%" }}
+    >
+      {/* ── Scrollable content area ──────────────────────────────────────── */}
+      <div className="flex-1 overflow-y-auto min-h-0">
+        {isCollapsed ? collapsedContent : expandedContent}
+      </div>
+
+      {/* ── Resize handle — right edge, expanded only ────────────────────── */}
+      {!isCollapsed && (
+        <div
+          className="absolute right-0 top-0 bottom-0 w-1 cursor-col-resize z-10 hover:bg-blue-400/50 active:bg-blue-500/60"
+          onMouseDown={handleResizeMouseDown}
+        />
+      )}
+
+      {/* ── Collapse / expand toggle button ──────────────────────────────── */}
+      <button
+        type="button"
+        onClick={toggleCollapse}
+        className="absolute right-0 top-1/2 -translate-y-1/2 translate-x-1/2 z-20 rounded-full w-5 h-5 bg-white border border-gray-300 shadow-sm flex items-center justify-center text-gray-500 hover:text-gray-700 hover:border-gray-400 transition-colors"
+        title={isCollapsed ? "Expand sidebar" : "Collapse sidebar"}
+      >
+        {isCollapsed ? (
+          <ChevronRight size={12} className="shrink-0" />
+        ) : (
+          <ChevronLeft size={12} className="shrink-0" />
+        )}
+      </button>
     </aside>
   );
 };
