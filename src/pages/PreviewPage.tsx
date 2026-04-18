@@ -1,6 +1,6 @@
 import { useState, useRef, useCallback, useEffect, useMemo } from 'react';
 import { useNavigate, useLocation } from 'react-router-dom';
-import { ArrowLeft, FileText, ScanLine, Trash2, Pencil, X, Check, MapPin, Copy } from 'lucide-react';
+import { ArrowLeft, FileText, ScanLine, Trash2, Pencil, X, Check, MapPin, Copy, Lock } from 'lucide-react';
 import ProfileDropdown from '@/components/ProfileDropdown';
 import StepIndicator from '@/components/StepIndicator';
 import type { DrawnBox } from '@/report/types';
@@ -63,6 +63,7 @@ interface DrawableImagePanelProps {
   onDuplicateBox?: (source: DrawnBox | UserAnnotation, pos: { top: number; left: number; width: number; height: number }, panelTarget: 'base' | 'new') => void;
   onAdjustAiBox?: (id: string, pos: { top: number; left: number; width: number; height: number }) => void;
   highlightedGroupId?: string | null;
+  isReadOnly?: boolean;
 }
 
 function DrawableImagePanel({
@@ -70,6 +71,7 @@ function DrawableImagePanel({
   aiBoxes, userBoxes, isDrawingMode, activeGroupId,
   onDrawComplete, onDeleteBox, onDeleteAiBox, onDuplicateBox, onAdjustAiBox,
   highlightedGroupId,
+  isReadOnly = false,
 }: DrawableImagePanelProps) {
   const containerRef = useRef<HTMLDivElement>(null);
   const [draw, setDraw] = useState<DrawState | null>(null);
@@ -231,16 +233,22 @@ function DrawableImagePanel({
       {/* Panel header */}
       <div
         className="border-b border-gray-200 px-4 py-2.5 flex items-center justify-between"
-        style={{ backgroundColor: isDrawingMode ? '#eff6ff' : '#f9fafb' }}
+        style={{ backgroundColor: isDrawingMode && !isReadOnly ? '#eff6ff' : '#f9fafb' }}
       >
         <div>
           <div className="flex items-center gap-1.5">
             <span className={`w-2 h-2 rounded-full flex-shrink-0 ${target === 'base' ? 'bg-blue-500' : 'bg-[#d51900]'}`} />
             <div className={`text-xs font-bold uppercase tracking-wide ${target === 'base' ? 'text-blue-700' : 'text-[#d51900]'}`}>{title}</div>
+            {isReadOnly && (
+              <div className="flex items-center gap-0.5 ml-1">
+                <Lock className="w-3 h-3 text-gray-400" />
+                <span className="text-[10px] text-gray-400">View only</span>
+              </div>
+            )}
           </div>
           {subtitle && <div className="text-[10px] text-gray-400 mt-0.5 truncate max-w-xs">{subtitle}</div>}
         </div>
-        {isDrawingMode && (
+        {isDrawingMode && !isReadOnly && (
           <span className="text-[10px] font-bold text-white bg-blue-600 px-2 py-0.5 flex items-center gap-1">
             <Pencil className="w-2.5 h-2.5" />
             {activeGroupId ? 'Adding location…' : 'Drawing active'}
@@ -251,12 +259,12 @@ function DrawableImagePanel({
       {/* Image area */}
       <div
         ref={containerRef}
-        className="relative select-none flex-1"
-        style={{ cursor: isDrawingMode ? 'crosshair' : 'default' }}
-        onPointerDown={handlePointerDown}
-        onPointerMove={handlePointerMove}
-        onPointerUp={handlePointerUp}
-        onClick={() => { if (!isDrawingMode && !placing) setSelectedBoxId(null); }}
+        className={`relative select-none flex-1${isReadOnly ? ' pointer-events-none' : ''}`}
+        style={{ cursor: isReadOnly ? 'default' : isDrawingMode ? 'crosshair' : 'default' }}
+        onPointerDown={isReadOnly ? undefined : handlePointerDown}
+        onPointerMove={isReadOnly ? undefined : handlePointerMove}
+        onPointerUp={isReadOnly ? undefined : handlePointerUp}
+        onClick={isReadOnly ? undefined : () => { if (!isDrawingMode && !placing) setSelectedBoxId(null); }}
       >
         <img src={src} alt={title} className="w-full h-auto block" draggable={false} />
 
@@ -886,11 +894,6 @@ const PreviewPage = () => {
    */
   const [activeGroupId, setActiveGroupId] = useState<string | null>(null);
 
-  // Entering "add location" mode automatically enables draw mode
-  const handleAddLocation = (groupId: string) => {
-    setActiveGroupId(groupId);
-    setIsDrawingMode(true);
-  };
 
   const handleExitAddLocation = () => {
     setActiveGroupId(null);
@@ -1058,7 +1061,7 @@ const PreviewPage = () => {
     // Merge human-adjusted positions back into requirementBoxes (% → 0-1 range)
     const adjustedRequirementBoxes = (state.requirementBoxes ?? [])
       .filter((_: any, i: number) => !hiddenAiBoxIds.includes(`requirement-${i}`))
-      .map((b: any, i: number) => {
+      .map((b: any) => {
         const originalIndex = requirementBoxes.indexOf(b);
         const adj = aiBoxAdjustments[`requirement-${originalIndex}`];
         if (!adj) return b;
@@ -1321,6 +1324,7 @@ const PreviewPage = () => {
                 onDuplicateBox={handleDuplicateBox}
                 onAdjustAiBox={handleAdjustAiBox}
                 highlightedGroupId={hoveredAnnotationId ?? selectedAnnotationId}
+                isReadOnly={true}
               />
             )}
             {hasNew && (
