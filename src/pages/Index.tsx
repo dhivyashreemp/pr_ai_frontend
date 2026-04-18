@@ -148,62 +148,65 @@ const Index = () => {
           // Backend includes barcode changes in discrepancies from the latest version.
           // This block ensures they also appear when the backend response omits them,
           // so barcode service results are always visible to the reviewer.
-          if (!parsedItems.some((pi: any) => pi.category === "Barcode")) {
-            const barcodeChanges: any[] = result.barcode_summary?.comparison?.changes ?? [];
-            for (const bc of barcodeChanges) {
-              const st = (bc.change_type || "").toLowerCase() === "removed" ? "Deleted"
-                       : (bc.change_type || "").toLowerCase() === "added"   ? "Added"
-                       : "Modified";
-              const ov = bc.old_value || bc.old_printed || "";
-              const nv = bc.new_value || bc.new_printed || "";
-              const bl = bc.barcode_type || "Barcode";
-              parsedItems.push({
-                id: `api-d${index}-bc-${idCounter++}`,
-                category: "Barcode",
-                status: st,
-                value: st === "Modified" ? `From: '${ov}' ➔ To: '${nv}'`
-                     : st === "Added"    ? (nv || bl)
-                     :                     (ov || bl),
-                oldText: st === "Modified" ? ov : undefined,
-                newText: st === "Modified" ? nv : undefined,
-                bounding_box: null,
-                detail: { field_label: bl, old_value: ov || undefined, new_value: nv || undefined },
-                summary: `Barcode scanner detected change (${bl})`,
-              });
-            }
+          // Per-entry dedup: skip any barcode change whose normalised key already
+          // exists in parsedItems (avoids double-counting when backend is updated).
+          const normBcKey = (ct: string, ov: string, nv: string) =>
+            `${ct.toLowerCase()}:${ov.toLowerCase().trim()}:${nv.toLowerCase().trim()}`;
+          const existingBcKeys = new Set(
+            parsedItems
+              .filter((pi: any) => pi.category === "Barcode")
+              .map((pi: any) => normBcKey(pi.status, pi.oldText || "", pi.newText || pi.value || ""))
+          );
+          for (const bc of (result.barcode_summary?.comparison?.changes ?? [])) {
+            const ctRaw = (bc.change_type || "").toLowerCase();
+            const st = ctRaw === "removed" ? "Deleted" : ctRaw === "added" ? "Added" : "Modified";
+            const ov = bc.old_value || bc.old_printed || "";
+            const nv = bc.new_value || bc.new_printed || "";
+            const bl = bc.barcode_type || bc.element_id || "Barcode";
+            if (existingBcKeys.has(normBcKey(st, ov, nv))) continue;
+            parsedItems.push({
+              id: `api-d${index}-bc-${idCounter++}`,
+              category: "Barcode",
+              status: st,
+              value: st === "Modified" ? `From: '${ov}' ➔ To: '${nv}'`
+                   : st === "Added"    ? (nv || bl)
+                   :                     (ov || bl),
+              oldText: st === "Modified" ? ov : undefined,
+              newText: st === "Modified" ? nv : undefined,
+              bounding_box: null,
+              detail: { field_label: bl, old_value: ov || undefined, new_value: nv || undefined },
+              summary: `Barcode scanner detected change (${bl})`,
+            });
           }
 
           // ── OCR text extraction results ────────────────────────────────────
           // Surface line-level changes from the multi-engine OCR ensemble that
           // the LLM structured extraction did not capture as named fields.
-          // LLM results take precedence — OCR entries are skipped when the same
-          // text is already covered by a structured LLM text discrepancy.
+          // LLM results take precedence — OCR entries are skipped when their
+          // normalised text already appears in an LLM discrepancy (substring or exact).
+          const normText = (s: string) => s.toLowerCase().replace(/\s+/g, " ").trim();
           const llmTextSet = new Set<string>(
             parsedItems
               .filter((pi: any) => pi.category === "Text")
               .flatMap((pi: any) =>
-                [pi.oldText, pi.newText, pi.value].filter(Boolean)
-                  .map((s: string) => s.toLowerCase().replace(/\s+/g, " ").trim())
+                [pi.oldText, pi.newText, pi.value].filter(Boolean).map(normText)
               )
           );
-          const ocrDiff: any[] = result.ocr_text_diff ?? [];
-          for (const entry of ocrDiff) {
+          const isOcrCaptured = (text: string) => {
+            if (!text) return true;
+            const n = normText(text);
+            return [...llmTextSet].some(v => v === n || v.includes(n) || n.includes(v));
+          };
+          for (const entry of (result.ocr_text_diff ?? [])) {
             if (entry.type === "equal") continue;
             const bt = (entry.base?.text    || "").trim();
             const rt = (entry.revised?.text || "").trim();
             if (!bt && !rt) continue;
-            const btLow = bt.toLowerCase();
-            const rtLow = rt.toLowerCase();
-            // Skip if LLM already captured this text change
-            const captured = [...llmTextSet].some(v =>
-              (btLow.length > 5 && v.includes(btLow)) ||
-              (rtLow.length > 5 && v.includes(rtLow)) ||
-              (btLow.length > 5 && btLow.includes(v.slice(0, Math.min(v.length, 20))))
-            );
-            if (captured) continue;
+            if (isOcrCaptured(bt) || isOcrCaptured(rt)) continue;
             const st = entry.type === "add"    ? "Added"
                      : entry.type === "delete" ? "Deleted"
                      :                           "Modified";
+            const engines: string[] = entry.revised?.engines ?? entry.base?.engines ?? [];
             parsedItems.push({
               id: `api-d${index}-ocr-${idCounter++}`,
               category: "Text",
@@ -215,7 +218,7 @@ const Index = () => {
               newText: st === "Modified" ? rt : undefined,
               bounding_box: null,
               detail: { field_label: "OCR Extracted Text", old_value: bt || undefined, new_value: rt || undefined },
-              summary: `Text extraction service (OCR — ${entry.revised?.engines?.join(", ") || entry.base?.engines?.join(", ") || "multi-engine"})`,
+              summary: `Text extraction service (OCR${engines.length ? ` — ${engines.join(", ")}` : ""})`,
             });
           }
 
