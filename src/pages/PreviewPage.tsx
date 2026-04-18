@@ -7,7 +7,8 @@ import type { DrawnBox } from '@/report/types';
 import type { RequirementBox } from '@/components/VisualDiffViewer';
 import { pdfToImage, isPdfFile } from '@/lib/pdfToImage';
 import LabelSidebar from '@/components/LabelSidebar';
-import AnnotationsPanel from '@/components/AnnotationsPanel';
+import ReportDetailsPanel from '@/components/ReportDetailsPanel';
+import { ThemeProvider } from '@/report/ThemeContext';
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Types
@@ -848,6 +849,23 @@ const PreviewPage = () => {
   const activeRequirementBoxes: RequirementBox[] =
     selectedChildIndex === (state.selectedResultIndex ?? 0) ? requirementBoxes : [];
 
+  // ── Discard state for unexpected changes ────────────────────────────────
+  const [discardedUnexpectedIds, setDiscardedUnexpectedIds] = useState<Set<string>>(
+    new Set(location.state?.discardedUnexpectedIds ?? [])
+  );
+  const handleDiscard = (id: string) => {
+    setDiscardedUnexpectedIds(prev => new Set([...prev, id]));
+  };
+
+  // Convert discarded panel IDs (ai-N) → canvas box IDs (annotation-N) so
+  // discarded items are hidden from the overlay without touching hiddenAiBoxIds.
+  const discardedAnnotationBoxIds = useMemo(
+    () => [...discardedUnexpectedIds]
+      .filter(id => id.startsWith('ai-'))
+      .map(id => `annotation-${id.slice(3)}`),
+    [discardedUnexpectedIds],
+  );
+
   const existingNewBoxes: DrawnBox[] = useMemo(() => {
     const requirementAiBoxes = activeRequirementBoxes.map((b: any, i: number) => ({
       id:     `requirement-${i}`,
@@ -869,8 +887,10 @@ const PreviewPage = () => {
       text:   b.label ?? b.text ?? '',
     }));
 
-    return [...requirementAiBoxes, ...annotationAiBoxes].filter(box => !hiddenAiBoxIds.includes(box.id));
-  }, [activeAnnotations, activeRequirementBoxes, hiddenAiBoxIds]);
+    return [...requirementAiBoxes, ...annotationAiBoxes].filter(
+      box => !hiddenAiBoxIds.includes(box.id) && !discardedAnnotationBoxIds.includes(box.id)
+    );
+  }, [activeAnnotations, activeRequirementBoxes, hiddenAiBoxIds, discardedAnnotationBoxIds]);
 
   // ── AI box position adjustments (human-in-the-loop fine-tuning) ─────────
   const [aiBoxAdjustments, setAiBoxAdjustments] = useState<Record<string, { top: number; left: number; width: number; height: number }>>({});
@@ -884,7 +904,7 @@ const PreviewPage = () => {
   }, []);
 
   // ── User-drawn annotation state ──────────────────────────────────────────
-  const [userAnnotations, setUserAnnotations] = useState<UserAnnotation[]>([]);
+  const [userAnnotations, setUserAnnotations] = useState<UserAnnotation[]>(state.userAnnotations ?? []);
   const [isDrawingMode,   setIsDrawingMode]   = useState(false);
   const [pendingBox,      setPendingBox]       = useState<PendingBox | null>(null);
 
@@ -1113,6 +1133,14 @@ const PreviewPage = () => {
         userExpectedUnique,
         userUnexpectedUnique,
         hasChanges,
+        // Preserve the child the user was actively viewing — overrides the
+        // stale state.selectedResultIndex that came in from the previous page.
+        selectedResultIndex: selectedChildIndex,
+        // Preserve the full flat annotation array so drawn boxes survive the
+        // /preview → /report → /preview round trip.
+        userAnnotations,
+        // Carry discarded unexpected IDs so ReportPage initializes correctly.
+        discardedUnexpectedIds: [...discardedUnexpectedIds],
       },
     });
   };
@@ -1135,6 +1163,7 @@ const PreviewPage = () => {
         selectedResultIndex:      selectedChildIndex,
         apiResults:   state.apiResults  ?? [],
         lrfAnalysis:  state.lrfAnalysis ?? null,
+        discardedUnexpectedIds: [...discardedUnexpectedIds],
       },
     });
   };
@@ -1354,15 +1383,28 @@ const PreviewPage = () => {
 
         </div>
         </div>{/* end flex-1 overflow-y-auto */}
-        <AnnotationsPanel
-          annotations={userAnnotations}
-          hoveredId={hoveredAnnotationId}
-          selectedId={selectedAnnotationId}
-          isDrawMode={isDrawingMode}
-          onHoverAnnotation={handleHoverAnnotation}
-          onSelectAnnotation={handleSelectAnnotation}
-          onDeleteAnnotation={handleDeleteGroup}
-        />
+        <ThemeProvider>
+          <ReportDetailsPanel
+            satisfiedItems={state?.satisfiedItems ?? []}
+            missingItems={state?.missingItems ?? []}
+            parsedItems={
+              selectedChildIndex === (state?.selectedResultIndex ?? 0)
+                ? (state?.parsedItems ?? [])
+                : (state?.apiResults?.[selectedChildIndex]?.parsedItems ?? [])
+            }
+            aiAnnotations={activeAnnotations.filter((_: any, i: number) => !hiddenAiBoxIds.includes(`annotation-${i}`))}
+            discardedUnexpectedIds={discardedUnexpectedIds}
+            onDiscard={handleDiscard}
+            analysisRun={true}
+            annotations={userAnnotations}
+            hoveredId={hoveredAnnotationId}
+            selectedId={selectedAnnotationId}
+            isDrawMode={isDrawingMode}
+            onHoverAnnotation={handleHoverAnnotation}
+            onSelectAnnotation={handleSelectAnnotation}
+            onDeleteAnnotation={handleDeleteGroup}
+          />
+        </ThemeProvider>
       </main>
 
       {/* Footer action bar */}
