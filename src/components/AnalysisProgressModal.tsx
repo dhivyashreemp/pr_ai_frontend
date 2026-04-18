@@ -16,7 +16,7 @@ const STEPS: Array<{ until: number; label: string }> = [
 
 const PATIENCE_MESSAGES = [
   "Large or complex labels may take a little longer...",
-  "Our AI is carefully reviewing every detail...",
+  "Carefully reviewing every detail...",
   "Regulatory-grade analysis takes precision...",
 ];
 

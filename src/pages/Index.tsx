@@ -976,11 +976,13 @@ const Index = () => {
             annotations={
               // In form mode (formData present), show Unexpected Changes AI annotations.
               // In single label mode, analysisRun && !lrfOnly shows everything.
-              formData
+              // Filter out annotations discarded on the /preview page.
+              (formData
                 ? (adjustedAnnotations.length > 0 ? adjustedAnnotations : (unexpectedAnnotations ?? []))
                 : analysisRun && !lrfOnly && apiResults.length > 0
                   ? (adjustedAnnotations.length > 0 ? adjustedAnnotations : (apiResults[selectedResultIndex]?.annotations ?? []))
                   : []
+              ).filter((_: any, i: number) => !discardedAnnotationBoxIds.includes(`annotation-${i}`))
             }
             requirementBoxes={formData ? (adjustedBoxes.length > 0 ? adjustedBoxes : (requirementBoxes ?? [])) : []}
             onBoxesChange={formData ? setAdjustedBoxes : undefined}

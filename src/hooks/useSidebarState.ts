@@ -1,8 +1,14 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 
-export const MIN_WIDTH = 180;
-export const MAX_WIDTH = 400;
+// ── Left sidebar constants ────────────────────────────────────────────────────
+export const MIN_WIDTH      = 180;
+export const MAX_WIDTH      = 400;
 export const COLLAPSED_WIDTH = 48;
+
+// ── Right review panel constants ──────────────────────────────────────────────
+export const PANEL_MIN_WIDTH       = 240;
+export const PANEL_MAX_WIDTH       = 500;
+export const PANEL_COLLAPSED_WIDTH = 48;
 
 const DEBOUNCE_MS = 300;
 
@@ -11,28 +17,40 @@ interface SidebarState {
   width: number;
 }
 
-const DEFAULT_STATE: SidebarState = { isCollapsed: false, width: 280 };
-
-function clampWidth(w: number): number {
-  return Math.max(MIN_WIDTH, Math.min(MAX_WIDTH, w));
+interface SidebarOptions {
+  min?: number;
+  max?: number;
+  defaultWidth?: number;
 }
 
-function readFromStorage(key: string): SidebarState {
-  try {
-    const raw = localStorage.getItem(key);
-    if (!raw) return DEFAULT_STATE;
-    const parsed = JSON.parse(raw);
-    return {
-      isCollapsed: !!parsed.isCollapsed,
-      width: clampWidth(typeof parsed.width === "number" ? parsed.width : DEFAULT_STATE.width),
-    };
-  } catch {
-    return DEFAULT_STATE;
-  }
-}
+const FALLBACK_DEFAULT: SidebarState = { isCollapsed: false, width: 280 };
 
-export function useSidebarState(key: string = "labelx-sidebar") {
-  const [state, setState] = useState<SidebarState>(() => readFromStorage(key));
+export function useSidebarState(key: string = "labelx-sidebar", options?: SidebarOptions) {
+  const min          = options?.min          ?? MIN_WIDTH;
+  const max          = options?.max          ?? MAX_WIDTH;
+  const defaultWidth = options?.defaultWidth ?? FALLBACK_DEFAULT.width;
+
+  const clamp = useCallback(
+    (w: number) => Math.max(min, Math.min(max, w)),
+    [min, max],
+  );
+
+  const [state, setState] = useState<SidebarState>(() => {
+    try {
+      const raw = localStorage.getItem(key);
+      if (!raw) return { isCollapsed: false, width: defaultWidth };
+      const parsed = JSON.parse(raw);
+      return {
+        isCollapsed: !!parsed.isCollapsed,
+        width: Math.max(min, Math.min(max,
+          typeof parsed.width === "number" ? parsed.width : defaultWidth,
+        )),
+      };
+    } catch {
+      return { isCollapsed: false, width: defaultWidth };
+    }
+  });
+
   const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   const persist = useCallback(
@@ -59,14 +77,14 @@ export function useSidebarState(key: string = "labelx-sidebar") {
 
   const setWidth = useCallback(
     (w: number) => {
-      const clamped = clampWidth(w);
+      const clamped = clamp(w);
       setState((prev) => {
         const next = { ...prev, width: clamped };
         persist(next);
         return next;
       });
     },
-    [persist],
+    [clamp, persist],
   );
 
   useEffect(() => {
