@@ -21,9 +21,10 @@ const Index = () => {
 
   const [baseFile, setBaseFile] = useState<File[]>(location.state?.baseFile || []);
   const [childFiles, setChildFiles] = useState<File[]>(location.state?.childFiles || []);
-  // Derived from childFiles: every child PDF is exploded into its N pages as
+  // Derived from baseFile / childFiles: every PDF is exploded into its N pages as
   // PNG File objects. All downstream usage (preview URLs, FormData, sidebar,
-  // apiResults indexing) works off this expanded array.
+  // apiResults indexing) works off these expanded arrays.
+  const [expandedBaseFiles, setExpandedBaseFiles] = useState<File[]>([]);
   const [expandedChildFiles, setExpandedChildFiles] = useState<File[]>([]);
 
   // Restored from location state when navigating back from the report page
@@ -40,6 +41,36 @@ const Index = () => {
   // When a base file is uploaded alongside a proof request, run the full comparison
   // so barcode_summary.comparison is populated for barcode requirement validation.
   const lrfOnly = !!formData && baseFile.length === 0;
+
+  // Expand base files: each PDF is exploded into N per-page PNG Files.
+  // Images pass through unchanged.
+  useEffect(() => {
+    if (baseFile.length === 0) {
+      setExpandedBaseFiles([]);
+      return;
+    }
+    let cancelled = false;
+
+    (async () => {
+      try {
+        const expanded: File[] = [];
+        for (const file of baseFile) {
+          if (isPdfFile(file)) {
+            const pages = await pdfToImageFiles(file);
+            expanded.push(...pages);
+          } else {
+            expanded.push(file);
+          }
+        }
+        if (!cancelled) setExpandedBaseFiles(expanded);
+      } catch (e) {
+        console.error("Failed to expand base PDF pages:", e);
+        if (!cancelled) toast.error("Failed to process base PDF pages.");
+      }
+    })();
+
+    return () => { cancelled = true; };
+  }, [baseFile]);
 
   // Expand child files: each PDF is exploded into N per-page PNG Files.
   // Images pass through unchanged. The resulting array is what all downstream
@@ -87,8 +118,8 @@ const Index = () => {
   // Tracks requirement box positions after user drags/resizes/duplicates them in VisualDiffViewer
   const [adjustedBoxes, setAdjustedBoxes] = useState<RequirementBox[]>([]);
   const [adjustedAnnotations, setAdjustedAnnotations] = useState<Annotation[]>([]);
-  const [basePreviewUrl, setBasePreviewUrl] = useState<string>(
-    location.state?.basePreviewUrl || ""
+  const [basePreviewUrls, setBasePreviewUrls] = useState<string[]>(
+    location.state?.expandedBasePreviewUrls || []
   );
   const [childPreviewUrls, setChildPreviewUrls] = useState<string[]>(
     location.state?.expandedChildPreviewUrls || []
@@ -99,7 +130,9 @@ const Index = () => {
   // plain strings that persist. When URLs were restored from location.state,
   // hold them until a real expansion replaces them — otherwise the first run of
   // the rebuild effects (with empty File arrays) would clobber them to "".
-  const restoredBaseUrlRef = useRef<boolean>(!!location.state?.basePreviewUrl);
+  const restoredBaseUrlRef = useRef<boolean>(
+    (location.state?.expandedBasePreviewUrls?.length ?? 0) > 0
+  );
   const restoredChildUrlsRef = useRef<boolean>(
     (location.state?.expandedChildPreviewUrls?.length ?? 0) > 0
   );
@@ -120,26 +153,26 @@ const Index = () => {
   // Both PDFs (via pdfToImage) and images (via FileReader) produce data URLs
   // so no blob URL cleanup is needed and the URLs survive unmount.
   useEffect(() => {
-    if (baseFile.length === 0) {
-      if (!restoredBaseUrlRef.current) setBasePreviewUrl("");
+    if (expandedBaseFiles.length === 0) {
+      if (!restoredBaseUrlRef.current) setBasePreviewUrls([]);
       return;
     }
-    // A real File object supersedes any restored URL.
     restoredBaseUrlRef.current = false;
-    const file = baseFile[0];
     let cancelled = false;
 
     (async () => {
       try {
-        const dataUrl = isPdfFile(file) ? await pdfToImage(file) : await toDataUrl(file);
-        if (!cancelled) setBasePreviewUrl(dataUrl);
+        const urls = await Promise.all(
+          expandedBaseFiles.map((f) => isPdfFile(f) ? pdfToImage(f) : toDataUrl(f))
+        );
+        if (!cancelled) setBasePreviewUrls(urls);
       } catch (e) {
-        console.error("Failed to build base preview:", e);
+        console.error("Failed to build base previews:", e);
       }
     })();
 
     return () => { cancelled = true; };
-  }, [baseFile]);
+  }, [expandedBaseFiles]);
 
   useEffect(() => {
     if (expandedChildFiles.length === 0) {
@@ -171,6 +204,9 @@ const Index = () => {
     setAdjustedAnnotations([]);
   }, [selectedResultIndex]);
 
+  // Derived: URL for the base label of the currently selected pair
+  const basePreviewUrl = basePreviewUrls[selectedResultIndex] || basePreviewUrls[0] || "";
+
   const handleRunAnalysis = async () => {
     if (expandedChildFiles.length === 0) {
       toast.error("Please upload the new version label.");
@@ -178,6 +214,12 @@ const Index = () => {
     }
     if (!lrfOnly && baseFile.length === 0) {
       toast.error("Please upload both base and child labels.");
+      return;
+    }
+    if (!lrfOnly && expandedBaseFiles.length !== expandedChildFiles.length) {
+      toast.error(
+        `Base label count (${expandedBaseFiles.length}) must match child label count (${expandedChildFiles.length}).`
+      );
       return;
     }
 
@@ -199,9 +241,9 @@ const Index = () => {
         setSelectedResultIndex(0);
         setAnalysisRun(true);
       } else {
-        // ── Full diff mode ──────────────────────────────────────────────────
+        // ── Full diff mode: N base labels paired positionally with N child labels ──
         const data = new FormData();
-        data.append("base_file", baseFile[0]);
+        expandedBaseFiles.forEach(file => data.append("base_files", file));
         expandedChildFiles.forEach(file => data.append("child_files", file));
         if (submissionId) data.append("submission_id", submissionId);
         const response = await fetch(`${API_URL}/api/compare`, { method: "POST", body: data });
@@ -882,7 +924,7 @@ const Index = () => {
       <main className="flex-1 overflow-hidden flex flex-row">
 
         <LabelSidebar
-          baseFile={baseFile[0] ?? null}
+          baseFile={expandedBaseFiles[selectedResultIndex] ?? expandedBaseFiles[0] ?? null}
           basePreviewUrl={basePreviewUrl || null}
           childFiles={expandedChildFiles}
           childPreviewUrls={childPreviewUrls}
@@ -901,10 +943,10 @@ const Index = () => {
             <div className="space-y-4">
               <div className="grid grid-cols-2 gap-4">
                 <Dropzone
-                  label="UPLOAD CURRENT VERSION LABEL (PDF / IMAGE)"
+                  label="UPLOAD CURRENT VERSION LABELS (PDF / IMAGE)"
                   files={baseFile}
                   onFilesSelect={setBaseFile}
-                  multiple={false}
+                  multiple={true}
                   alwaysShowUploadBox={true}
                 />
                 <Dropzone
@@ -995,9 +1037,9 @@ const Index = () => {
             // Barcode pipeline results for report summary + changes made
             barcode_summary: analysisRun && apiResults.length > 0 ? apiResults[selectedResultIndex]?.barcode_summary ?? null : null,
             // Pass as arrays — PreviewPage unpacks [0] for display, passes single File to ReportPage
-            baseFile:  baseFile[0] ? [baseFile[0]] : [],
+            baseFile:  expandedBaseFiles[selectedResultIndex] ? [expandedBaseFiles[selectedResultIndex]] : [],
             childFile: expandedChildFiles[selectedResultIndex] ? [expandedChildFiles[selectedResultIndex]] : [],
-            baseFileName: baseFile[0]?.name ?? '',
+            baseFileName: expandedBaseFiles[selectedResultIndex]?.name ?? '',
             childFileName: expandedChildFiles[selectedResultIndex]?.name ?? '',
             // Stored so compare page can be fully restored when navigating back.
             // Preview URLs (strings) are the source of truth on remount because
@@ -1006,6 +1048,7 @@ const Index = () => {
             lrfAnalysis,
             childFiles: expandedChildFiles,
             basePreviewUrl,
+            expandedBasePreviewUrls: basePreviewUrls,
             expandedChildPreviewUrls: childPreviewUrls,
             analysisRun,
             selectedResultIndex,
