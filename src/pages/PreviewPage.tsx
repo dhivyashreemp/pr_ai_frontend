@@ -7,6 +7,7 @@ import type { DrawnBox } from '@/report/types';
 import type { RequirementBox } from '@/components/VisualDiffViewer';
 import { pdfToImage, isPdfFile } from '@/lib/pdfToImage';
 import LabelSidebar from '@/components/LabelSidebar';
+import AnnotationsPanel from '@/components/AnnotationsPanel';
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Types
@@ -61,12 +62,14 @@ interface DrawableImagePanelProps {
   onDeleteAiBox?: (id: string) => void;
   onDuplicateBox?: (source: DrawnBox | UserAnnotation, pos: { top: number; left: number; width: number; height: number }, panelTarget: 'base' | 'new') => void;
   onAdjustAiBox?: (id: string, pos: { top: number; left: number; width: number; height: number }) => void;
+  highlightedGroupId?: string | null;
 }
 
 function DrawableImagePanel({
   src, title, subtitle, target,
   aiBoxes, userBoxes, isDrawingMode, activeGroupId,
   onDrawComplete, onDeleteBox, onDeleteAiBox, onDuplicateBox, onAdjustAiBox,
+  highlightedGroupId,
 }: DrawableImagePanelProps) {
   const containerRef = useRef<HTMLDivElement>(null);
   const [draw, setDraw] = useState<DrawState | null>(null);
@@ -395,7 +398,7 @@ function DrawableImagePanel({
           boxGroupIndex[box.groupId] = (boxGroupIndex[box.groupId] ?? 0) + 1;
           const idx   = boxGroupIndex[box.groupId];
           const total = boxGroupCount[box.groupId];
-          const isHighlighted = activeGroupId === box.groupId;
+          const isHighlighted = activeGroupId === box.groupId || highlightedGroupId === box.groupId;
           const isSelected    = selectedBoxId === box.id;
           const clickable     = !isDrawingMode && !placing;
           return (
@@ -1027,6 +1030,12 @@ const PreviewPage = () => {
     setAiBoxAdjustments({});
   }, []);
 
+  // ── Annotations panel hover / select state ───────────────────────────────
+  const [hoveredAnnotationId,  setHoveredAnnotationId]  = useState<string | null>(null);
+  const [selectedAnnotationId, setSelectedAnnotationId] = useState<string | null>(null);
+  const handleHoverAnnotation  = useCallback((id: string | null) => setHoveredAnnotationId(id),  []);
+  const handleSelectAnnotation = useCallback((id: string | null) => setSelectedAnnotationId(id), []);
+
   // ── Navigate to report ───────────────────────────────────────────────────
   const handleGenerateReport = () => {
     // All boxes → visual overlay on images
@@ -1308,6 +1317,7 @@ const PreviewPage = () => {
                 onDeleteAiBox={handleDeleteAiBox}
                 onDuplicateBox={handleDuplicateBox}
                 onAdjustAiBox={handleAdjustAiBox}
+                highlightedGroupId={hoveredAnnotationId ?? selectedAnnotationId}
               />
             )}
             {hasNew && (
@@ -1325,6 +1335,7 @@ const PreviewPage = () => {
                 onDeleteAiBox={handleDeleteAiBox}
                 onDuplicateBox={handleDuplicateBox}
                 onAdjustAiBox={handleAdjustAiBox}
+                highlightedGroupId={hoveredAnnotationId ?? selectedAnnotationId}
               />
             )}
             {!hasBase && !hasNew && (
@@ -1334,114 +1345,17 @@ const PreviewPage = () => {
             )}
           </div>
 
-          {/* Annotations summary table */}
-          {annotationGroups.length > 0 && (
-            <div className="bg-white border border-gray-200">
-              <div className="border-b border-gray-200 px-5 py-3 flex items-center gap-2">
-                <Pencil className="w-3.5 h-3.5 text-gray-500" />
-                <h3 className="text-xs font-bold uppercase tracking-wide text-gray-700">
-                  Reviewer Annotations
-                </h3>
-                <span className="ml-1 bg-gray-100 border border-gray-200 text-gray-600 text-[10px] px-1.5 py-0.5 font-semibold">
-                  {annotationGroups.length} {annotationGroups.length === 1 ? 'entry' : 'entries'}
-                  {userAnnotations.length > annotationGroups.length && (
-                    <span className="text-gray-400 ml-1">· {userAnnotations.length} boxes total</span>
-                  )}
-                </span>
-              </div>
-              <div className="overflow-x-auto">
-                <table className="w-full text-xs border-collapse">
-                  <thead>
-                    <tr className="bg-gray-50 border-b border-gray-200">
-                      <th className="px-4 py-2 text-left font-bold text-gray-600 uppercase tracking-wide text-[10px] border-r border-gray-200 w-8">#</th>
-                      <th className="px-4 py-2 text-left font-bold text-gray-600 uppercase tracking-wide text-[10px] border-r border-gray-200 w-28">Type</th>
-                      <th className="px-4 py-2 text-left font-bold text-gray-600 uppercase tracking-wide text-[10px] border-r border-gray-200">Comment</th>
-                      <th className="px-4 py-2 text-left font-bold text-gray-600 uppercase tracking-wide text-[10px] border-r border-gray-200 w-24">Element</th>
-                      <th className="px-4 py-2 text-left font-bold text-gray-600 uppercase tracking-wide text-[10px] border-r border-gray-200 w-28">Section</th>
-                      <th className="px-4 py-2 text-left font-bold text-gray-600 uppercase tracking-wide text-[10px] border-r border-gray-200 w-24">Locations</th>
-                      <th className="px-4 py-2 text-center font-bold text-gray-600 uppercase tracking-wide text-[10px] w-28">Actions</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {annotationGroups.map((group, idx) => {
-                      const color = TYPE_COLORS[group.type] ?? '#6b7280';
-                      const isActive = activeGroupId === group.groupId;
-                      return (
-                        <tr
-                          key={group.groupId}
-                          className={`border-b border-gray-100 last:border-0 transition-colors ${
-                            isActive ? 'bg-amber-50' : 'hover:bg-gray-50'
-                          }`}
-                        >
-                          <td className="px-4 py-2.5 border-r border-gray-200 text-gray-500 font-mono">{idx + 1}</td>
-                          <td className="px-4 py-2.5 border-r border-gray-200">
-                            <span
-                              className="inline-block px-2 py-0.5 text-[10px] font-bold border"
-                              style={{ color, borderColor: `${color}60`, backgroundColor: `${color}15` }}
-                            >
-                              {group.type}
-                            </span>
-                          </td>
-                          <td className="px-4 py-2.5 border-r border-gray-200 text-gray-800">{group.text}</td>
-                          <td className="px-4 py-2.5 border-r border-gray-200 text-gray-700">{group.elementType}</td>
-                          <td className="px-4 py-2.5 border-r border-gray-200">
-                            <span className={`inline-block px-2 py-0.5 text-[10px] font-bold border ${
-                              group.disposition === 'Expected'
-                                ? 'text-teal-700 bg-teal-50 border-teal-200'
-                                : 'text-orange-700 bg-orange-50 border-orange-200'
-                            }`}>
-                              {group.disposition}
-                            </span>
-                          </td>
-                          <td className="px-4 py-2.5 border-r border-gray-200">
-                            <div className="flex items-center gap-1.5">
-                              <MapPin className="w-3 h-3 text-gray-400" />
-                              <span className="font-semibold text-gray-700">{group.boxes.length}</span>
-                              <span className="text-gray-400 text-[10px]">
-                                {group.boxes.length === 1 ? 'box' : 'boxes'}
-                              </span>
-                            </div>
-                          </td>
-                          <td className="px-4 py-2.5 text-center">
-                            <div className="flex items-center justify-center gap-1.5">
-                              {/* Add Location button */}
-                              {isActive ? (
-                                <button
-                                  onClick={handleExitAddLocation}
-                                  className="flex items-center gap-1 px-2.5 py-1 text-[10px] font-bold border-2 border-amber-500 text-amber-700 bg-amber-100 hover:bg-amber-200 transition-colors"
-                                  title="Done adding locations"
-                                >
-                                  <Check className="w-3 h-3" /> Done
-                                </button>
-                              ) : (
-                                <button
-                                  onClick={() => handleAddLocation(group.groupId)}
-                                  className="flex items-center gap-1 px-2.5 py-1 text-[10px] font-bold border border-gray-300 text-gray-600 hover:border-blue-400 hover:text-blue-600 hover:bg-blue-50 transition-colors"
-                                  title="Draw another box for the same annotation"
-                                >
-                                  <MapPin className="w-3 h-3" /> Add Location
-                                </button>
-                              )}
-                              {/* Delete entire group */}
-                              <button
-                                onClick={() => handleDeleteGroup(group.groupId)}
-                                className="flex items-center gap-1 px-2 py-1 text-[10px] font-bold border border-gray-200 text-gray-400 hover:border-red-400 hover:text-red-600 hover:bg-red-50 transition-colors"
-                                title="Remove this annotation and all its boxes"
-                              >
-                                <Trash2 className="w-3 h-3" />
-                              </button>
-                            </div>
-                          </td>
-                        </tr>
-                      );
-                    })}
-                  </tbody>
-                </table>
-              </div>
-            </div>
-          )}
         </div>
         </div>{/* end flex-1 overflow-y-auto */}
+        <AnnotationsPanel
+          annotations={userAnnotations}
+          hoveredId={hoveredAnnotationId}
+          selectedId={selectedAnnotationId}
+          isDrawMode={isDrawingMode}
+          onHoverAnnotation={handleHoverAnnotation}
+          onSelectAnnotation={handleSelectAnnotation}
+          onDeleteAnnotation={handleDeleteGroup}
+        />
       </main>
 
       {/* Footer action bar */}
