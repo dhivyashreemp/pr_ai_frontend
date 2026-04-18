@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { useLocation } from 'react-router-dom';
 import { ThemeProvider } from '@/report/ThemeContext';
 import { ReportHeader } from '@/report/ReportHeader';
@@ -7,6 +7,7 @@ import { FrameA, FrameB, FrameC, FrameNoChange } from '@/report/Frames';
 import type { ReportData, Requirement, DiscrepancyCategory, DrawnBox, UnexpectedChange } from '@/report/types';
 import type { ProofRequestMissingItem } from '@/data/dummyData';
 import type { RequirementBox } from '@/components/VisualDiffViewer';
+import { pdfToImage, isPdfFile } from '@/lib/pdfToImage';
 
 // ── helpers ───────────────────────────────────────────────────────────────────
 
@@ -261,22 +262,75 @@ const ReportPageInner = () => {
     source: 'ai',
   }));
 
-  const [baseUrl,  setBaseUrl]  = useState('');
-  const [childUrl, setChildUrl] = useState('');
+  // Prefer URLs forwarded through location.state — the full Index → Preview →
+  // Report chain is multi-hop and File objects may not survive intact. The
+  // preview URLs (data URLs for PDFs, blob URLs for images) are plain strings
+  // that do survive, so use them directly and only fall back to rebuilding
+  // from File when no URL was forwarded.
+  const restoredBaseUrl  = (location.state?.basePreviewUrl  as string | undefined) ?? '';
+  const restoredChildUrl = (location.state?.childPreviewUrl as string | undefined) ?? '';
+  const [baseUrl,  setBaseUrl]  = useState<string>(restoredBaseUrl);
+  const [childUrl, setChildUrl] = useState<string>(restoredChildUrl);
+  const restoredBaseUrlRef  = useRef<boolean>(!!restoredBaseUrl);
+  const restoredChildUrlRef = useRef<boolean>(!!restoredChildUrl);
   const [discardedUnexpectedIds, setDiscardedUnexpectedIds] = useState<(string | number)[]>([]);
 
   useEffect(() => {
-    if (!baseFile) return;
-    const url = URL.createObjectURL(baseFile);
-    setBaseUrl(url);
-    return () => URL.revokeObjectURL(url);
+    if (!baseFile) {
+      if (!restoredBaseUrlRef.current) setBaseUrl('');
+      return;
+    }
+    restoredBaseUrlRef.current = false;
+    let cancelled = false;
+    let blobUrl: string | null = null;
+
+    (async () => {
+      try {
+        if (isPdfFile(baseFile)) {
+          const dataUrl = await pdfToImage(baseFile);
+          if (!cancelled) setBaseUrl(dataUrl);
+        } else {
+          blobUrl = URL.createObjectURL(baseFile);
+          if (!cancelled) setBaseUrl(blobUrl);
+        }
+      } catch (e) {
+        console.error('Failed to build base label URL:', e);
+      }
+    })();
+
+    return () => {
+      cancelled = true;
+      if (blobUrl) URL.revokeObjectURL(blobUrl);
+    };
   }, [baseFile]);
 
   useEffect(() => {
-    if (!childFile) return;
-    const url = URL.createObjectURL(childFile);
-    setChildUrl(url);
-    return () => URL.revokeObjectURL(url);
+    if (!childFile) {
+      if (!restoredChildUrlRef.current) setChildUrl('');
+      return;
+    }
+    restoredChildUrlRef.current = false;
+    let cancelled = false;
+    let blobUrl: string | null = null;
+
+    (async () => {
+      try {
+        if (isPdfFile(childFile)) {
+          const dataUrl = await pdfToImage(childFile);
+          if (!cancelled) setChildUrl(dataUrl);
+        } else {
+          blobUrl = URL.createObjectURL(childFile);
+          if (!cancelled) setChildUrl(blobUrl);
+        }
+      } catch (e) {
+        console.error('Failed to build child label URL:', e);
+      }
+    })();
+
+    return () => {
+      cancelled = true;
+      if (blobUrl) URL.revokeObjectURL(blobUrl);
+    };
   }, [childFile]);
 
   const baseRequirements = buildRequirements(satisfiedItems, missingItems);

@@ -1,9 +1,12 @@
-import { useState, useEffect, useMemo, useCallback } from "react";
-import { Download, RefreshCw, FileText, Activity, AlertCircle, Play, ScanLine, ArrowLeft } from "lucide-react";
+import { useState, useEffect, useMemo, useCallback, useRef } from "react";
+import { Download, RefreshCw, FileText, AlertCircle, Play, ScanLine, ArrowLeft } from "lucide-react";
+import AnalysisProgressModal from "@/components/AnalysisProgressModal";
 import { useLocation, useNavigate } from "react-router-dom";
 import Dropzone from "@/components/Dropzone";
 import VisualDiffViewer, { type RequirementBox, type Annotation } from "@/components/VisualDiffViewer";
 import DataTables from "@/components/DataTables";
+import LabelSidebar from "@/components/LabelSidebar";
+import { pdfToImage, pdfToImageFiles, isPdfFile } from "@/lib/pdfToImage";
 import ProfileDropdown from "@/components/ProfileDropdown";
 import StepIndicator from "@/components/StepIndicator";
 import { toast } from "sonner";
@@ -17,7 +20,11 @@ const Index = () => {
   const submissionId: string | null = location.state?.submissionId ?? null;
 
   const [baseFile, setBaseFile] = useState<File[]>(location.state?.baseFile || []);
-  const [childFiles, setChildFiles] = useState<File[]>(location.state?.childFile || []);
+  const [childFiles, setChildFiles] = useState<File[]>(location.state?.childFiles || []);
+  // Derived from childFiles: every child PDF is exploded into its N pages as
+  // PNG File objects. All downstream usage (preview URLs, FormData, sidebar,
+  // apiResults indexing) works off this expanded array.
+  const [expandedChildFiles, setExpandedChildFiles] = useState<File[]>([]);
 
   // Restored from location state when navigating back from the report page
   const [apiResults, setApiResults] = useState<any[]>(location.state?.apiResults || []);
@@ -34,35 +41,130 @@ const Index = () => {
   // so barcode_summary.comparison is populated for barcode requirement validation.
   const lrfOnly = !!formData && baseFile.length === 0;
 
+  // Expand child files: each PDF is exploded into N per-page PNG Files.
+  // Images pass through unchanged. The resulting array is what all downstream
+  // usage (previews, FormData, sidebar) works off of.
+  useEffect(() => {
+    if (childFiles.length === 0) {
+      setExpandedChildFiles([]);
+      return;
+    }
+    let cancelled = false;
+
+    (async () => {
+      try {
+        const expanded: File[] = [];
+        for (const file of childFiles) {
+          if (isPdfFile(file)) {
+            const pages = await pdfToImageFiles(file);
+            expanded.push(...pages);
+          } else {
+            expanded.push(file);
+          }
+        }
+        if (!cancelled) setExpandedChildFiles(expanded);
+      } catch (e) {
+        console.error("Failed to expand child PDF pages:", e);
+        if (!cancelled) toast.error("Failed to process PDF pages.");
+      }
+    })();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [childFiles]);
+
   // Auto-run analysis for Scenario 3 (only when results are not already restored)
   useEffect(() => {
-    if (formData && childFiles.length > 0 && !analysisRun && !loading) {
+    if (formData && expandedChildFiles.length > 0 && !analysisRun && !loading) {
       handleRunAnalysis();
     }
-  }, [formData, baseFile, childFiles, analysisRun, loading]);
+  }, [formData, baseFile, expandedChildFiles, analysisRun, loading]);
 
-  const [progress, setProgress] = useState(0);
-  const [selectedResultIndex, setSelectedResultIndex] = useState(0);
+  const [selectedResultIndex, setSelectedResultIndex] = useState<number>(
+    location.state?.selectedResultIndex ?? 0
+  );
   // Tracks requirement box positions after user drags/resizes/duplicates them in VisualDiffViewer
   const [adjustedBoxes, setAdjustedBoxes] = useState<RequirementBox[]>([]);
   const [adjustedAnnotations, setAdjustedAnnotations] = useState<Annotation[]>([]);
-  const [basePreviewUrl, setBasePreviewUrl] = useState<string>("");
-  const [childPreviewUrls, setChildPreviewUrls] = useState<string[]>([]);
+  const [basePreviewUrl, setBasePreviewUrl] = useState<string>(
+    location.state?.basePreviewUrl || ""
+  );
+  const [childPreviewUrls, setChildPreviewUrls] = useState<string[]>(
+    location.state?.expandedChildPreviewUrls || []
+  );
 
-  // Create object URLs from uploaded files for preview
+  // File objects may not survive location.state on some remount paths, but the
+  // derived preview URLs (data URLs from PDF rendering, blob URLs otherwise) are
+  // plain strings that persist. When URLs were restored from location.state,
+  // hold them until a real expansion replaces them — otherwise the first run of
+  // the rebuild effects (with empty File arrays) would clobber them to "".
+  const restoredBaseUrlRef = useRef<boolean>(!!location.state?.basePreviewUrl);
+  const restoredChildUrlsRef = useRef<boolean>(
+    (location.state?.expandedChildPreviewUrls?.length ?? 0) > 0
+  );
+
+  // Converts an image File to a data URL using FileReader.
+  // Data URLs are self-contained strings — unlike blob URLs they are never
+  // revoked, so they survive navigation and can be safely passed through
+  // location.state across multiple page hops (Index → Preview → Report).
+  const toDataUrl = (file: File): Promise<string> =>
+    new Promise((resolve, reject) => {
+      const reader = new FileReader();
+      reader.onload = () => resolve(reader.result as string);
+      reader.onerror = reject;
+      reader.readAsDataURL(file);
+    });
+
+  // Create preview URLs from uploaded files.
+  // Both PDFs (via pdfToImage) and images (via FileReader) produce data URLs
+  // so no blob URL cleanup is needed and the URLs survive unmount.
   useEffect(() => {
-    if (baseFile.length > 0) {
-      const url = URL.createObjectURL(baseFile[0]);
-      setBasePreviewUrl(url);
-      return () => URL.revokeObjectURL(url);
+    if (baseFile.length === 0) {
+      if (!restoredBaseUrlRef.current) setBasePreviewUrl("");
+      return;
     }
+    // A real File object supersedes any restored URL.
+    restoredBaseUrlRef.current = false;
+    const file = baseFile[0];
+    let cancelled = false;
+
+    (async () => {
+      try {
+        const dataUrl = isPdfFile(file) ? await pdfToImage(file) : await toDataUrl(file);
+        if (!cancelled) setBasePreviewUrl(dataUrl);
+      } catch (e) {
+        console.error("Failed to build base preview:", e);
+      }
+    })();
+
+    return () => { cancelled = true; };
   }, [baseFile]);
 
   useEffect(() => {
-    const urls = childFiles.map(f => URL.createObjectURL(f));
-    setChildPreviewUrls(urls);
-    return () => urls.forEach(u => URL.revokeObjectURL(u));
-  }, [childFiles]);
+    if (expandedChildFiles.length === 0) {
+      if (!restoredChildUrlsRef.current) setChildPreviewUrls([]);
+      return;
+    }
+    // Real File objects supersede any restored URLs.
+    restoredChildUrlsRef.current = false;
+    let cancelled = false;
+
+    (async () => {
+      try {
+        const urls = await Promise.all(
+          expandedChildFiles.map((f) =>
+            isPdfFile(f) ? pdfToImage(f) : toDataUrl(f)
+          )
+        );
+        if (!cancelled) setChildPreviewUrls(urls);
+      } catch (e) {
+        console.error("Failed to build child previews:", e);
+      }
+    })();
+
+    return () => { cancelled = true; };
+  }, [expandedChildFiles]);
 
   useEffect(() => {
     setAdjustedBoxes([]);
@@ -70,7 +172,7 @@ const Index = () => {
   }, [selectedResultIndex]);
 
   const handleRunAnalysis = async () => {
-    if (childFiles.length === 0) {
+    if (expandedChildFiles.length === 0) {
       toast.error("Please upload the new version label.");
       return;
     }
@@ -80,15 +182,7 @@ const Index = () => {
     }
 
     setLoading(true);
-    setProgress(0);
     setAnalysisRun(false);
-
-    const progressInterval = setInterval(() => {
-      setProgress((prev) => {
-        if (prev >= 95) { clearInterval(progressInterval); return 95; }
-        return prev + 5;
-      });
-    }, 400);
 
     const API_URL = import.meta.env.VITE_API_BASE_URL || "https://label-comparator.azurewebsites.net";
 
@@ -96,20 +190,19 @@ const Index = () => {
       if (lrfOnly) {
         // ── LRF-only mode: single-label analysis ────────────────────────────
         const data = new FormData();
-        data.append("child_file", childFiles[0]);
+        data.append("child_file", expandedChildFiles[0]);
         const response = await fetch(`${API_URL}/api/analyze-label`, { method: "POST", body: data });
         if (!response.ok) throw new Error(`Analysis failed: ${response.statusText}`);
         const rawData = await response.json();
         setLrfAnalysis(rawData);
         setApiResults([]);
         setSelectedResultIndex(0);
-        setProgress(100);
         setAnalysisRun(true);
       } else {
         // ── Full diff mode ──────────────────────────────────────────────────
         const data = new FormData();
         data.append("base_file", baseFile[0]);
-        childFiles.forEach(file => data.append("child_files", file));
+        expandedChildFiles.forEach(file => data.append("child_files", file));
         if (submissionId) data.append("submission_id", submissionId);
         const response = await fetch(`${API_URL}/api/compare`, { method: "POST", body: data });
         if (!response.ok) throw new Error(`Analysis failed: ${response.statusText}`);
@@ -119,6 +212,7 @@ const Index = () => {
           const apiDiscrepancies = result.discrepancies || {};
           const parsedItems: any[] = [];
           let idCounter = 1;
+          let discrepancyIdx = 0;
 
           for (const status of ["Added", "Deleted", "Modified", "Repositioned"]) {
             if (apiDiscrepancies[status]) {
@@ -129,112 +223,43 @@ const Index = () => {
                   const match = value.match(/From:\s*'(.*?)'\s*➔\s*To:\s*'(.*?)'/);
                   if (match) { oldText = match[1]; newText = match[2]; }
                 }
+                // Find the annotation whose discrepancy_id matches this item's position
+                const ann = (result.annotations ?? []).find(
+                  (a: any) => a.discrepancy_id === discrepancyIdx
+                );
                 parsedItems.push({
-                  id: `api-d${index}-${idCounter++}`,
-                  category: item.Category,
+                  id:         `api-d${index}-${idCounter++}`,
+                  category:   item.Category,
                   status,
                   value,
                   oldText,
                   newText,
-                  bounding_box: item.bounding_box ?? null,
-                  detail: item.detail ?? null,
-                  summary: item.summary ?? null,
+                  detail:     item.detail ?? null,
+                  aiSummary:  ann?.summary ?? null,
+                  confidence: ann?.confidence ?? null,
                 });
+                discrepancyIdx++;
               });
             }
           }
 
-          // ── Barcode scanner results (safety net) ──────────────────────────
-          // Backend includes barcode changes in discrepancies from the latest version.
-          // This block ensures they also appear when the backend response omits them,
-          // so barcode service results are always visible to the reviewer.
-          // Per-entry dedup: skip any barcode change whose normalised key already
-          // exists in parsedItems (avoids double-counting when backend is updated).
-          const normBcKey = (ct: string, ov: string, nv: string) =>
-            `${ct.toLowerCase()}:${ov.toLowerCase().trim()}:${nv.toLowerCase().trim()}`;
-          const existingBcKeys = new Set(
-            parsedItems
-              .filter((pi: any) => pi.category === "Barcode")
-              .map((pi: any) => normBcKey(pi.status, pi.oldText || "", pi.newText || pi.value || ""))
-          );
-          for (const bc of (result.barcode_summary?.comparison?.changes ?? [])) {
-            const ctRaw = (bc.change_type || "").toLowerCase();
-            const st = ctRaw === "removed" ? "Deleted" : ctRaw === "added" ? "Added" : "Modified";
-            const ov = bc.old_value || bc.old_printed || "";
-            const nv = bc.new_value || bc.new_printed || "";
-            const bl = bc.barcode_type || bc.element_id || "Barcode";
-            if (existingBcKeys.has(normBcKey(st, ov, nv))) continue;
-            parsedItems.push({
-              id: `api-d${index}-bc-${idCounter++}`,
-              category: "Barcode",
-              status: st,
-              value: st === "Modified" ? `From: '${ov}' ➔ To: '${nv}'`
-                   : st === "Added"    ? (nv || bl)
-                   :                     (ov || bl),
-              oldText: st === "Modified" ? ov : undefined,
-              newText: st === "Modified" ? nv : undefined,
-              bounding_box: null,
-              detail: { field_label: bl, old_value: ov || undefined, new_value: nv || undefined },
-              summary: `Barcode scanner detected change (${bl})`,
-            });
-          }
-
-          // ── OCR text extraction results (safety net) ──────────────────────
-          // The backend now sends OCR-based text changes in discrepancies as
-          // the primary text source. This block is a backward-compat fallback:
-          // it adds any non-equal OCR entries not already present in parsedItems.
-          const normText = (s: string) => s.toLowerCase().replace(/\s+/g, " ").trim();
-          const existingTextSet = new Set<string>(
-            parsedItems
-              .filter((pi: any) => pi.category === "Text")
-              .flatMap((pi: any) =>
-                [pi.oldText, pi.newText, pi.value].filter(Boolean).map(normText)
-              )
-          );
-          const isTextCaptured = (text: string) => {
-            if (!text) return true;
-            const n = normText(text);
-            return [...existingTextSet].some(v => v === n || v.includes(n) || n.includes(v));
+          return {
+            ...result,
+            parsedItems,
+            yolo_review:  result.yolo_review  ?? [],
+            child_fields: result.child_fields ?? {},
           };
-          for (const entry of (result.ocr_text_diff ?? [])) {
-            if (entry.type === "equal") continue;
-            const bt = (entry.base?.text    || "").trim();
-            const rt = (entry.revised?.text || "").trim();
-            if (!bt && !rt) continue;
-            if (isTextCaptured(bt) || isTextCaptured(rt)) continue;
-            const st = entry.type === "add"    ? "Added"
-                     : entry.type === "delete" ? "Deleted"
-                     :                           "Modified";
-            const engines: string[] = entry.revised?.engines ?? entry.base?.engines ?? [];
-            parsedItems.push({
-              id: `api-d${index}-ocr-${idCounter++}`,
-              category: "Text",
-              status: st,
-              value: st === "Modified" ? `From: '${bt}' ➔ To: '${rt}'`
-                   : st === "Added"    ? rt
-                   :                     bt,
-              oldText: st === "Modified" ? bt : undefined,
-              newText: st === "Modified" ? rt : undefined,
-              bounding_box: null,
-              detail: { field_label: "Text Extraction", old_value: bt || undefined, new_value: rt || undefined },
-              summary: `Text extraction service (OCR${engines.length ? ` — ${engines.join(", ")}` : ""})`,
-            });
-          }
-
-          return { ...result, parsedItems };
         });
 
         setLrfAnalysis(null);
         setApiResults(processedResults);
         setSelectedResultIndex(0);
-        setProgress(100);
         setAnalysisRun(true);
       }
     } catch (error) {
       console.error("Comparison error:", error);
       toast.error("Error running analysis. Please check your connection and try again.");
     } finally {
-      clearInterval(progressInterval);
       setTimeout(() => setLoading(false), 500);
     }
   };
@@ -831,27 +856,7 @@ const Index = () => {
   return (
     <div className="min-h-screen bg-[#f8f9fa] flex flex-col">
 
-      {/* Loading popup */}
-      {loading && (
-        <div className="fixed inset-0 bg-black/30 backdrop-blur-[2px] z-[100] flex items-center justify-center">
-          <div className="bg-white rounded-lg shadow-xl px-8 py-6 flex flex-col items-center gap-4 w-72">
-            <Activity className="h-8 w-8 text-[#d51900] animate-pulse" />
-            <div className="text-center space-y-1">
-              <div className="text-sm font-bold text-slate-800 uppercase tracking-wide">
-                Analysing Labels
-              </div>
-              <div className="text-xs text-slate-500">This may take a moment…</div>
-            </div>
-            <div className="w-full h-1.5 bg-slate-100 rounded-full overflow-hidden">
-              <div
-                className="h-full bg-[#d51900] transition-all duration-500 ease-out"
-                style={{ width: `${progress}%` }}
-              />
-            </div>
-            <span className="text-xs text-slate-400 font-mono">{progress}%</span>
-          </div>
-        </div>
-      )}
+      <AnalysisProgressModal isOpen={loading} />
 
       {/* Navbar */}
       <nav className="bg-primary text-white px-6 py-0 flex items-center justify-between shadow-md sticky top-0 z-40" style={{ minHeight: 52 }}>
@@ -907,25 +912,20 @@ const Index = () => {
       )}
 
       {/* Main Content */}
-      <main className="flex-1 overflow-y-auto">
+      <main className="flex-1 overflow-hidden flex flex-row">
 
-        {/* Result Tabs — only when multiple child results */}
-        {analysisRun && apiResults.length > 1 && (
-          <div className="bg-white border-b border-gray-200 px-6 py-3 flex gap-2 overflow-x-auto">
-            {apiResults.map((res, idx) => (
-              <button
-                key={idx}
-                onClick={() => setSelectedResultIndex(idx)}
-                className={`px-4 py-2 text-[11px] font-bold uppercase tracking-wider transition-all border shrink-0 ${selectedResultIndex === idx
-                  ? "bg-[#d51900] text-white border-[#d51900] shadow-sm"
-                  : "bg-white text-slate-500 border-slate-200 hover:border-slate-400 hover:bg-slate-50"
-                  }`}
-              >
-                {res.filename || `Label ${idx + 1}`}
-              </button>
-            ))}
-          </div>
-        )}
+        <LabelSidebar
+          baseFile={baseFile[0] ?? null}
+          basePreviewUrl={basePreviewUrl || null}
+          childFiles={expandedChildFiles}
+          childPreviewUrls={childPreviewUrls}
+          apiResults={apiResults}
+          selectedIndex={selectedResultIndex}
+          onSelectChild={setSelectedResultIndex}
+          analysisRun={analysisRun}
+        />
+
+        <div className="flex-1 overflow-y-auto">
 
         <div className="px-6 py-6 space-y-6 pb-16 max-w-[1600px] mx-auto w-full">
 
@@ -964,8 +964,6 @@ const Index = () => {
           <VisualDiffViewer
             baseImage={basePreviewUrl || undefined}
             childImage={childPreviewUrls[selectedResultIndex] || childPreviewUrls[0] || undefined}
-            isBasePdf={baseFile[0]?.type === "application/pdf"}
-            isChildPdf={(childFiles[selectedResultIndex] || childFiles[0])?.type === "application/pdf"}
             annotations={
               // In form mode (formData present), show Unexpected Changes AI annotations.
               // In single label mode, analysisRun && !lrfOnly shows everything.
@@ -1001,8 +999,11 @@ const Index = () => {
             }
             missingItems={missingItems}
             satisfiedItems={satisfiedItems}
+            yoloReview={apiResults[selectedResultIndex]?.yolo_review ?? []}
+            childFields={apiResults[selectedResultIndex]?.child_fields ?? {}}
           />
 
+        </div>
         </div>
       </main>
 
@@ -1034,12 +1035,19 @@ const Index = () => {
             barcode_summary: analysisRun && apiResults.length > 0 ? apiResults[selectedResultIndex]?.barcode_summary ?? null : null,
             // Pass as arrays — PreviewPage unpacks [0] for display, passes single File to ReportPage
             baseFile:  baseFile[0] ? [baseFile[0]] : [],
-            childFile: childFiles[selectedResultIndex] ? [childFiles[selectedResultIndex]] : [],
+            childFile: expandedChildFiles[selectedResultIndex] ? [expandedChildFiles[selectedResultIndex]] : [],
             baseFileName: baseFile[0]?.name ?? '',
-            childFileName: childFiles[selectedResultIndex]?.name ?? '',
-            // Stored so compare page can be fully restored when navigating back
+            childFileName: expandedChildFiles[selectedResultIndex]?.name ?? '',
+            // Stored so compare page can be fully restored when navigating back.
+            // Preview URLs (strings) are the source of truth on remount because
+            // File objects may not survive location.state across all remount paths.
             apiResults,
             lrfAnalysis,
+            childFiles: expandedChildFiles,
+            basePreviewUrl,
+            expandedChildPreviewUrls: childPreviewUrls,
+            analysisRun,
+            selectedResultIndex,
           },
         })}
           className="flex items-center gap-2 bg-[#d51900] text-white px-8 py-3 text-[13px] font-bold uppercase tracking-widest hover:bg-[#b01300] transition-colors rounded-lg shadow-md"

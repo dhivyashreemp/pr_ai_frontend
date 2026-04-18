@@ -1,10 +1,13 @@
 import { useState, useRef, useCallback, useEffect, useMemo } from 'react';
 import { useNavigate, useLocation } from 'react-router-dom';
-import { ArrowLeft, FileText, ScanLine, Trash2, Pencil, X, Check, MapPin, Copy } from 'lucide-react';
+import { ArrowLeft, FileText, ScanLine, Trash2, Pencil, X, Check, MapPin, Copy, Lock } from 'lucide-react';
 import ProfileDropdown from '@/components/ProfileDropdown';
 import StepIndicator from '@/components/StepIndicator';
 import type { DrawnBox } from '@/report/types';
 import type { RequirementBox } from '@/components/VisualDiffViewer';
+import { pdfToImage, isPdfFile } from '@/lib/pdfToImage';
+import LabelSidebar from '@/components/LabelSidebar';
+import AnnotationsPanel from '@/components/AnnotationsPanel';
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Types
@@ -59,12 +62,16 @@ interface DrawableImagePanelProps {
   onDeleteAiBox?: (id: string) => void;
   onDuplicateBox?: (source: DrawnBox | UserAnnotation, pos: { top: number; left: number; width: number; height: number }, panelTarget: 'base' | 'new') => void;
   onAdjustAiBox?: (id: string, pos: { top: number; left: number; width: number; height: number }) => void;
+  highlightedGroupId?: string | null;
+  isReadOnly?: boolean;
 }
 
 function DrawableImagePanel({
   src, title, subtitle, target,
   aiBoxes, userBoxes, isDrawingMode, activeGroupId,
   onDrawComplete, onDeleteBox, onDeleteAiBox, onDuplicateBox, onAdjustAiBox,
+  highlightedGroupId,
+  isReadOnly = false,
 }: DrawableImagePanelProps) {
   const containerRef = useRef<HTMLDivElement>(null);
   const [draw, setDraw] = useState<DrawState | null>(null);
@@ -226,13 +233,22 @@ function DrawableImagePanel({
       {/* Panel header */}
       <div
         className="border-b border-gray-200 px-4 py-2.5 flex items-center justify-between"
-        style={{ backgroundColor: isDrawingMode ? '#eff6ff' : '#f9fafb' }}
+        style={{ backgroundColor: isDrawingMode && !isReadOnly ? '#eff6ff' : '#f9fafb' }}
       >
         <div>
-          <div className="text-xs font-bold uppercase tracking-wide text-gray-700">{title}</div>
+          <div className="flex items-center gap-1.5">
+            <span className={`w-2 h-2 rounded-full flex-shrink-0 ${target === 'base' ? 'bg-blue-500' : 'bg-[#d51900]'}`} />
+            <div className={`text-xs font-bold uppercase tracking-wide ${target === 'base' ? 'text-blue-700' : 'text-[#d51900]'}`}>{title}</div>
+            {isReadOnly && (
+              <div className="flex items-center gap-0.5 ml-1">
+                <Lock className="w-3 h-3 text-gray-400" />
+                <span className="text-[10px] text-gray-400">View only</span>
+              </div>
+            )}
+          </div>
           {subtitle && <div className="text-[10px] text-gray-400 mt-0.5 truncate max-w-xs">{subtitle}</div>}
         </div>
-        {isDrawingMode && (
+        {isDrawingMode && !isReadOnly && (
           <span className="text-[10px] font-bold text-white bg-blue-600 px-2 py-0.5 flex items-center gap-1">
             <Pencil className="w-2.5 h-2.5" />
             {activeGroupId ? 'Adding location…' : 'Drawing active'}
@@ -243,12 +259,12 @@ function DrawableImagePanel({
       {/* Image area */}
       <div
         ref={containerRef}
-        className="relative select-none flex-1"
-        style={{ cursor: isDrawingMode ? 'crosshair' : 'default' }}
-        onPointerDown={handlePointerDown}
-        onPointerMove={handlePointerMove}
-        onPointerUp={handlePointerUp}
-        onClick={() => { if (!isDrawingMode && !placing) setSelectedBoxId(null); }}
+        className={`relative select-none flex-1${isReadOnly ? ' pointer-events-none' : ''}`}
+        style={{ cursor: isReadOnly ? 'default' : isDrawingMode ? 'crosshair' : 'default' }}
+        onPointerDown={isReadOnly ? undefined : handlePointerDown}
+        onPointerMove={isReadOnly ? undefined : handlePointerMove}
+        onPointerUp={isReadOnly ? undefined : handlePointerUp}
+        onClick={isReadOnly ? undefined : () => { if (!isDrawingMode && !placing) setSelectedBoxId(null); }}
       >
         <img src={src} alt={title} className="w-full h-auto block" draggable={false} />
 
@@ -393,7 +409,7 @@ function DrawableImagePanel({
           boxGroupIndex[box.groupId] = (boxGroupIndex[box.groupId] ?? 0) + 1;
           const idx   = boxGroupIndex[box.groupId];
           const total = boxGroupCount[box.groupId];
-          const isHighlighted = activeGroupId === box.groupId;
+          const isHighlighted = activeGroupId === box.groupId || highlightedGroupId === box.groupId;
           const isSelected    = selectedBoxId === box.id;
           const clickable     = !isDrawingMode && !placing;
           return (
@@ -748,31 +764,92 @@ const PreviewPage = () => {
   const [childUrl, setChildUrl] = useState('');
 
   useEffect(() => {
-    if (baseFileArr[0]) {
-      const url = URL.createObjectURL(baseFileArr[0]);
-      setBaseUrl(url);
-      return () => URL.revokeObjectURL(url);
+    const file = baseFileArr[0];
+    if (!file) {
+      setBaseUrl('');
+      return;
     }
+    let cancelled = false;
+    let blobUrl: string | null = null;
+
+    (async () => {
+      try {
+        if (isPdfFile(file)) {
+          const dataUrl = await pdfToImage(file);
+          if (!cancelled) setBaseUrl(dataUrl);
+        } else {
+          blobUrl = URL.createObjectURL(file);
+          if (!cancelled) setBaseUrl(blobUrl);
+        }
+      } catch (e) {
+        console.error('Failed to build base preview:', e);
+      }
+    })();
+
+    return () => {
+      cancelled = true;
+      if (blobUrl) URL.revokeObjectURL(blobUrl);
+    };
   }, [baseFileArr[0]]);
 
   useEffect(() => {
-    if (childFileArr[0]) {
-      const url = URL.createObjectURL(childFileArr[0]);
-      setChildUrl(url);
-      return () => URL.revokeObjectURL(url);
+    const file = childFileArr[0];
+    if (!file) {
+      setChildUrl('');
+      return;
     }
+    let cancelled = false;
+    let blobUrl: string | null = null;
+
+    (async () => {
+      try {
+        if (isPdfFile(file)) {
+          const dataUrl = await pdfToImage(file);
+          if (!cancelled) setChildUrl(dataUrl);
+        } else {
+          blobUrl = URL.createObjectURL(file);
+          if (!cancelled) setChildUrl(blobUrl);
+        }
+      } catch (e) {
+        console.error('Failed to build child preview:', e);
+      }
+    })();
+
+    return () => {
+      cancelled = true;
+      if (blobUrl) URL.revokeObjectURL(blobUrl);
+    };
   }, [childFileArr[0]]);
 
   const baseFileName  = state.baseFileName  ?? (baseFileArr[0]?.name  ?? '');
   const childFileName = state.childFileName ?? (childFileArr[0]?.name ?? '');
+
+  // ── Multi-child sidebar state ────────────────────────────────────────────
+  const expandedChildPreviewUrls: string[] = state.expandedChildPreviewUrls ?? [];
+  const childFilesAll: File[] = state.childFiles ?? [];
+  const [selectedChildIndex, setSelectedChildIndex] = useState<number>(state.selectedResultIndex ?? 0);
 
   // ── Build existing AI / requirement boxes for overlay ────────────────────
   const annotations:      any[]            = state.annotations     ?? [];
   const requirementBoxes: RequirementBox[] = state.requirementBoxes ?? [];
   const [hiddenAiBoxIds, setHiddenAiBoxIds] = useState<string[]>([]);
 
+  // When the user picks a different child in the sidebar, show that child's
+  // AI annotations. Fall back to the originally-passed annotations for the
+  // child that was active when Index.tsx navigated here.
+  const activeAnnotations: any[] =
+    selectedChildIndex === (state.selectedResultIndex ?? 0)
+      ? annotations
+      : (state.apiResults?.[selectedChildIndex]?.annotations ?? []);
+
+  // Requirement boxes only apply to the originally-selected child (they are
+  // pre-computed by Index.tsx for that specific child). For other children
+  // we only show the raw AI annotations.
+  const activeRequirementBoxes: RequirementBox[] =
+    selectedChildIndex === (state.selectedResultIndex ?? 0) ? requirementBoxes : [];
+
   const existingNewBoxes: DrawnBox[] = useMemo(() => {
-    const requirementAiBoxes = requirementBoxes.map((b: any, i: number) => ({
+    const requirementAiBoxes = activeRequirementBoxes.map((b: any, i: number) => ({
       id:     `requirement-${i}`,
       type:   (b.changeType ?? 'Modified') as DrawnBox['type'],
       top:    (b.y ?? 0) * 100,
@@ -782,7 +859,7 @@ const PreviewPage = () => {
       text:   b.label ?? b.text ?? '',
     }));
 
-    const annotationAiBoxes = annotations.map((b: any, i: number) => ({
+    const annotationAiBoxes = activeAnnotations.map((b: any, i: number) => ({
       id:     `annotation-${i}`,
       type:   (b.change_type ?? 'Modified') as DrawnBox['type'],
       top:    (b.y ?? b.top ?? 0) * (b.y !== undefined ? 100 : 1),
@@ -793,7 +870,7 @@ const PreviewPage = () => {
     }));
 
     return [...requirementAiBoxes, ...annotationAiBoxes].filter(box => !hiddenAiBoxIds.includes(box.id));
-  }, [annotations, hiddenAiBoxIds, requirementBoxes]);
+  }, [activeAnnotations, activeRequirementBoxes, hiddenAiBoxIds]);
 
   // ── AI box position adjustments (human-in-the-loop fine-tuning) ─────────
   const [aiBoxAdjustments, setAiBoxAdjustments] = useState<Record<string, { top: number; left: number; width: number; height: number }>>({});
@@ -817,11 +894,6 @@ const PreviewPage = () => {
    */
   const [activeGroupId, setActiveGroupId] = useState<string | null>(null);
 
-  // Entering "add location" mode automatically enables draw mode
-  const handleAddLocation = (groupId: string) => {
-    setActiveGroupId(groupId);
-    setIsDrawingMode(true);
-  };
 
   const handleExitAddLocation = () => {
     setActiveGroupId(null);
@@ -943,10 +1015,32 @@ const PreviewPage = () => {
   }, [userAnnotations]);
 
   const hasBase = !!baseUrl;
-  const hasNew  = !!childUrl;
+
+  // Prefer the pre-rendered URL for the selected child (survives navigation);
+  // fall back to the URL built from childFileArr[0] for the no-sidebar path.
+  const activeChildUrl = expandedChildPreviewUrls[selectedChildIndex] || childUrl;
+  const hasNew  = !!activeChildUrl;
+
+  // Subtitle shown in the "New Version" panel header
+  const activeChildFileName =
+    childFilesAll[selectedChildIndex]?.name ?? childFileName;
 
   const userBaseBoxes = userAnnotations.filter(a => a.target === 'base');
   const userNewBoxes  = userAnnotations.filter(a => a.target === 'new');
+
+  // ── Child switching ──────────────────────────────────────────────────────
+  const handleSelectChild = useCallback((index: number) => {
+    setSelectedChildIndex(index);
+    // Reset per-panel state so it doesn't bleed across children
+    setHiddenAiBoxIds([]);
+    setAiBoxAdjustments({});
+  }, []);
+
+  // ── Annotations panel hover / select state ───────────────────────────────
+  const [hoveredAnnotationId,  setHoveredAnnotationId]  = useState<string | null>(null);
+  const [selectedAnnotationId, setSelectedAnnotationId] = useState<string | null>(null);
+  const handleHoverAnnotation  = useCallback((id: string | null) => setHoveredAnnotationId(id),  []);
+  const handleSelectAnnotation = useCallback((id: string | null) => setSelectedAnnotationId(id), []);
 
   // ── Navigate to report ───────────────────────────────────────────────────
   const handleGenerateReport = () => {
@@ -967,7 +1061,7 @@ const PreviewPage = () => {
     // Merge human-adjusted positions back into requirementBoxes (% → 0-1 range)
     const adjustedRequirementBoxes = (state.requirementBoxes ?? [])
       .filter((_: any, i: number) => !hiddenAiBoxIds.includes(`requirement-${i}`))
-      .map((b: any, i: number) => {
+      .map((b: any) => {
         const originalIndex = requirementBoxes.indexOf(b);
         const adj = aiBoxAdjustments[`requirement-${originalIndex}`];
         if (!adj) return b;
@@ -1007,6 +1101,12 @@ const PreviewPage = () => {
         requirementBoxes: adjustedRequirementBoxes,
         baseFile:  baseFileArr[0]  ?? null,
         childFile: childFileArr[0] ?? null,
+        // Forward the already-rendered preview URLs (data URLs for PDFs,
+        // blob URLs for images). ReportPage uses these directly instead of
+        // rebuilding from File objects, which may not survive the full
+        // Index → Preview → Report navigation chain.
+        basePreviewUrl:  baseUrl  || state.basePreviewUrl  || '',
+        childPreviewUrl: activeChildUrl || '',
         userAnnotationsBase,
         userAnnotationsNew,
         userAnnotationsUnique,
@@ -1024,6 +1124,15 @@ const PreviewPage = () => {
         submissionId: state.submissionId,
         baseFile:     baseFileArr,
         childFile:    childFileArr,
+        // Pass back the full expanded child array + preview URLs + UI state so
+        // /compare can fully restore its sidebar, selected child, and analysed
+        // badges on remount (File objects alone are not sufficient — preview
+        // URLs carry the visual state through location.state as plain strings).
+        childFiles:               state.childFiles               ?? [],
+        basePreviewUrl:           state.basePreviewUrl           ?? '',
+        expandedChildPreviewUrls: state.expandedChildPreviewUrls ?? [],
+        analysisRun:              state.analysisRun              ?? true,
+        selectedResultIndex:      selectedChildIndex,
         apiResults:   state.apiResults  ?? [],
         lrfAnalysis:  state.lrfAnalysis ?? null,
       },
@@ -1097,7 +1206,20 @@ const PreviewPage = () => {
       )}
 
       {/* Main content */}
-      <main className="flex-1 overflow-y-auto">
+      <main className="flex-1 overflow-hidden flex flex-row">
+
+        <LabelSidebar
+          baseFile={baseFileArr[0] ?? null}
+          basePreviewUrl={baseUrl || null}
+          childFiles={childFilesAll}
+          childPreviewUrls={expandedChildPreviewUrls}
+          apiResults={state.apiResults ?? []}
+          selectedIndex={selectedChildIndex}
+          onSelectChild={handleSelectChild}
+          analysisRun={true}
+        />
+
+        <div className="flex-1 overflow-y-auto">
         <div className="max-w-[1600px] mx-auto px-6 py-5 space-y-4">
 
           {/* Instructions + controls bar */}
@@ -1201,13 +1323,15 @@ const PreviewPage = () => {
                 onDeleteAiBox={handleDeleteAiBox}
                 onDuplicateBox={handleDuplicateBox}
                 onAdjustAiBox={handleAdjustAiBox}
+                highlightedGroupId={hoveredAnnotationId ?? selectedAnnotationId}
+                isReadOnly={true}
               />
             )}
             {hasNew && (
               <DrawableImagePanel
-                src={childUrl}
+                src={activeChildUrl}
                 title="New Version"
-                subtitle={childFileName}
+                subtitle={activeChildFileName}
                 target="new"
                 aiBoxes={existingNewBoxes}
                 userBoxes={userNewBoxes}
@@ -1218,6 +1342,7 @@ const PreviewPage = () => {
                 onDeleteAiBox={handleDeleteAiBox}
                 onDuplicateBox={handleDuplicateBox}
                 onAdjustAiBox={handleAdjustAiBox}
+                highlightedGroupId={hoveredAnnotationId ?? selectedAnnotationId}
               />
             )}
             {!hasBase && !hasNew && (
@@ -1227,113 +1352,17 @@ const PreviewPage = () => {
             )}
           </div>
 
-          {/* Annotations summary table */}
-          {annotationGroups.length > 0 && (
-            <div className="bg-white border border-gray-200">
-              <div className="border-b border-gray-200 px-5 py-3 flex items-center gap-2">
-                <Pencil className="w-3.5 h-3.5 text-gray-500" />
-                <h3 className="text-xs font-bold uppercase tracking-wide text-gray-700">
-                  Reviewer Annotations
-                </h3>
-                <span className="ml-1 bg-gray-100 border border-gray-200 text-gray-600 text-[10px] px-1.5 py-0.5 font-semibold">
-                  {annotationGroups.length} {annotationGroups.length === 1 ? 'entry' : 'entries'}
-                  {userAnnotations.length > annotationGroups.length && (
-                    <span className="text-gray-400 ml-1">· {userAnnotations.length} boxes total</span>
-                  )}
-                </span>
-              </div>
-              <div className="overflow-x-auto">
-                <table className="w-full text-xs border-collapse">
-                  <thead>
-                    <tr className="bg-gray-50 border-b border-gray-200">
-                      <th className="px-4 py-2 text-left font-bold text-gray-600 uppercase tracking-wide text-[10px] border-r border-gray-200 w-8">#</th>
-                      <th className="px-4 py-2 text-left font-bold text-gray-600 uppercase tracking-wide text-[10px] border-r border-gray-200 w-28">Type</th>
-                      <th className="px-4 py-2 text-left font-bold text-gray-600 uppercase tracking-wide text-[10px] border-r border-gray-200">Comment</th>
-                      <th className="px-4 py-2 text-left font-bold text-gray-600 uppercase tracking-wide text-[10px] border-r border-gray-200 w-24">Element</th>
-                      <th className="px-4 py-2 text-left font-bold text-gray-600 uppercase tracking-wide text-[10px] border-r border-gray-200 w-28">Section</th>
-                      <th className="px-4 py-2 text-left font-bold text-gray-600 uppercase tracking-wide text-[10px] border-r border-gray-200 w-24">Locations</th>
-                      <th className="px-4 py-2 text-center font-bold text-gray-600 uppercase tracking-wide text-[10px] w-28">Actions</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {annotationGroups.map((group, idx) => {
-                      const color = TYPE_COLORS[group.type] ?? '#6b7280';
-                      const isActive = activeGroupId === group.groupId;
-                      return (
-                        <tr
-                          key={group.groupId}
-                          className={`border-b border-gray-100 last:border-0 transition-colors ${
-                            isActive ? 'bg-amber-50' : 'hover:bg-gray-50'
-                          }`}
-                        >
-                          <td className="px-4 py-2.5 border-r border-gray-200 text-gray-500 font-mono">{idx + 1}</td>
-                          <td className="px-4 py-2.5 border-r border-gray-200">
-                            <span
-                              className="inline-block px-2 py-0.5 text-[10px] font-bold border"
-                              style={{ color, borderColor: `${color}60`, backgroundColor: `${color}15` }}
-                            >
-                              {group.type}
-                            </span>
-                          </td>
-                          <td className="px-4 py-2.5 border-r border-gray-200 text-gray-800">{group.text}</td>
-                          <td className="px-4 py-2.5 border-r border-gray-200 text-gray-700">{group.elementType}</td>
-                          <td className="px-4 py-2.5 border-r border-gray-200">
-                            <span className={`inline-block px-2 py-0.5 text-[10px] font-bold border ${
-                              group.disposition === 'Expected'
-                                ? 'text-teal-700 bg-teal-50 border-teal-200'
-                                : 'text-orange-700 bg-orange-50 border-orange-200'
-                            }`}>
-                              {group.disposition}
-                            </span>
-                          </td>
-                          <td className="px-4 py-2.5 border-r border-gray-200">
-                            <div className="flex items-center gap-1.5">
-                              <MapPin className="w-3 h-3 text-gray-400" />
-                              <span className="font-semibold text-gray-700">{group.boxes.length}</span>
-                              <span className="text-gray-400 text-[10px]">
-                                {group.boxes.length === 1 ? 'box' : 'boxes'}
-                              </span>
-                            </div>
-                          </td>
-                          <td className="px-4 py-2.5 text-center">
-                            <div className="flex items-center justify-center gap-1.5">
-                              {/* Add Location button */}
-                              {isActive ? (
-                                <button
-                                  onClick={handleExitAddLocation}
-                                  className="flex items-center gap-1 px-2.5 py-1 text-[10px] font-bold border-2 border-amber-500 text-amber-700 bg-amber-100 hover:bg-amber-200 transition-colors"
-                                  title="Done adding locations"
-                                >
-                                  <Check className="w-3 h-3" /> Done
-                                </button>
-                              ) : (
-                                <button
-                                  onClick={() => handleAddLocation(group.groupId)}
-                                  className="flex items-center gap-1 px-2.5 py-1 text-[10px] font-bold border border-gray-300 text-gray-600 hover:border-blue-400 hover:text-blue-600 hover:bg-blue-50 transition-colors"
-                                  title="Draw another box for the same annotation"
-                                >
-                                  <MapPin className="w-3 h-3" /> Add Location
-                                </button>
-                              )}
-                              {/* Delete entire group */}
-                              <button
-                                onClick={() => handleDeleteGroup(group.groupId)}
-                                className="flex items-center gap-1 px-2 py-1 text-[10px] font-bold border border-gray-200 text-gray-400 hover:border-red-400 hover:text-red-600 hover:bg-red-50 transition-colors"
-                                title="Remove this annotation and all its boxes"
-                              >
-                                <Trash2 className="w-3 h-3" />
-                              </button>
-                            </div>
-                          </td>
-                        </tr>
-                      );
-                    })}
-                  </tbody>
-                </table>
-              </div>
-            </div>
-          )}
         </div>
+        </div>{/* end flex-1 overflow-y-auto */}
+        <AnnotationsPanel
+          annotations={userAnnotations}
+          hoveredId={hoveredAnnotationId}
+          selectedId={selectedAnnotationId}
+          isDrawMode={isDrawingMode}
+          onHoverAnnotation={handleHoverAnnotation}
+          onSelectAnnotation={handleSelectAnnotation}
+          onDeleteAnnotation={handleDeleteGroup}
+        />
       </main>
 
       {/* Footer action bar */}

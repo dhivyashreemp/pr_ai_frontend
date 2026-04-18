@@ -193,21 +193,12 @@ export function FrameNoChange({ labelName, labelUrl, crNumber, sku }: NoChangePr
       <div className="report-label-page bg-white border border-gray-300 p-4">
         <div className="text-[10px] uppercase tracking-wide text-gray-500 font-bold mb-3">Label</div>
         {labelUrl ? (
-          labelName?.toLowerCase().endsWith('.pdf') ? (
-            <embed
-              src={labelUrl}
-              type="application/pdf"
-              className="w-full"
-              style={{ height: '600px' }}
-            />
-          ) : (
-            <img
-              src={labelUrl}
-              alt={labelName ?? 'Label'}
-              className="w-full object-contain"
-              style={{ maxHeight: '600px' }}
-            />
-          )
+          <img
+            src={labelUrl}
+            alt={labelName ?? 'Label'}
+            className="w-full object-contain"
+            style={{ maxHeight: '600px' }}
+          />
         ) : (
           <div className="flex items-center justify-center h-48 bg-gray-50 border border-dashed border-gray-300 text-sm text-gray-400 italic">
             No label image provided

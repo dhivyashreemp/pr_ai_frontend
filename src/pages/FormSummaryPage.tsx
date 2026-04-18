@@ -120,7 +120,7 @@ const FormSummaryPage = () => {
       setSubmitting(false);
     }
 
-    navigate("/compare", { state: { formData, submissionId, baseFile, childFile } });
+    navigate("/compare", { state: { formData, submissionId, baseFile, childFiles: childFile } });
   };
 
   return (
@@ -278,7 +278,7 @@ const FormSummaryPage = () => {
                       label="New Version Label (required)"
                       files={childFile}
                       onFilesSelect={setChildFile}
-                      multiple={false}
+                      multiple={true}
                     />
                     <Dropzone
                       label="Current Version Label (optional — enables side-by-side diff)"
@@ -292,7 +292,7 @@ const FormSummaryPage = () => {
                     label="New Version Label"
                     files={childFile}
                     onFilesSelect={setChildFile}
-                    multiple={false}
+                    multiple={true}
                   />
                 )}
 
