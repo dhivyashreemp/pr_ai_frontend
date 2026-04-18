@@ -179,30 +179,29 @@ const Index = () => {
             });
           }
 
-          // ── OCR text extraction results ────────────────────────────────────
-          // Surface line-level changes from the multi-engine OCR ensemble that
-          // the LLM structured extraction did not capture as named fields.
-          // LLM results take precedence — OCR entries are skipped when their
-          // normalised text already appears in an LLM discrepancy (substring or exact).
+          // ── OCR text extraction results (safety net) ──────────────────────
+          // The backend now sends OCR-based text changes in discrepancies as
+          // the primary text source. This block is a backward-compat fallback:
+          // it adds any non-equal OCR entries not already present in parsedItems.
           const normText = (s: string) => s.toLowerCase().replace(/\s+/g, " ").trim();
-          const llmTextSet = new Set<string>(
+          const existingTextSet = new Set<string>(
             parsedItems
               .filter((pi: any) => pi.category === "Text")
               .flatMap((pi: any) =>
                 [pi.oldText, pi.newText, pi.value].filter(Boolean).map(normText)
               )
           );
-          const isOcrCaptured = (text: string) => {
+          const isTextCaptured = (text: string) => {
             if (!text) return true;
             const n = normText(text);
-            return [...llmTextSet].some(v => v === n || v.includes(n) || n.includes(v));
+            return [...existingTextSet].some(v => v === n || v.includes(n) || n.includes(v));
           };
           for (const entry of (result.ocr_text_diff ?? [])) {
             if (entry.type === "equal") continue;
             const bt = (entry.base?.text    || "").trim();
             const rt = (entry.revised?.text || "").trim();
             if (!bt && !rt) continue;
-            if (isOcrCaptured(bt) || isOcrCaptured(rt)) continue;
+            if (isTextCaptured(bt) || isTextCaptured(rt)) continue;
             const st = entry.type === "add"    ? "Added"
                      : entry.type === "delete" ? "Deleted"
                      :                           "Modified";
@@ -217,7 +216,7 @@ const Index = () => {
               oldText: st === "Modified" ? bt : undefined,
               newText: st === "Modified" ? rt : undefined,
               bounding_box: null,
-              detail: { field_label: "OCR Extracted Text", old_value: bt || undefined, new_value: rt || undefined },
+              detail: { field_label: "Text Extraction", old_value: bt || undefined, new_value: rt || undefined },
               summary: `Text extraction service (OCR${engines.length ? ` — ${engines.join(", ")}` : ""})`,
             });
           }
