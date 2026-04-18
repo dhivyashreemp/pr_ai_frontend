@@ -82,6 +82,8 @@ export function ReportHeader({
         parsedItems:  s.parsedItems  ?? [],
         missingItems: s.missingItems ?? [],
         satisfiedItems:   s.satisfiedItems   ?? [],
+        userAnnotations:  s.userAnnotations  ?? [],
+        discardedUnexpectedIds: [...(s.discardedUnexpectedIds ?? [])],
         annotations:      s.annotations      ?? [],
         requirementBoxes: s.requirementBoxes ?? [],
         barcode_summary:  s.barcode_summary  ?? null,

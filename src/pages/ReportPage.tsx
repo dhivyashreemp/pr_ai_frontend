@@ -273,7 +273,9 @@ const ReportPageInner = () => {
   const [childUrl, setChildUrl] = useState<string>(restoredChildUrl);
   const restoredBaseUrlRef  = useRef<boolean>(!!restoredBaseUrl);
   const restoredChildUrlRef = useRef<boolean>(!!restoredChildUrl);
-  const [discardedUnexpectedIds, setDiscardedUnexpectedIds] = useState<(string | number)[]>([]);
+  const [discardedUnexpectedIds, setDiscardedUnexpectedIds] = useState<(string | number)[]>(
+    location.state?.discardedUnexpectedIds ?? []
+  );
 
   useEffect(() => {
     if (!baseFile) {
