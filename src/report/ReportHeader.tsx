@@ -1,5 +1,5 @@
 import { useTheme } from './ThemeContext';
-import { ThemeSwitcher } from './ThemeSwitcher';
+// import { ThemeSwitcher } from './ThemeSwitcher';
 import { useNavigate, useLocation } from 'react-router-dom';
 import { useUser } from '@/context/UserContext';
 import { ArrowLeft, Home } from 'lucide-react';
@@ -218,7 +218,7 @@ export function ReportHeader({
             <DownloadIcon />
             PDF
           </button>
-          <ThemeSwitcher />
+          {/* <ThemeSwitcher /> */}
           <ProfileDropdown />
         </div>
       </div>
