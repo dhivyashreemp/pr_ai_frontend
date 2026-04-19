@@ -862,6 +862,16 @@ const Index = () => {
     });
   }, [requirementBoxes]);
 
+  const [discardedUnexpectedIds] = useState<Set<string>>(
+    new Set(location.state?.discardedUnexpectedIds ?? [])
+  );
+  const discardedAnnotationBoxIds = useMemo(
+    () => [...discardedUnexpectedIds]
+      .filter(id => id.startsWith('ai-'))
+      .map(id => `annotation-${id.slice(3)}`),
+    [discardedUnexpectedIds],
+  );
+
   return (
     <div className="min-h-screen bg-[#f8f9fa] flex flex-col">
 
