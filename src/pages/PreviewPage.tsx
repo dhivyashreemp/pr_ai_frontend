@@ -230,16 +230,15 @@ function DrawableImagePanel({
   const boxGroupIndex: Record<string, number> = {};
 
   return (
-    <div className="flex flex-col bg-white border border-gray-200 shadow-sm">
+    <div className={`flex flex-col bg-white border border-gray-200 shadow-sm ${target === 'base' ? 'border-l-4 border-l-blue-400' : 'border-l-4 border-l-[#d51900]'}`}>
       {/* Panel header */}
       <div
-        className="border-b border-gray-200 px-4 py-2.5 flex items-center justify-between"
-        style={{ backgroundColor: isDrawingMode && !isReadOnly ? '#eff6ff' : '#f9fafb' }}
+        className={`border-b-2 px-4 py-2 flex items-center justify-between ${target === 'base' ? 'bg-blue-50 border-b-blue-400' : 'bg-red-50 border-b-red-400'}`}
       >
         <div>
           <div className="flex items-center gap-1.5">
             <span className={`w-2 h-2 rounded-full flex-shrink-0 ${target === 'base' ? 'bg-blue-500' : 'bg-[#d51900]'}`} />
-            <div className={`text-xs font-bold uppercase tracking-wide ${target === 'base' ? 'text-blue-700' : 'text-[#d51900]'}`}>{title}</div>
+            <div className={`text-sm font-semibold uppercase tracking-wide ${target === 'base' ? 'text-blue-700' : 'text-[#d51900]'}`}>{title}</div>
             {isReadOnly && (
               <div className="flex items-center gap-0.5 ml-1">
                 <Lock className="w-3 h-3 text-gray-400" />

@@ -220,8 +220,8 @@ const LabelSidebar = ({
               onClick={() => onSelectChild(idx)}
               className={`w-full text-left rounded-lg overflow-hidden transition-all duration-150 transform-gpu ${
                 isActive
-                  ? "border-2 border-[#d51900] bg-red-50 shadow-md"
-                  : "border border-gray-200 bg-white shadow-sm hover:shadow-md hover:scale-[1.02]"
+                  ? "border border-red-200 border-l-4 border-l-[#d51900] bg-red-50 shadow-md"
+                  : "border border-gray-200 border-l-4 border-l-gray-300 bg-white shadow-sm hover:shadow-md hover:scale-[1.02]"
               }`}
             >
               <CardThumbnail file={file} url={childPreviewUrls[idx] ?? null} />
@@ -241,12 +241,12 @@ const LabelSidebar = ({
   const expandedContent = (
     <>
       <div className="px-3 pt-3 pb-2">
-        <div className="text-xs font-semibold text-gray-400 uppercase tracking-wider">Labels</div>
+        <span className="inline-flex items-center gap-1 bg-blue-100 text-blue-700 text-[10px] font-bold px-2 py-0.5 rounded-full uppercase tracking-wider mb-2">Labels</span>
       </div>
       <div className="p-3 pt-0">
         {baseFile ? (
           <>
-            <div className="bg-blue-50 rounded-lg overflow-hidden border border-blue-200 shadow-sm">
+            <div className="bg-blue-50 rounded-lg overflow-hidden border border-blue-200 border-l-4 border-l-blue-500 shadow-sm">
               <CardThumbnail file={baseFile} url={basePreviewUrl} />
               <CardFooter
                 filename={baseFile.name}
@@ -254,16 +254,12 @@ const LabelSidebar = ({
                 dotColor="bg-blue-500"
               />
             </div>
-            <div className="text-[10px] font-semibold text-gray-400 uppercase tracking-wider mt-3 mb-1">
-              Child Labels
-            </div>
+            <span className="inline-flex items-center gap-1 bg-red-100 text-red-700 text-[10px] font-bold px-2 py-0.5 rounded-full uppercase tracking-wider mt-3 mb-2">Child Labels</span>
             <div className="pl-3 border-l border-gray-300 ml-1">{childrenList}</div>
           </>
         ) : (
           <>
-            <div className="text-[10px] font-semibold text-gray-400 uppercase tracking-wider mb-1">
-              Child Labels
-            </div>
+            <span className="inline-flex items-center gap-1 bg-red-100 text-red-700 text-[10px] font-bold px-2 py-0.5 rounded-full uppercase tracking-wider mb-2">Child Labels</span>
             {childrenList}
           </>
         )}
