@@ -312,12 +312,12 @@ const PanelContent = (props: PanelContentProps) => {
         <span className="text-xs font-semibold text-gray-400 uppercase tracking-wider">
           Report Details
         </span>
-        {isDrawMode && (
+        {/* {isDrawMode && (
           <div className="flex items-center gap-1.5 ml-auto">
             <span className="w-2 h-2 rounded-full bg-blue-500 animate-pulse inline-block" />
             <span className="text-[10px] font-semibold text-blue-600">Recording…</span>
           </div>
-        )}
+        )} */}
       </div>
 
       {/* ── Scrollable sections ──────────────────────────────────────────── */}
