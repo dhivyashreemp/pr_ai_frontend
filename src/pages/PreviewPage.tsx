@@ -1165,6 +1165,7 @@ const PreviewPage = () => {
         apiResults:   state.apiResults  ?? [],
         lrfAnalysis:  state.lrfAnalysis ?? null,
         discardedUnexpectedIds: [...discardedUnexpectedIds],
+        userAnnotations,
       },
     });
   };
