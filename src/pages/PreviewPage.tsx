@@ -1110,9 +1110,10 @@ const PreviewPage = () => {
     //
     // Only when there are zero requirements AND zero annotations does the report
     // render the No Change template (Scenario A with truly no detected changes).
-    const satisfiedCount  = (state.satisfiedItems?.length ?? 0);
-    const hasRequirements = (state.satisfiedItems?.length ?? 0) + (state.missingItems?.length ?? 0) > 0;
-    const hasChanges      = userAnnotationsUnique.length > 0 || satisfiedCount > 0 || hasRequirements;
+    const satisfiedCount    = (state.satisfiedItems?.length ?? 0);
+    const hasRequirements   = (state.satisfiedItems?.length ?? 0) + (state.missingItems?.length ?? 0) > 0;
+    const hasApiChanges     = adjustedAnnotations.length > 0 || (state.parsedItems?.length ?? 0) > 0;
+    const hasChanges        = userAnnotationsUnique.length > 0 || satisfiedCount > 0 || hasRequirements || hasApiChanges;
 
     navigate('/report', {
       state: {
