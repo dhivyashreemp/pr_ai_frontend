@@ -41,8 +41,8 @@ const AnnotationOverlay = ({
   annotations, naturalW, naturalH,
 }: { annotations: Annotation[]; naturalW: number; naturalH: number }) => {
   if (!annotations.length || !naturalW || !naturalH) return null;
-  const strokeW  = Math.max(naturalW, naturalH) * 0.004;
-  const fontSize = Math.max(naturalW, naturalH) * 0.022;
+  const strokeW  = Math.max(naturalW, naturalH) * 0.001;
+  const fontSize = Math.max(naturalW, naturalH) * 0.013;
   return (
     <svg
       viewBox={`0 0 ${naturalW} ${naturalH}`}
@@ -263,14 +263,14 @@ const DraggableBoxOverlay = ({
   };
 
   const handles: { dir: ResizeDir; style: React.CSSProperties; cursor: string }[] = [
-    { dir: "nw", cursor: "nw-resize", style: { top: -4,    left: -4   } },
-    { dir: "ne", cursor: "ne-resize", style: { top: -4,    right: -4  } },
-    { dir: "sw", cursor: "sw-resize", style: { bottom: -4, left: -4   } },
-    { dir: "se", cursor: "se-resize", style: { bottom: -4, right: -4  } },
-    { dir: "n",  cursor: "n-resize",  style: { top: -4,    left: "calc(50% - 4px)" } },
-    { dir: "s",  cursor: "s-resize",  style: { bottom: -4, left: "calc(50% - 4px)" } },
-    { dir: "e",  cursor: "e-resize",  style: { right: -4,  top: "calc(50% - 4px)"  } },
-    { dir: "w",  cursor: "w-resize",  style: { left: -4,   top: "calc(50% - 4px)"  } },
+    { dir: "nw", cursor: "nw-resize", style: { top: -2,    left: -2   } },
+    { dir: "ne", cursor: "ne-resize", style: { top: -2,    right: -2  } },
+    { dir: "sw", cursor: "sw-resize", style: { bottom: -2, left: -2   } },
+    { dir: "se", cursor: "se-resize", style: { bottom: -2, right: -2  } },
+    { dir: "n",  cursor: "n-resize",  style: { top: -2,    left: "calc(50% - 2px)" } },
+    { dir: "s",  cursor: "s-resize",  style: { bottom: -2, left: "calc(50% - 2px)" } },
+    { dir: "e",  cursor: "e-resize",  style: { right: -2,  top: "calc(50% - 2px)"  } },
+    { dir: "w",  cursor: "w-resize",  style: { left: -2,   top: "calc(50% - 2px)"  } },
   ];
 
   return (
@@ -298,7 +298,7 @@ const DraggableBoxOverlay = ({
                 top:    `${s.y * 100}%`,
                 width:  `${s.w * 100}%`,
                 height: `${s.h * 100}%`,
-                border: `2px solid ${color}`,
+                border: `1px solid ${color}`,
                 backgroundColor: bg,
                 boxSizing: "border-box",
                 cursor: "move",
@@ -417,14 +417,14 @@ const DraggableBoxOverlay = ({
                 </div>
               )}
 
-              {/* Resize handles */}
-              {handles.map(({ dir, style, cursor }) => (
+              {/* Resize handles — only visible when box is selected */}
+              {isSelected && handles.map(({ dir, style, cursor }) => (
                 <div
                   key={dir}
                   className="no-pan"
                   style={{
                     position: "absolute",
-                    width: 8, height: 8,
+                    width: 4, height: 4,
                     background: color,
                     border: "1px solid white",
                     borderRadius: 1,
