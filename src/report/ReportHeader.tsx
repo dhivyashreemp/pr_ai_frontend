@@ -1,5 +1,5 @@
 import { useTheme } from './ThemeContext';
-import { ThemeSwitcher } from './ThemeSwitcher';
+// import { ThemeSwitcher } from './ThemeSwitcher';
 import { useNavigate, useLocation } from 'react-router-dom';
 import { useUser } from '@/context/UserContext';
 import { ArrowLeft, Home } from 'lucide-react';
@@ -11,6 +11,7 @@ interface ReportHeaderProps {
   reportId?: string;
   currentRevision?: string;
   newRevision?: string;
+  onDownloadPDF?: () => void;
 }
 
 function DownloadIcon() {
@@ -38,6 +39,7 @@ export function ReportHeader({
   reportId: propReportId,
   currentRevision,
   newRevision,
+  onDownloadPDF,
 }: ReportHeaderProps) {
   const { theme } = useTheme();
   const navigate  = useNavigate();
@@ -210,7 +212,7 @@ export function ReportHeader({
             Home
           </button>
           <button
-            onClick={handleDownloadPDF}
+            onClick={onDownloadPDF ?? handleDownloadPDF}
             className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold uppercase tracking-wider transition-colors border border-transparent"
             style={{ backgroundColor: theme.accent, color: '#fff' }}
             title="Download as PDF"
@@ -218,7 +220,7 @@ export function ReportHeader({
             <DownloadIcon />
             PDF
           </button>
-          <ThemeSwitcher />
+          {/* <ThemeSwitcher /> */}
           <ProfileDropdown />
         </div>
       </div>

@@ -982,15 +982,15 @@ const VisualDiffViewer = ({
       {/* Column headers */}
       <div className={`grid ${singlePanel ? "grid-cols-1" : "grid-cols-2"} border-b border-border bg-white`}>
         {!singlePanel && (
-          <div className="px-4 py-1.5 border-r border-border border-b-2 border-b-blue-200 flex items-center justify-center gap-2">
+          <div className="bg-blue-50 border-b-2 border-b-blue-400 border-l-4 border-l-blue-400 border-r border-border px-4 py-2 flex items-center gap-2">
             <span className="w-2 h-2 rounded-full bg-blue-500 flex-shrink-0" />
-            <span className="text-[11px] font-semibold uppercase tracking-widest text-blue-700">Current Version Label</span>
+            <span className="text-sm font-semibold uppercase tracking-wider text-blue-700">Current Version Label</span>
           </div>
         )}
-        <div className="px-4 py-1.5 flex items-center justify-center relative border-b-2 border-b-red-200">
+        <div className="bg-red-50 border-b-2 border-b-red-400 border-l-4 border-l-[#d51900] px-4 py-2 flex items-center relative">
           <div className="flex items-center gap-2">
             <span className="w-2 h-2 rounded-full bg-[#d51900] flex-shrink-0" />
-            <span className="text-[11px] font-semibold uppercase tracking-widest text-[#d51900]">New Version Label</span>
+            <span className="text-sm font-semibold uppercase tracking-wider text-[#d51900]">New Version Label</span>
           </div>
           <div className="absolute right-3 flex items-center gap-2">
             {!useReqBoxes && annotations.length > 0 && (
@@ -1022,7 +1022,7 @@ const VisualDiffViewer = ({
 
         {/* Base panel */}
         {!singlePanel && (
-          <div className="border-r border-border bg-[#f1f5f9] h-[480px] overflow-hidden p-4">
+          <div className="border-r border-border border-l-4 border-l-blue-400 bg-[#f1f5f9] h-[480px] overflow-hidden p-4">
             <TransformWrapper ref={baseRef} minScale={0.5} maxScale={4} initialScale={1}>
               <TransformComponent
                 wrapperStyle={{ width: "100%", height: "100%" }}
@@ -1037,7 +1037,7 @@ const VisualDiffViewer = ({
         {/* Child panel — PlacementOverlay is a SIBLING of TransformWrapper (not inside it).
             This is the architectural fix: react-zoom-pan-pinch never intercepts these
             pointer events and clicking the overlay cannot trigger navigation. */}
-        <div className="bg-[#f1f5f9] h-[480px] overflow-hidden p-4" style={{ position: "relative" }}>
+        <div className="bg-[#f1f5f9] h-[480px] overflow-hidden p-4 border-l-4 border-l-[#d51900]" style={{ position: "relative" }}>
           {placing && (
             <PlacementOverlay
               placing={placing}

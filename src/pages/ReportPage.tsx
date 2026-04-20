@@ -1,5 +1,6 @@
 import { useState, useEffect, useRef } from 'react';
 import { useLocation } from 'react-router-dom';
+import { CheckCircle, Download } from 'lucide-react';
 import { ThemeProvider } from '@/report/ThemeContext';
 import { ReportHeader } from '@/report/ReportHeader';
 import { MetadataRow } from '@/report/MetadataRow';
@@ -208,6 +209,73 @@ function buildAnnotationBoxes(
   return base;
 }
 
+// ── print helpers ─────────────────────────────────────────────────────────────
+
+function _getISTDateParts() {
+  const now = new Date();
+  const ist = new Date(now.getTime() + (5 * 60 + 30) * 60 * 1000);
+  return {
+    yyyy: String(ist.getUTCFullYear()),
+    mm:   String(ist.getUTCMonth() + 1).padStart(2, '0'),
+    dd:   String(ist.getUTCDate()).padStart(2, '0'),
+    hh:   String(ist.getUTCHours()).padStart(2, '0'),
+    min:  String(ist.getUTCMinutes()).padStart(2, '0'),
+  };
+}
+
+function _makePrintHandler(reportId: string): () => void {
+  return () => {
+    const { yyyy, mm, dd, hh, min } = _getISTDateParts();
+    const dateStr = `${yyyy}-${mm}-${dd}`;
+    const timeStr = `${hh}:${min} IST`;
+    const style = document.createElement('style');
+    style.id = '__print-override__';
+    style.textContent = `
+      @page {
+        size: A4 portrait;
+        margin: 14mm 12mm 18mm 12mm;
+        @bottom-left   { content: "LPR: ${reportId}"; font-size: 7pt; color: #888; font-family: sans-serif; }
+        @bottom-center { content: "Page " counter(page); font-size: 7pt; color: #888; font-family: sans-serif; }
+        @bottom-right  { content: "${dateStr} ${timeStr}"; font-size: 7pt; color: #888; font-family: sans-serif; }
+      }
+      @media print {
+        body { margin: 0; background: #fff !important; }
+        .report-content-wrap { max-width: none !important; padding-left: 0 !important; padding-right: 0 !important; }
+        .report-banner {
+          padding: 22px 28px !important;
+          -webkit-print-color-adjust: exact !important;
+          print-color-adjust: exact !important;
+        }
+        .report-banner-title { font-size: 24pt !important; font-weight: 700 !important; line-height: 1.2 !important; }
+        .report-banner-id { font-size: 8.5pt !important; margin-top: 4px !important; }
+        .report-banner-logo { height: 32px !important; width: auto !important; }
+        .report-banner-revision { font-size: 10pt !important; font-weight: 600 !important; margin-top: 4px !important; }
+        .report-metadata-bar { font-size: 8.5pt !important; }
+        .report-page-break { page-break-before: always !important; break-before: page !important; }
+        .report-label-page { page-break-inside: avoid !important; break-inside: avoid !important; }
+        .report-label-img {
+          max-height: 180mm !important; width: auto !important;
+          max-width: 100% !important; display: block !important; margin: 0 auto !important;
+        }
+        .report-section { page-break-inside: avoid; }
+        .report-section-header { page-break-after: avoid; }
+        table { width: 100% !important; font-size: 8pt !important; }
+        th, td { padding: 4px 6px !important; }
+        span[class*="inline-block"] {
+          -webkit-print-color-adjust: exact !important;
+          print-color-adjust: exact !important;
+        }
+      }
+    `;
+    document.head.appendChild(style);
+    const prevTitle = document.title;
+    document.title = reportId;
+    window.print();
+    document.title = prevTitle;
+    document.head.removeChild(style);
+  };
+}
+
 // ── inner page ────────────────────────────────────────────────────────────────
 
 const ReportPageInner = () => {
@@ -354,6 +422,10 @@ const ReportPageInner = () => {
   const currentBoxes = buildAnnotationBoxes([], undefined, userBoxesBase)
     .filter((box) => !box.linkedRowId || !discardedUnexpectedIds.includes(box.linkedRowId));
 
+  const { yyyy, mm, dd } = _getISTDateParts();
+  const computedReportId  = `${yyyy}${mm}${dd}0001`;
+  const handleDownloadPDF = _makePrintHandler(computedReportId);
+
   const labelVersion = formData?.metadata?.label_version ?? '';
   const revParts     = labelVersion.includes('→')
     ? labelVersion.split('→').map((s: string) => s.trim())
@@ -376,17 +448,20 @@ const ReportPageInner = () => {
     discrepancyCategories,
   };
 
+  const generatedDate = new Date().toLocaleDateString('en-GB', { day: 'numeric', month: 'long', year: 'numeric' });
+
   return (
-    <div className="min-h-screen bg-white">
+    <div className="min-h-screen bg-white flex flex-col">
       <ReportHeader
         activeScenario={activeScenario}
         onScenarioChange={setActiveScenario}
         reportId={reportData.reportId || undefined}
         currentRevision={reportData.currentRevision}
         newRevision={reportData.newRevision}
+        onDownloadPDF={handleDownloadPDF}
       />
       <MetadataRow data={reportData} />
-      <div className="report-content-wrap max-w-[1600px] mx-auto px-8 py-6">
+      <div className="flex-1 report-content-wrap max-w-[1600px] mx-auto px-8 py-6 pb-24">
         {!hasChanges ? (
           <FrameNoChange
             labelName={childFileName || baseFileName || undefined}
@@ -418,6 +493,26 @@ const ReportPageInner = () => {
             )}
           </>
         )}
+      </div>
+
+      {/* ── Sticky footer — hidden during print ── */}
+      <div className="print:hidden sticky bottom-0 left-0 right-0 bg-white border-t border-gray-200 shadow-[0_-4px_12px_rgba(0,0,0,0.06)] px-6 py-3 flex items-center justify-between z-10">
+        <div className="flex items-center gap-3">
+          <div className="w-8 h-8 rounded-full bg-green-100 flex items-center justify-center flex-shrink-0">
+            <CheckCircle className="w-4 h-4 text-green-600" />
+          </div>
+          <div>
+            <p className="text-sm font-medium text-gray-700">Your report is ready</p>
+            <p className="text-xs text-gray-400">Generated: {generatedDate}</p>
+          </div>
+        </div>
+        <button
+          onClick={handleDownloadPDF}
+          className="flex items-center gap-2 bg-[#d51900] hover:bg-red-800 text-white text-sm font-medium px-5 py-2.5 rounded-lg transition-colors"
+        >
+          <Download className="w-4 h-4" />
+          Download PDF
+        </button>
       </div>
     </div>
   );
