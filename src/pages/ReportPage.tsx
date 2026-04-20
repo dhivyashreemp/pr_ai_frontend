@@ -5,7 +5,7 @@ import { ThemeProvider } from '@/report/ThemeContext';
 import { ReportHeader } from '@/report/ReportHeader';
 import { MetadataRow } from '@/report/MetadataRow';
 import { FrameA, FrameB, FrameC, FrameNoChange } from '@/report/Frames';
-import type { ReportData, Requirement, DiscrepancyCategory, DrawnBox, UnexpectedChange } from '@/report/types';
+import type { ReportData, PairReportData, Requirement, DiscrepancyCategory, DrawnBox, UnexpectedChange } from '@/report/types';
 import type { ProofRequestMissingItem } from '@/data/dummyData';
 import type { RequirementBox } from '@/components/VisualDiffViewer';
 import { pdfToImage, isPdfFile } from '@/lib/pdfToImage';
@@ -295,10 +295,13 @@ const ReportPageInner = () => {
   const annotations    = location.state?.annotations    ?? [];
   const reqBoxes       = location.state?.requirementBoxes as RequirementBox[] | undefined;
   const barcodeSummary = location.state?.barcode_summary ?? null;
-  const baseFile       = location.state?.baseFile  as File | null | undefined;
-  const childFile      = location.state?.childFile as File | null | undefined;
-  const baseFileName   = location.state?.baseFileName  ?? '';
-  const childFileName  = location.state?.childFileName ?? '';
+  const baseFile        = location.state?.baseFile  as File | null | undefined;
+  const childFile       = location.state?.childFile as File | null | undefined;
+  const baseFileName    = location.state?.baseFileName  ?? '';
+  const childFileName   = location.state?.childFileName ?? '';
+  // Full arrays forwarded from PreviewPage when multiple new-version labels exist
+  const childPreviewUrls: string[] = location.state?.childPreviewUrls ?? [];
+  const childFileNames:   string[] = location.state?.childFileNames   ?? [];
 
   // User-drawn annotation boxes from the preview page (all boxes → visual overlay)
   const userBoxesBase: DrawnBox[] = location.state?.userAnnotationsBase ?? [];
@@ -344,6 +347,10 @@ const ReportPageInner = () => {
   const [discardedUnexpectedIds, setDiscardedUnexpectedIds] = useState<(string | number)[]>(
     location.state?.discardedUnexpectedIds ?? []
   );
+
+  // ── Multi-pair sidebar state ───────────────────────────────────────────────
+  const [activePairIndex,    setActivePairIndex]    = useState<number>(0);
+  const [checkedPairIndices, setCheckedPairIndices] = useState<Set<number>>(new Set());
 
   useEffect(() => {
     if (!baseFile) {
@@ -431,6 +438,146 @@ const ReportPageInner = () => {
     ? labelVersion.split('→').map((s: string) => s.trim())
     : [labelVersion, ''];
 
+  // When multiple new-version labels were uploaded, childPreviewUrls contains all
+  // of their pre-rendered URLs. Fall back to the single childUrl for older paths.
+  const effectiveNewUrls  = childPreviewUrls.length > 0 ? childPreviewUrls : (childUrl ? [childUrl] : []);
+  const effectiveNewNames = childFileNames.length   > 0 ? childFileNames   : (childFileName ? [childFileName] : []);
+
+  // ── Multi-pair report data ────────────────────────────────────────────────
+  // allPairs is set by PreviewPage when N > 1 label pairs were uploaded.
+  const rawPairs: any[] = location.state?.allPairs ?? [];
+  const isMultiPair = rawPairs.length > 1;
+
+  const pairReportData: PairReportData[] = rawPairs.map((pair: any) => {
+    const pairReqs = buildRequirements(pair.satisfiedItems ?? [], pair.missingItems ?? []);
+    const pairAiUnexpected: UnexpectedChange[] = (pair.annotations ?? []).map((ann: any, i: number) => ({
+      id:           `ai-p${pair.pairIndex}-${i}`,
+      elementType:  ann.category ?? 'Text',
+      changeType:   ann.change_type ?? 'Modified',
+      actual:       ann.label || ann.value || ann.change_type || 'AI-detected change',
+      linkedBoxIds: [`ai-p${pair.pairIndex}-${i}`],
+      source:       'ai' as const,
+    }));
+    return {
+      pairIndex:    pair.pairIndex,
+      baseUrl:      pair.baseUrl,
+      childUrl:     pair.childUrl,
+      baseFileName: pair.baseFileName,
+      childFileName: pair.childFileName,
+      currentBoxes: [],
+      newBoxes: buildAnnotationBoxes(pair.annotations ?? [], undefined, []),
+      requirements: pairReqs,
+      unexpectedChanges: pairAiUnexpected.filter(
+        (item) => !discardedUnexpectedIds.includes(item.id)
+      ),
+      discrepancyCategories: buildDiscrepancyCategories(
+        pair.parsedItems ?? [],
+        pair.barcode_summary ?? null,
+      ),
+    };
+  });
+
+  // Aggregated summary across all pairs (used in FrameMulti header)
+  const multiPairSummaryData = isMultiPair
+    ? buildSummaryData(
+        pairReportData.flatMap(p => p.requirements),
+        pairReportData.flatMap(p => p.unexpectedChanges),
+      )
+    : summaryData;
+
+  // Active pair for the sidebar-driven single-pair view
+  const activePair = isMultiPair
+    ? (pairReportData[activePairIndex] ?? pairReportData[0])
+    : null;
+
+  const activePairSummaryData = activePair
+    ? buildSummaryData(activePair.requirements, activePair.unexpectedChanges)
+    : summaryData;
+
+  // Map active PairReportData → ReportData so FrameA can render it.
+  // NOTE: reportData is defined later; build this from already-computed values
+  // to avoid a temporal dead zone error.
+  const activePairAsReportData: ReportData | null = activePair ? {
+    reportId:              '',
+    crNumber:              formData?.metadata?.cr_number   ?? '',
+    sku:                   formData?.metadata?.part_number ?? '',
+    currentRevision:       revParts[0] ?? '',
+    newRevision:           revParts[1] ?? '',
+    currentLabelName:      activePair.baseFileName,
+    newLabelName:          activePair.childFileName,
+    currentLabelUrl:       activePair.baseUrl  || undefined,
+    newLabelUrl:           activePair.childUrl || undefined,
+    newLabelUrls:          undefined,
+    newLabelNames:         undefined,
+    currentBoxes:          activePair.currentBoxes,
+    newBoxes:              activePair.newBoxes,
+    requirements:          activePair.requirements,
+    unexpectedChanges:     activePair.unexpectedChanges,
+    discrepancyCategories: activePair.discrepancyCategories,
+  } : null;
+
+  // Toggle-all helper for checkboxes
+  const toggleSelectAll = () => {
+    if (checkedPairIndices.size === pairReportData.length) {
+      setCheckedPairIndices(new Set());
+    } else {
+      setCheckedPairIndices(new Set(pairReportData.map((_, i) => i)));
+    }
+  };
+
+  // Print only the specified pair indices. Non-selected pairs are hidden via
+  // injected CSS using data-pair-print attributes on their wrapper divs.
+  const downloadPairs = (indices: number[]) => {
+    const { yyyy, mm, dd, hh, min } = _getISTDateParts();
+    const dateStr = `${yyyy}-${mm}-${dd}`;
+    const timeStr = `${hh}:${min} IST`;
+
+    const hiddenIndices = pairReportData
+      .map(p => p.pairIndex)
+      .filter(idx => !indices.includes(idx));
+    const pairHideRules = hiddenIndices
+      .map(idx => `[data-pair-print="${idx}"] { display: none !important; }`)
+      .join('\n');
+
+    const style = document.createElement('style');
+    style.id = '__print-override__';
+    style.textContent = `
+      @page {
+        size: A4 portrait;
+        margin: 14mm 12mm 18mm 12mm;
+        @bottom-left   { content: "LPR: ${computedReportId}"; font-size: 7pt; color: #888; font-family: sans-serif; }
+        @bottom-center { content: "Page " counter(page); font-size: 7pt; color: #888; font-family: sans-serif; }
+        @bottom-right  { content: "${dateStr} ${timeStr}"; font-size: 7pt; color: #888; font-family: sans-serif; }
+      }
+      @media print {
+        body { margin: 0; background: #fff !important; }
+        .report-content-wrap { max-width: none !important; padding-left: 0 !important; padding-right: 0 !important; }
+        .report-banner { padding: 22px 28px !important; -webkit-print-color-adjust: exact !important; print-color-adjust: exact !important; }
+        .report-banner-title { font-size: 24pt !important; font-weight: 700 !important; line-height: 1.2 !important; }
+        .report-banner-id { font-size: 8.5pt !important; margin-top: 4px !important; }
+        .report-banner-logo { height: 32px !important; width: auto !important; }
+        .report-banner-revision { font-size: 10pt !important; font-weight: 600 !important; margin-top: 4px !important; }
+        .report-metadata-bar { font-size: 8.5pt !important; }
+        .report-page-break { page-break-before: always !important; break-before: page !important; }
+        .report-label-page { page-break-inside: avoid !important; break-inside: avoid !important; }
+        .report-label-img { max-height: 180mm !important; width: auto !important; max-width: 100% !important; display: block !important; margin: 0 auto !important; }
+        .report-section { page-break-inside: avoid; }
+        .report-section-header { page-break-after: avoid; }
+        table { width: 100% !important; font-size: 8pt !important; }
+        th, td { padding: 4px 6px !important; }
+        span[class*="inline-block"] { -webkit-print-color-adjust: exact !important; print-color-adjust: exact !important; }
+        .report-pair-screen { display: none !important; }
+        ${pairHideRules}
+      }
+    `;
+    document.head.appendChild(style);
+    const prevTitle = document.title;
+    document.title = computedReportId;
+    window.print();
+    document.title = prevTitle;
+    document.head.removeChild(style);
+  };
+
   const reportData: ReportData = {
     reportId:         '',
     crNumber:         formData?.metadata?.cr_number   ?? '',
@@ -438,17 +585,24 @@ const ReportPageInner = () => {
     currentRevision:  revParts[0] ?? '',
     newRevision:      revParts[1] ?? '',
     currentLabelName: baseFileName,
-    newLabelName:     childFileName,
+    newLabelName:     effectiveNewNames[0] ?? childFileName,
     currentLabelUrl:  baseUrl  || undefined,
-    newLabelUrl:      childUrl || undefined,
+    newLabelUrl:      effectiveNewUrls[0]  || undefined,
+    // Pass the full arrays when there are multiple new-version labels
+    newLabelUrls:   effectiveNewUrls.length  > 1 ? effectiveNewUrls  : undefined,
+    newLabelNames:  effectiveNewNames.length > 1 ? effectiveNewNames : undefined,
     currentBoxes,
     newBoxes,
     requirements,
     unexpectedChanges: allUnexpected,
     discrepancyCategories,
+    pairs: isMultiPair ? pairReportData : undefined,
   };
 
   const generatedDate = new Date().toLocaleDateString('en-GB', { day: 'numeric', month: 'long', year: 'numeric' });
+
+  const onDiscard = (id: string | number) =>
+    setDiscardedUnexpectedIds((prev) => prev.includes(id) ? prev : [...prev, id]);
 
   return (
     <div className="min-h-screen bg-white flex flex-col">
@@ -458,62 +612,212 @@ const ReportPageInner = () => {
         reportId={reportData.reportId || undefined}
         currentRevision={reportData.currentRevision}
         newRevision={reportData.newRevision}
-        onDownloadPDF={handleDownloadPDF}
+        onDownloadPDF={isMultiPair ? () => downloadPairs([activePairIndex]) : handleDownloadPDF}
       />
-      <MetadataRow data={reportData} />
-      <div className="flex-1 report-content-wrap max-w-[1600px] mx-auto px-8 py-6 pb-24">
-        {!hasChanges ? (
-          <FrameNoChange
-            labelName={childFileName || baseFileName || undefined}
-            labelUrl={childUrl || baseUrl || undefined}
-            crNumber={reportData.crNumber || undefined}
-            sku={reportData.sku || undefined}
-          />
-        ) : (
-          <>
-            {activeScenario === 'A' && (
-              <FrameA
-                data={reportData}
-                summaryData={summaryData}
-                onDiscardUnexpected={(id) => setDiscardedUnexpectedIds((prev) => prev.includes(id) ? prev : [...prev, id])}
-              />
-            )}
-            {activeScenario === 'B' && (
-              <FrameB formData={formData} summaryData={summaryData} />
-            )}
-            {activeScenario === 'C' && (
-              <FrameC
-                data={reportData}
-                formData={formData}
-                summaryData={summaryData}
-                satisfiedItems={satisfiedItems}
-                missingItems={missingItems}
-                onDiscardUnexpected={(id) => setDiscardedUnexpectedIds((prev) => prev.includes(id) ? prev : [...prev, id])}
-              />
-            )}
-          </>
-        )}
-      </div>
+      <MetadataRow data={activePairAsReportData ?? reportData} />
 
-      {/* ── Sticky footer — hidden during print ── */}
-      <div className="print:hidden sticky bottom-0 left-0 right-0 bg-white border-t border-gray-200 shadow-[0_-4px_12px_rgba(0,0,0,0.06)] px-6 py-3 flex items-center justify-between z-10">
-        <div className="flex items-center gap-3">
-          <div className="w-8 h-8 rounded-full bg-green-100 flex items-center justify-center flex-shrink-0">
-            <CheckCircle className="w-4 h-4 text-green-600" />
+      {isMultiPair && activePairAsReportData ? (
+        // ── Multi-pair: sidebar + single-pair viewer ──────────────────────────
+        <div className="flex flex-1 min-h-0 overflow-hidden">
+
+          {/* Left sidebar — screen only */}
+          <aside className="print:hidden w-60 border-r border-gray-200 bg-gray-50 flex-shrink-0 flex flex-col overflow-hidden">
+            <div className="px-3 py-2.5 border-b border-gray-200 flex items-center justify-between">
+              <span className="text-[11px] font-bold uppercase tracking-widest text-gray-500">
+                Labels ({pairReportData.length})
+              </span>
+              <button
+                onClick={toggleSelectAll}
+                className="text-[11px] text-blue-600 hover:underline"
+              >
+                {checkedPairIndices.size === pairReportData.length ? 'Deselect All' : 'Select All'}
+              </button>
+            </div>
+
+            <div className="flex-1 overflow-y-auto divide-y divide-gray-100">
+              {pairReportData.map((pair, i) => (
+                <div
+                  key={pair.pairIndex}
+                  onClick={() => setActivePairIndex(i)}
+                  className={`flex items-start gap-2.5 p-3 cursor-pointer transition-colors border-l-2 ${
+                    activePairIndex === i
+                      ? 'bg-blue-50 border-l-blue-600'
+                      : 'hover:bg-gray-100 border-l-transparent'
+                  }`}
+                >
+                  <input
+                    type="checkbox"
+                    checked={checkedPairIndices.has(i)}
+                    onChange={() => {}}
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      setCheckedPairIndices(prev => {
+                        const next = new Set(prev);
+                        if (next.has(i)) next.delete(i); else next.add(i);
+                        return next;
+                      });
+                    }}
+                    className="mt-1 flex-shrink-0 accent-blue-600 cursor-pointer"
+                  />
+                  <div className="flex-1 min-w-0">
+                    {pair.childUrl && (
+                      <div className="w-full h-14 mb-1.5 bg-white border border-gray-200 flex items-center justify-center overflow-hidden">
+                        <img
+                          src={pair.childUrl}
+                          alt=""
+                          className="max-w-full max-h-full object-contain"
+                        />
+                      </div>
+                    )}
+                    <div className="text-[11px] font-semibold text-gray-700 truncate">
+                      {pair.childFileName || `Label ${i + 1}`}
+                    </div>
+                    <div className="text-[10px] text-gray-400 mt-0.5">
+                      Label {i + 1} of {pairReportData.length}
+                    </div>
+                  </div>
+                </div>
+              ))}
+            </div>
+          </aside>
+
+          {/* Screen: active pair report */}
+          <div className="report-pair-screen flex-1 overflow-y-auto report-content-wrap max-w-none px-8 py-6 pb-24">
+            <FrameA
+              data={activePairAsReportData}
+              summaryData={activePairSummaryData}
+              onDiscardUnexpected={onDiscard}
+            />
           </div>
-          <div>
-            <p className="text-sm font-medium text-gray-700">Your report is ready</p>
-            <p className="text-xs text-gray-400">Generated: {generatedDate}</p>
+
+          {/* Print: all pairs rendered; CSS hides non-selected via data-pair-print */}
+          <div className="hidden print:block w-full report-content-wrap">
+            {pairReportData.map(pair => (
+              <div key={pair.pairIndex} data-pair-print={pair.pairIndex}>
+                <FrameA
+                  data={{
+                    ...reportData,
+                    currentLabelName:      pair.baseFileName,
+                    newLabelName:          pair.childFileName,
+                    currentLabelUrl:       pair.baseUrl  || undefined,
+                    newLabelUrl:           pair.childUrl || undefined,
+                    newLabelUrls:          undefined,
+                    newLabelNames:         undefined,
+                    currentBoxes:          pair.currentBoxes,
+                    newBoxes:              pair.newBoxes,
+                    requirements:          pair.requirements,
+                    unexpectedChanges:     pair.unexpectedChanges,
+                    discrepancyCategories: pair.discrepancyCategories,
+                  }}
+                  summaryData={buildSummaryData(pair.requirements, pair.unexpectedChanges)}
+                  onDiscardUnexpected={onDiscard}
+                />
+              </div>
+            ))}
           </div>
         </div>
-        <button
-          onClick={handleDownloadPDF}
-          className="flex items-center gap-2 bg-[#d51900] hover:bg-red-800 text-white text-sm font-medium px-5 py-2.5 rounded-lg transition-colors"
-        >
-          <Download className="w-4 h-4" />
-          Download PDF
-        </button>
-      </div>
+
+      ) : (
+        // ── Single pair (or no-change) ─────────────────────────────────────────
+        <div className="flex-1 report-content-wrap max-w-[1600px] mx-auto px-8 py-6 pb-24">
+          {!hasChanges ? (
+            <FrameNoChange
+              labelName={childFileName || baseFileName || undefined}
+              labelUrl={childUrl || baseUrl || undefined}
+              crNumber={reportData.crNumber || undefined}
+              sku={reportData.sku || undefined}
+            />
+          ) : (
+            <>
+              {activeScenario === 'A' && (
+                <FrameA data={reportData} summaryData={summaryData} onDiscardUnexpected={onDiscard} />
+              )}
+              {activeScenario === 'B' && (
+                <FrameB formData={formData} summaryData={summaryData} />
+              )}
+              {activeScenario === 'C' && (
+                <FrameC
+                  data={reportData}
+                  formData={formData}
+                  summaryData={summaryData}
+                  satisfiedItems={satisfiedItems}
+                  missingItems={missingItems}
+                  onDiscardUnexpected={onDiscard}
+                />
+              )}
+            </>
+          )}
+        </div>
+      )}
+
+      {/* ── Sticky footer — hidden during print ── */}
+      {isMultiPair ? (
+        <div className="print:hidden sticky bottom-0 left-0 right-0 bg-white border-t border-gray-200 shadow-[0_-4px_12px_rgba(0,0,0,0.06)] px-6 py-3 flex items-center justify-between z-10">
+          <div className="flex items-center gap-3">
+            <div className="w-8 h-8 rounded-full bg-green-100 flex items-center justify-center flex-shrink-0">
+              <CheckCircle className="w-4 h-4 text-green-600" />
+            </div>
+            <div>
+              {checkedPairIndices.size > 0 ? (
+                <>
+                  <p className="text-sm font-medium text-gray-700">
+                    {checkedPairIndices.size} label{checkedPairIndices.size > 1 ? 's' : ''} selected
+                  </p>
+                  <p className="text-xs text-gray-400">Download as a combined PDF report</p>
+                </>
+              ) : (
+                <>
+                  <p className="text-sm font-medium text-gray-700">
+                    Viewing Label {activePairIndex + 1} of {pairReportData.length}
+                  </p>
+                  <p className="text-xs text-gray-400">Use checkboxes to select labels for bulk download</p>
+                </>
+              )}
+            </div>
+          </div>
+          <div className="flex items-center gap-2">
+            {checkedPairIndices.size > 0 && (
+              <button
+                onClick={() => downloadPairs([...checkedPairIndices])}
+                className="flex items-center gap-2 bg-[#d51900] hover:bg-red-800 text-white text-sm font-medium px-5 py-2.5 rounded-lg transition-colors"
+              >
+                <Download className="w-4 h-4" />
+                Download Selected ({checkedPairIndices.size})
+              </button>
+            )}
+            <button
+              onClick={() => downloadPairs([activePairIndex])}
+              className={`flex items-center gap-2 text-sm font-medium px-5 py-2.5 rounded-lg transition-colors ${
+                checkedPairIndices.size > 0
+                  ? 'border border-gray-300 bg-white hover:bg-gray-50 text-gray-700'
+                  : 'bg-[#d51900] hover:bg-red-800 text-white'
+              }`}
+            >
+              <Download className="w-4 h-4" />
+              {checkedPairIndices.size > 0 ? 'Download This Label' : 'Download PDF'}
+            </button>
+          </div>
+        </div>
+      ) : (
+        <div className="print:hidden sticky bottom-0 left-0 right-0 bg-white border-t border-gray-200 shadow-[0_-4px_12px_rgba(0,0,0,0.06)] px-6 py-3 flex items-center justify-between z-10">
+          <div className="flex items-center gap-3">
+            <div className="w-8 h-8 rounded-full bg-green-100 flex items-center justify-center flex-shrink-0">
+              <CheckCircle className="w-4 h-4 text-green-600" />
+            </div>
+            <div>
+              <p className="text-sm font-medium text-gray-700">Your report is ready</p>
+              <p className="text-xs text-gray-400">Generated: {generatedDate}</p>
+            </div>
+          </div>
+          <button
+            onClick={handleDownloadPDF}
+            className="flex items-center gap-2 bg-[#d51900] hover:bg-red-800 text-white text-sm font-medium px-5 py-2.5 rounded-lg transition-colors"
+          >
+            <Download className="w-4 h-4" />
+            Download PDF
+          </button>
+        </div>
+      )}
     </div>
   );
 };

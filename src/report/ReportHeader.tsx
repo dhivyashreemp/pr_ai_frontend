@@ -2,7 +2,7 @@ import { useTheme } from './ThemeContext';
 // import { ThemeSwitcher } from './ThemeSwitcher';
 import { useNavigate, useLocation } from 'react-router-dom';
 import { useUser } from '@/context/UserContext';
-import { ArrowLeft, Home } from 'lucide-react';
+import { ArrowLeft, Home, ScanLine } from 'lucide-react';
 import ProfileDropdown from '@/components/ProfileDropdown';
 
 interface ReportHeaderProps {
@@ -193,8 +193,9 @@ export function ReportHeader({
             <ArrowLeft className="h-4 w-4" />
             <span className="text-xs font-semibold uppercase tracking-wider hidden sm:inline">Back</span>
           </button>
-          <div className="flex items-center gap-2">
-            <span className="text-sm font-bold tracking-tight uppercase text-white">Label Proofing</span>
+          <div className="flex items-center gap-2 text-white">
+            <ScanLine size={18} />
+            <span className="text-sm font-bold tracking-tight uppercase">LabelX Proofreading</span>
             <span className="text-white/30 mx-1">|</span>
             <span className="text-xs text-white/70 font-medium">Report</span>
           </div>

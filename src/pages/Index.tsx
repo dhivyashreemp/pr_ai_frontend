@@ -227,7 +227,7 @@ const Index = () => {
     setLoading(true);
     setAnalysisRun(false);
 
-    const API_URL = import.meta.env.VITE_API_BASE_URL || "http://localhost:8000";
+    const API_URL = import.meta.env.VITE_API_BASE_URL || "https://label-comparator.azurewebsites.net";
 
     try {
       if (lrfOnly) {
@@ -1102,6 +1102,7 @@ const Index = () => {
             basePreviewUrl,
             expandedBasePreviewUrls: basePreviewUrls,
             expandedChildPreviewUrls: childPreviewUrls,
+            expandedBaseFileNames: expandedBaseFiles.map(f => f.name),
             analysisRun,
             selectedResultIndex,
             userAnnotations: restoredUserAnnotations,

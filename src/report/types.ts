@@ -47,6 +47,19 @@ export interface DiscrepancyCategory {
   items: DiscrepancyItem[];
 }
 
+export interface PairReportData {
+  pairIndex:     number;
+  baseUrl:       string;
+  childUrl:      string;
+  baseFileName:  string;
+  childFileName: string;
+  currentBoxes:  DrawnBox[];
+  newBoxes:      DrawnBox[];
+  requirements:  Requirement[];
+  unexpectedChanges: UnexpectedChange[];
+  discrepancyCategories: DiscrepancyCategory[];
+}
+
 export interface ReportData {
   reportId: string;
   crNumber: string;
@@ -57,9 +70,12 @@ export interface ReportData {
   newLabelName: string;
   currentLabelUrl?: string;
   newLabelUrl?: string;
+  newLabelUrls?: string[];   // all new-version labels when multiple were uploaded
+  newLabelNames?: string[];  // corresponding file names
   currentBoxes: DrawnBox[];
   newBoxes: DrawnBox[];
   requirements: Requirement[];
   unexpectedChanges: UnexpectedChange[];
   discrepancyCategories: DiscrepancyCategory[];
+  pairs?: PairReportData[];  // populated when N label pairs were uploaded
 }

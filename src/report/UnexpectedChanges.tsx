@@ -40,9 +40,9 @@ export function UnexpectedChanges({ changes, onDiscard }: UnexpectedChangesProps
               </tr>
             </thead>
             <tbody>
-              {changes.map((ch) => (
+              {changes.map((ch, idx) => (
                 <tr key={ch.id} className="border-b border-gray-200 last:border-0 hover:bg-gray-50">
-                  <td className="px-3 py-2 border-r border-gray-200 text-gray-500">{ch.id}</td>
+                  <td className="px-3 py-2 border-r border-gray-200 text-gray-500">{idx + 1}</td>
                   <td className="px-3 py-2 border-r border-gray-200 text-gray-800" style={{ wordBreak: 'break-word' }}>
                     {ch.elementType}
                   </td>
