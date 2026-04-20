@@ -18,6 +18,7 @@ const Index = () => {
   const navigate = useNavigate();
   const formData = location.state?.formData;
   const submissionId: string | null = location.state?.submissionId ?? null;
+  const restoredUserAnnotations: any[] = location.state?.userAnnotations ?? [];
 
   const [baseFile, setBaseFile] = useState<File[]>(location.state?.baseFile || []);
   const [childFiles, setChildFiles] = useState<File[]>(location.state?.childFiles || []);
@@ -895,6 +896,16 @@ const Index = () => {
     });
   }, [requirementBoxes, unexpectedRequirementBoxes]);
 
+  const [discardedUnexpectedIds] = useState<Set<string>>(
+    new Set(location.state?.discardedUnexpectedIds ?? [])
+  );
+  const discardedAnnotationBoxIds = useMemo(
+    () => [...discardedUnexpectedIds]
+      .filter(id => id.startsWith('ai-'))
+      .map(id => `annotation-${id.slice(3)}`),
+    [discardedUnexpectedIds],
+  );
+
   return (
     <div className="min-h-screen bg-[#f8f9fa] flex flex-col">
 
@@ -1093,6 +1104,7 @@ const Index = () => {
             expandedChildPreviewUrls: childPreviewUrls,
             analysisRun,
             selectedResultIndex,
+            userAnnotations: restoredUserAnnotations,
           },
         })}
           className="flex items-center gap-2 bg-[#d51900] text-white px-8 py-3 text-[13px] font-bold uppercase tracking-widest hover:bg-[#b01300] transition-colors rounded-lg shadow-md"
