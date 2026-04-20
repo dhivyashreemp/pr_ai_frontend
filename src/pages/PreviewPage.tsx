@@ -826,6 +826,7 @@ const PreviewPage = () => {
 
   // ── Multi-child sidebar state ────────────────────────────────────────────
   const expandedChildPreviewUrls: string[] = state.expandedChildPreviewUrls ?? [];
+  const expandedBasePreviewUrls:  string[] = state.expandedBasePreviewUrls  ?? [];
   const childFilesAll: File[] = state.childFiles ?? [];
   const [selectedChildIndex, setSelectedChildIndex] = useState<number>(state.selectedResultIndex ?? 0);
 
@@ -902,8 +903,22 @@ const PreviewPage = () => {
     setHiddenAiBoxIds(prev => prev.includes(id) ? prev : [...prev, id]);
   }, []);
 
-  // ── User-drawn annotation state ──────────────────────────────────────────
-  const [userAnnotations, setUserAnnotations] = useState<UserAnnotation[]>(state.userAnnotations ?? []);
+  // ── User-drawn annotation state (per-child) ─────────────────────────────
+  const [userAnnotationsByChild, setUserAnnotationsByChild] = useState<Record<number, UserAnnotation[]>>(
+    { [state.selectedResultIndex ?? 0]: state.userAnnotations ?? [] }
+  );
+  const userAnnotations = userAnnotationsByChild[selectedChildIndex] ?? [];
+  const setUserAnnotations = useCallback(
+    (updater: ((prev: UserAnnotation[]) => UserAnnotation[]) | UserAnnotation[]) => {
+      setUserAnnotationsByChild(byChild => ({
+        ...byChild,
+        [selectedChildIndex]: typeof updater === 'function'
+          ? updater(byChild[selectedChildIndex] ?? [])
+          : updater,
+      }));
+    },
+    [selectedChildIndex],
+  );
   const [isDrawingMode,   setIsDrawingMode]   = useState(false);
   const [pendingBox,      setPendingBox]       = useState<PendingBox | null>(null);
 
@@ -1033,11 +1048,11 @@ const PreviewPage = () => {
     }));
   }, [userAnnotations]);
 
-  const hasBase = !!baseUrl;
-
   // Prefer the pre-rendered URL for the selected child (survives navigation);
   // fall back to the URL built from childFileArr[0] for the no-sidebar path.
   const activeChildUrl = expandedChildPreviewUrls[selectedChildIndex] || childUrl;
+  const activeBaseUrl  = expandedBasePreviewUrls[selectedChildIndex]  || baseUrl;
+  const hasBase = !!activeBaseUrl;
   const hasNew  = !!activeChildUrl;
 
   // Subtitle shown in the "New Version" panel header
@@ -1125,7 +1140,7 @@ const PreviewPage = () => {
         // blob URLs for images). ReportPage uses these directly instead of
         // rebuilding from File objects, which may not survive the full
         // Index → Preview → Report navigation chain.
-        basePreviewUrl:  baseUrl  || state.basePreviewUrl  || '',
+        basePreviewUrl:  activeBaseUrl || state.basePreviewUrl || '',
         childPreviewUrl: activeChildUrl || '',
         userAnnotationsBase,
         userAnnotationsNew,
@@ -1240,7 +1255,7 @@ const PreviewPage = () => {
 
         <LabelSidebar
           baseFile={baseFileArr[0] ?? null}
-          basePreviewUrl={baseUrl || null}
+          basePreviewUrl={activeBaseUrl || null}
           childFiles={childFilesAll}
           childPreviewUrls={expandedChildPreviewUrls}
           apiResults={state.apiResults ?? []}
@@ -1340,7 +1355,7 @@ const PreviewPage = () => {
           <div className={hasBase && hasNew ? 'grid grid-cols-2 gap-5' : 'grid grid-cols-1 max-w-3xl mx-auto'}>
             {hasBase && (
               <DrawableImagePanel
-                src={baseUrl}
+                src={activeBaseUrl}
                 title="Current Version"
                 subtitle={baseFileName}
                 target="base"
