@@ -297,6 +297,7 @@ const Index = () => {
         setLrfAnalysis(null);
         setApiResults(processedResults);
         setSelectedResultIndex(0);
+        setAdjustedAnnotations([]);
         setAnalysisRun(true);
       }
     } catch (error) {
@@ -974,7 +975,7 @@ const Index = () => {
           childPreviewUrls={childPreviewUrls}
           apiResults={apiResults}
           selectedIndex={selectedResultIndex}
-          onSelectChild={setSelectedResultIndex}
+          onSelectChild={(i) => { setSelectedResultIndex(i); setAdjustedAnnotations([]); }}
           analysisRun={analysisRun}
         />
 
@@ -1018,15 +1019,60 @@ const Index = () => {
             baseImage={basePreviewUrl || undefined}
             childImage={childPreviewUrls[selectedResultIndex] || childPreviewUrls[0] || undefined}
             annotations={
-              // In form mode (formData present), show Unexpected Changes AI annotations.
-              // In single label mode, analysisRun && !lrfOnly shows everything.
-              // Filter out annotations discarded on the /preview page.
-              (formData
-                ? (adjustedAnnotations.length > 0 ? adjustedAnnotations : (unexpectedAnnotations ?? []))
-                : analysisRun && !lrfOnly && apiResults.length > 0
-                  ? (adjustedAnnotations.length > 0 ? adjustedAnnotations : (apiResults[selectedResultIndex]?.annotations ?? []))
-                  : []
-              ).filter((_: any, i: number) => !discardedAnnotationBoxIds.includes(`annotation-${i}`))
+              (() => {
+                const result = apiResults[selectedResultIndex];
+
+                // IDs already covered by the backend annotations array (by discrepancy index)
+                const existingDiscrepancyIds = new Set(
+                  (result?.annotations ?? [])
+                    .filter((a: any) => a.discrepancy_id != null)
+                    .map((a: any) => a.discrepancy_id)
+                );
+
+                // Extract bboxes from every discrepancy that has a bounding_box but is NOT
+                // already represented in the backend annotations array.
+                const discrepancyBoxes: any[] = [];
+                if (result?.discrepancies) {
+                  let idx = 0;
+                  for (const status of ['Added', 'Deleted', 'Modified', 'Repositioned']) {
+                    const items = (result.discrepancies[status] ?? []) as any[];
+                    items.forEach((item: any) => {
+                      const bb = item.bounding_box;
+                      if (bb && bb.x != null && bb.y != null && !existingDiscrepancyIds.has(idx)) {
+                        discrepancyBoxes.push({
+                          label: item.Value ?? '',
+                          change_type: status as any,
+                          category: item.Category ?? '',
+                          x: bb.x, y: bb.y, width: bb.width, height: bb.height,
+                          confidence: (bb.confidence ?? 'medium') as any,
+                        });
+                      }
+                      idx++;
+                    });
+                  }
+                }
+
+                const yoloBoxes = (result?.yolo_review ?? [])
+                  .filter((item: any) => item.x != null && item.y != null && item.width != null && item.height != null)
+                  .map((item: any) => ({
+                    label: item.name ?? item.label ?? '',
+                    change_type: (item.change_type ?? 'Modified') as any,
+                    category: item.yolo_class ?? '',
+                    x: item.x, y: item.y, width: item.width, height: item.height,
+                    confidence: 'low' as const,
+                  }));
+
+                const base = formData
+                  ? (adjustedAnnotations.length > 0 ? adjustedAnnotations : [...(unexpectedAnnotations ?? []), ...yoloBoxes])
+                  : analysisRun && !lrfOnly && apiResults.length > 0
+                    ? (adjustedAnnotations.length > 0 ? adjustedAnnotations : [
+                        ...(result?.annotations ?? []),
+                        ...discrepancyBoxes,
+                        ...yoloBoxes,
+                      ])
+                    : [];
+                return base.filter((_: any, i: number) => !discardedAnnotationBoxIds.includes(`annotation-${i}`));
+              })()
             }
             requirementBoxes={
               formData
@@ -1083,7 +1129,44 @@ const Index = () => {
             satisfiedItems,
             annotations: adjustedAnnotations.length > 0
               ? adjustedAnnotations
-              : (analysisRun && apiResults.length > 0 ? apiResults[selectedResultIndex]?.annotations ?? [] : []),
+              : (analysisRun && apiResults.length > 0 ? (() => {
+                  const result = apiResults[selectedResultIndex];
+                  const existingIds = new Set(
+                    (result?.annotations ?? [])
+                      .filter((a: any) => a.discrepancy_id != null)
+                      .map((a: any) => a.discrepancy_id)
+                  );
+                  const discrepancyBoxes: any[] = [];
+                  if (result?.discrepancies) {
+                    let idx = 0;
+                    for (const status of ['Added', 'Deleted', 'Modified', 'Repositioned']) {
+                      const items = (result.discrepancies[status] ?? []) as any[];
+                      items.forEach((item: any) => {
+                        const bb = item.bounding_box;
+                        if (bb && bb.x != null && bb.y != null && !existingIds.has(idx)) {
+                          discrepancyBoxes.push({
+                            label: item.Value ?? '',
+                            change_type: status as any,
+                            category: item.Category ?? '',
+                            x: bb.x, y: bb.y, width: bb.width, height: bb.height,
+                            confidence: (bb.confidence ?? 'medium') as any,
+                          });
+                        }
+                        idx++;
+                      });
+                    }
+                  }
+                  const yoloBoxes = (result?.yolo_review ?? [])
+                    .filter((item: any) => item.x != null && item.y != null && item.width != null && item.height != null)
+                    .map((item: any) => ({
+                      label: item.name ?? item.label ?? '',
+                      change_type: (item.change_type ?? 'Modified') as any,
+                      category: item.yolo_class ?? '',
+                      x: item.x, y: item.y, width: item.width, height: item.height,
+                      confidence: 'low' as const,
+                    }));
+                  return [...(result?.annotations ?? []), ...discrepancyBoxes, ...yoloBoxes];
+                })() : []),
             // User-adjusted requirement box positions (proof-request mode only)
             requirementBoxes: adjustedBoxes.length > 0 ? adjustedBoxes : (requirementBoxes ?? []),
             // Barcode pipeline results for report summary + changes made

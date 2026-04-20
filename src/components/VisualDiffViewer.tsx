@@ -866,6 +866,21 @@ const VisualDiffViewer = ({
   const wrapperRef = useRef<HTMLDivElement>(null);
   const [childNatural, setChildNatural] = useState({ w: 0, h: 0 });
   const [isExpanded,   setIsExpanded]   = useState(false);
+  const isSyncing  = useRef(false);
+
+  const handleBaseTransformed = useCallback((_: any, state: { scale: number; positionX: number; positionY: number }) => {
+    if (isSyncing.current) return;
+    isSyncing.current = true;
+    childRef.current?.setTransform(state.positionX, state.positionY, state.scale, 0);
+    isSyncing.current = false;
+  }, []);
+
+  const handleChildTransformed = useCallback((_: any, state: { scale: number; positionX: number; positionY: number }) => {
+    if (isSyncing.current) return;
+    isSyncing.current = true;
+    baseRef.current?.setTransform(state.positionX, state.positionY, state.scale, 0);
+    isSyncing.current = false;
+  }, []);
 
   // Placement state lives here so the overlay can be a SIBLING of TransformWrapper
   const [placing,  setPlacing]  = useState<PlacingState | null>(null);
@@ -1023,7 +1038,7 @@ const VisualDiffViewer = ({
         {/* Base panel */}
         {!singlePanel && (
           <div className="border-r border-border border-l-4 border-l-blue-400 bg-[#f1f5f9] h-[480px] overflow-hidden p-4">
-            <TransformWrapper ref={baseRef} minScale={0.5} maxScale={4} initialScale={1}>
+            <TransformWrapper ref={baseRef} minScale={0.5} maxScale={4} initialScale={1} onTransformed={handleBaseTransformed}>
               <TransformComponent
                 wrapperStyle={{ width: "100%", height: "100%" }}
                 contentStyle={{ width: "100%", height: "100%", display: "flex", alignItems: "center", justifyContent: "center" }}
@@ -1051,6 +1066,7 @@ const VisualDiffViewer = ({
             ref={childRef}
             minScale={0.5} maxScale={4} initialScale={1}
             panning={{ excluded: ["no-pan"] }}
+            onTransformed={handleChildTransformed}
           >
             <TransformComponent
               wrapperStyle={{ width: "100%", height: "100%" }}
