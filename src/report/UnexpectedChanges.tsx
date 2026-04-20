@@ -25,18 +25,23 @@ export function UnexpectedChanges({ changes, onDiscard }: UnexpectedChangesProps
               <col style={{ width: '12%' }} />
               <col style={{ width: '15%' }} />
               <col style={{ width: onDiscard ? '57%' : '69%' }} />
-              {onDiscard && <col style={{ width: '12%' }} />}
+              {onDiscard && <col className="print:hidden" style={{ width: '12%' }} />}
             </colgroup>
             <thead>
               <tr className="bg-gray-100 border-b border-gray-300">
-                {['#', 'Element', 'Change Type', 'Actual', ...(onDiscard ? ['Action'] : [])].map((h, i, arr) => (
+                {['#', 'Element', 'Change Type', 'Actual'].map((h, i) => (
                   <th
                     key={h}
-                    className={`px-3 py-2.5 text-left font-bold text-gray-800 text-[11px] uppercase tracking-wide ${i < arr.length - 1 ? 'border-r border-gray-200' : ''}`}
+                    className={`px-3 py-2.5 text-left font-bold text-gray-800 text-[11px] uppercase tracking-wide ${onDiscard || i < 3 ? 'border-r border-gray-200' : ''}`}
                   >
                     {h}
                   </th>
                 ))}
+                {onDiscard && (
+                  <th className="print:hidden px-3 py-2.5 text-left font-bold text-gray-800 text-[11px] uppercase tracking-wide">
+                    Action
+                  </th>
+                )}
               </tr>
             </thead>
             <tbody>
@@ -53,7 +58,7 @@ export function UnexpectedChanges({ changes, onDiscard }: UnexpectedChangesProps
                     {ch.actual}
                   </td>
                   {onDiscard && (
-                    <td className="px-3 py-2 text-center">
+                    <td className="print:hidden px-3 py-2 text-center">
                       <button
                         onClick={() => onDiscard(ch.id)}
                         className="px-2.5 py-1 text-[10px] font-bold border border-red-200 text-red-700 bg-red-50 hover:bg-red-100 transition-colors"
