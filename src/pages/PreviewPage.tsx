@@ -65,6 +65,7 @@ interface DrawableImagePanelProps {
   onAdjustAiBox?: (id: string, pos: { top: number; left: number; width: number; height: number }) => void;
   highlightedGroupId?: string | null;
   isReadOnly?: boolean;
+  initialAiOverrides?: Record<string, { top: number; left: number; width: number; height: number }>;
 }
 
 function DrawableImagePanel({
@@ -73,6 +74,7 @@ function DrawableImagePanel({
   onDrawComplete, onDeleteBox, onDeleteAiBox, onDuplicateBox, onAdjustAiBox,
   highlightedGroupId,
   isReadOnly = false,
+  initialAiOverrides,
 }: DrawableImagePanelProps) {
   const containerRef = useRef<HTMLDivElement>(null);
   const [draw, setDraw] = useState<DrawState | null>(null);
@@ -83,8 +85,9 @@ function DrawableImagePanel({
   const [ghostBox, setGhostBox] = useState<{ top: number; left: number; width: number; height: number } | null>(null);
   const [placementDraft, setPlacementDraft] = useState<PlacementDraft | null>(null);
 
-  // AI box drag / resize
-  const [aiOverrides, setAiOverrides] = useState<Record<string, { top: number; left: number; width: number; height: number }>>({});
+  // AI box drag / resize — initialise from persisted parent state so positions
+  // survive switching away and back to this child.
+  const [aiOverrides, setAiOverrides] = useState<Record<string, { top: number; left: number; width: number; height: number }>>(initialAiOverrides ?? {});
   const [activeDrag, setActiveDrag]   = useState<{
     type: 'move' | ResizeHandle;
     id: string;
@@ -827,6 +830,7 @@ const PreviewPage = () => {
   // ── Multi-child sidebar state ────────────────────────────────────────────
   const expandedChildPreviewUrls: string[] = state.expandedChildPreviewUrls ?? [];
   const expandedBasePreviewUrls:  string[] = state.expandedBasePreviewUrls  ?? [];
+  const expandedBaseFileNames:    string[] = state.expandedBaseFileNames    ?? [];
   const childFilesAll: File[] = state.childFiles ?? [];
   const [selectedChildIndex, setSelectedChildIndex] = useState<number>(state.selectedResultIndex ?? 0);
 
@@ -893,11 +897,15 @@ const PreviewPage = () => {
   }, [activeAnnotations, activeRequirementBoxes, hiddenAiBoxIds, discardedAnnotationBoxIds]);
 
   // ── AI box position adjustments (human-in-the-loop fine-tuning) ─────────
-  const [aiBoxAdjustments, setAiBoxAdjustments] = useState<Record<string, { top: number; left: number; width: number; height: number }>>({});
+  // Keyed by child index so each child retains its own independent adjustments.
+  const [aiBoxAdjustments, setAiBoxAdjustments] = useState<Record<number, Record<string, { top: number; left: number; width: number; height: number }>>>({});
 
   const handleAdjustAiBox = useCallback((id: string, pos: { top: number; left: number; width: number; height: number }) => {
-    setAiBoxAdjustments(prev => ({ ...prev, [id]: pos }));
-  }, []);
+    setAiBoxAdjustments(prev => ({
+      ...prev,
+      [selectedChildIndex]: { ...(prev[selectedChildIndex] ?? {}), [id]: pos },
+    }));
+  }, [selectedChildIndex]);
 
   const handleDeleteAiBox = useCallback((id: string) => {
     setHiddenAiBoxIds(prev => prev.includes(id) ? prev : [...prev, id]);
@@ -1067,7 +1075,7 @@ const PreviewPage = () => {
     setSelectedChildIndex(index);
     // Reset per-panel state so it doesn't bleed across children
     setHiddenAiBoxIds([]);
-    setAiBoxAdjustments({});
+    // aiBoxAdjustments is per-child — each child retains its own adjustments
   }, []);
 
   // ── Annotations panel hover / select state ───────────────────────────────
@@ -1093,11 +1101,12 @@ const PreviewPage = () => {
     const userUnexpectedUnique = userAnnotationsUnique.filter(a => a.disposition !== 'Expected');
 
     // Merge human-adjusted positions back into requirementBoxes (% → 0-1 range)
+    const childAdjustments = aiBoxAdjustments[selectedChildIndex] ?? {};
     const adjustedRequirementBoxes = (state.requirementBoxes ?? [])
       .filter((_: any, i: number) => !hiddenAiBoxIds.includes(`requirement-${i}`))
       .map((b: any) => {
         const originalIndex = requirementBoxes.indexOf(b);
-        const adj = aiBoxAdjustments[`requirement-${originalIndex}`];
+        const adj = childAdjustments[`requirement-${originalIndex}`];
         if (!adj) return b;
         return { ...b, y: adj.top / 100, x: adj.left / 100, width: adj.width / 100, height: adj.height / 100 };
       });
@@ -1105,7 +1114,7 @@ const PreviewPage = () => {
     const adjustedAnnotations = (state.annotations ?? [])
       .filter((_: any, i: number) => !hiddenAiBoxIds.includes(`annotation-${i}`))
       .map((b: any, i: number) => {
-        const adj = aiBoxAdjustments[`annotation-${i}`];
+        const adj = childAdjustments[`annotation-${i}`];
         if (!adj) return b;
         return {
           ...b,
@@ -1142,6 +1151,28 @@ const PreviewPage = () => {
         // Index → Preview → Report navigation chain.
         basePreviewUrl:  activeBaseUrl || state.basePreviewUrl || '',
         childPreviewUrl: activeChildUrl || '',
+        // Forward ALL child label URLs and names so the report can display every
+        // new-version label when multiple were uploaded.
+        childPreviewUrls: expandedChildPreviewUrls,
+        childFileNames:   childFilesAll.map(f => f.name),
+        // Build per-pair data for multi-label reports. Each entry carries its own
+        // base/child URLs, file names, and raw AI results so the report page can
+        // render independent label comparisons + change tables for every pair.
+        allPairs: (() => {
+          const allApiResults: any[] = state.apiResults ?? [];
+          if (allApiResults.length <= 1) return [];
+          return allApiResults.map((result: any, i: number) => ({
+            pairIndex:    i,
+            // Fall back to index 0 when fewer base labels were uploaded than child labels
+            baseUrl:      expandedBasePreviewUrls[i]  ?? expandedBasePreviewUrls[0]  ?? '',
+            childUrl:     expandedChildPreviewUrls[i] ?? '',
+            baseFileName: expandedBaseFileNames[i]    ?? expandedBaseFileNames[0]    ?? '',
+            childFileName: childFilesAll[i]?.name     ?? '',
+            annotations:  result.annotations           ?? [],
+            parsedItems:  result.parsedItems            ?? [],
+            barcode_summary: result.barcode_summary     ?? null,
+          }));
+        })(),
         userAnnotationsBase,
         userAnnotationsNew,
         userAnnotationsUnique,
@@ -1207,7 +1238,7 @@ const PreviewPage = () => {
           </button>
           <div className="flex items-center gap-2">
             <ScanLine size={18} />
-            <span className="text-sm font-bold tracking-tight uppercase">Label Proofing</span>
+            <span className="text-sm font-bold tracking-tight uppercase">LabelX Proofreading</span>
             <span className="text-white/30 mx-1">|</span>
             <span className="text-xs text-white/70 font-medium">Preview &amp; Annotate</span>
           </div>
@@ -1374,6 +1405,7 @@ const PreviewPage = () => {
             )}
             {hasNew && (
               <DrawableImagePanel
+                key={`new-${selectedChildIndex}`}
                 src={activeChildUrl}
                 title="New Version"
                 subtitle={activeChildFileName}
@@ -1388,6 +1420,7 @@ const PreviewPage = () => {
                 onDuplicateBox={handleDuplicateBox}
                 onAdjustAiBox={handleAdjustAiBox}
                 highlightedGroupId={hoveredAnnotationId ?? selectedAnnotationId}
+                initialAiOverrides={aiBoxAdjustments[selectedChildIndex]}
               />
             )}
             {!hasBase && !hasNew && (

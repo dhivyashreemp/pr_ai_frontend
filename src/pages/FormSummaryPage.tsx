@@ -97,7 +97,7 @@ const FormSummaryPage = () => {
     // Save the LRF submission to the backend (non-blocking on failure)
     let submissionId: string | null = null;
     try {
-      const API_URL = import.meta.env.VITE_API_BASE_URL || "https://label-comparator.azurewebsites.net";
+      const API_URL = import.meta.env.VITE_API_BASE_URL || "http://localhost:8000";
       const resp = await fetch(`${API_URL}/api/submissions`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },

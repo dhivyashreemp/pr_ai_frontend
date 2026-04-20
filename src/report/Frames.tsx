@@ -4,7 +4,7 @@ import { MissingChanges } from './MissingChanges';
 import { ExpectedChanges } from './ExpectedChanges';
 import { UnexpectedChanges } from './UnexpectedChanges';
 import { useTheme } from './ThemeContext';
-import type { ReportData } from './types';
+import type { ReportData, PairReportData } from './types';
 import type { ProofRequestMissingItem } from '@/data/dummyData';
 
 interface FormData {
@@ -46,6 +46,8 @@ export function FrameA({ data, summaryData, onDiscardUnexpected }: Pick<DynamicP
           currentLabelName={data?.currentLabelName}
           newLabelUrl={data?.newLabelUrl}
           newLabelName={data?.newLabelName}
+          newLabelUrls={data?.newLabelUrls}
+          newLabelNames={data?.newLabelNames}
           currentBoxes={data?.currentBoxes}
           newBoxes={data?.newBoxes}
         />
@@ -53,6 +55,7 @@ export function FrameA({ data, summaryData, onDiscardUnexpected }: Pick<DynamicP
 
       {/* Page 3 — Report Details */}
       <div className="report-page-break space-y-6">
+        <h3 className="text-sm font-bold uppercase tracking-wide text-gray-800">Report Details</h3>
         <ExpectedChanges requirements={data?.requirements} />
         <UnexpectedChanges changes={data?.unexpectedChanges ?? []} onDiscard={onDiscardUnexpected} />
         <ReportInspectionSummary data={summaryData} />
@@ -110,6 +113,8 @@ export function FrameC({ data, formData, summaryData, satisfiedItems, missingIte
           currentLabelName={data?.currentLabelName}
           newLabelUrl={data?.newLabelUrl}
           newLabelName={data?.newLabelName}
+          newLabelUrls={data?.newLabelUrls}
+          newLabelNames={data?.newLabelNames}
           currentBoxes={data?.currentBoxes}
           newBoxes={data?.newBoxes}
         />
@@ -207,6 +212,77 @@ export function FrameNoChange({ labelName, labelUrl, crNumber, sku }: NoChangePr
         {labelName && (
           <div className="mt-2 text-[10px] text-gray-400 text-center">{labelName}</div>
         )}
+      </div>
+    </div>
+  );
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// FrameMulti — Multiple label pairs (N base labels vs N new labels)
+//   Renders one comparison block per pair, each with its own label images and
+//   change tables. An aggregated Requirements Summary appears at the top and a
+//   single Inspection Summary at the bottom.
+// ─────────────────────────────────────────────────────────────────────────────
+
+interface MultiPairProps {
+  pairs: PairReportData[];
+  summaryData?: any;
+  onDiscardUnexpected?: (id: string | number) => void;
+}
+
+export function FrameMulti({ pairs, summaryData, onDiscardUnexpected }: MultiPairProps) {
+  const allRequirements = pairs.flatMap(p => p.requirements);
+
+  return (
+    <div className="report-section space-y-6">
+      {/* Aggregated requirements summary across all pairs */}
+      <MissingChanges requirements={allRequirements} />
+
+      {/* One block per label pair */}
+      {pairs.map((pair, i) => (
+        <div key={pair.pairIndex} className="report-page-break space-y-4" style={{ pageBreakInside: 'avoid', breakInside: 'avoid' }}>
+
+          {/* Pair heading */}
+          <div className="flex items-center gap-3 border-b border-gray-200 pb-2">
+            <span className="text-[10px] font-bold uppercase tracking-widest text-gray-400">
+              Label {i + 1} of {pairs.length}
+            </span>
+            {(pair.baseFileName || pair.childFileName) && (
+              <span className="text-[10px] text-gray-500 truncate">
+                {pair.baseFileName}{pair.baseFileName && pair.childFileName ? ' → ' : ''}{pair.childFileName}
+              </span>
+            )}
+          </div>
+
+          {/* Label comparison images */}
+          <div className="report-label-page">
+            <LabelComparison
+              currentLabelUrl={pair.baseUrl || undefined}
+              currentLabelName={pair.baseFileName || undefined}
+              newLabelUrl={pair.childUrl || undefined}
+              newLabelName={pair.childFileName || undefined}
+              currentBoxes={pair.currentBoxes}
+              newBoxes={pair.newBoxes}
+            />
+          </div>
+
+          {/* Per-pair change tables */}
+          <div className="space-y-4">
+            <h3 className="text-sm font-bold uppercase tracking-wide text-gray-800">
+              Report Details — Label {i + 1}
+            </h3>
+            <ExpectedChanges requirements={pair.requirements} />
+            <UnexpectedChanges
+              changes={pair.unexpectedChanges}
+              onDiscard={onDiscardUnexpected}
+            />
+          </div>
+        </div>
+      ))}
+
+      {/* Single aggregated inspection summary at the end */}
+      <div className="report-page-break">
+        <ReportInspectionSummary data={summaryData} />
       </div>
     </div>
   );

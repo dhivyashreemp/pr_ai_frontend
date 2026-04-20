@@ -7,6 +7,8 @@ interface LabelComparisonProps {
   currentLabelName?: string;
   newLabelUrl?: string;
   newLabelName?: string;
+  newLabelUrls?: string[];   // multiple new-version labels
+  newLabelNames?: string[];  // corresponding names
   currentBoxes?: DrawnBox[];
   newBoxes?: DrawnBox[];
 }
@@ -134,17 +136,34 @@ export function LabelComparison({
   currentLabelName,
   newLabelUrl,
   newLabelName,
+  newLabelUrls,
+  newLabelNames,
   currentBoxes,
   newBoxes,
 }: LabelComparisonProps) {
   const hasCurrent = !!currentLabelUrl;
-  const hasNew     = !!newLabelUrl;
+
+  // Resolve the list of new labels: prefer the array prop, fall back to the single prop
+  const resolvedNewLabels: { src: string; subtitle: string }[] =
+    newLabelUrls && newLabelUrls.length > 0
+      ? newLabelUrls.map((url, i) => ({
+          src: url,
+          subtitle: newLabelNames?.[i] ?? (newLabelUrls.length > 1 ? `New Version ${i + 1}` : (newLabelName ?? '')),
+        }))
+      : newLabelUrl
+        ? [{ src: newLabelUrl, subtitle: newLabelName ?? '' }]
+        : [];
+
+  const hasNew     = resolvedNewLabels.length > 0;
   const isDemoMode = !hasCurrent && !hasNew;
 
   const currentSrc      = currentLabelUrl ?? '/LCN-187301111_1_Rev-D.png';
   const currentSubtitle = currentLabelName ?? 'LCN-187301111_1_Rev-D';
-  const newSrc          = newLabelUrl      ?? '/LCN-187301111_1_Rev-E.png';
-  const newSubtitle     = newLabelName     ?? 'LCN-187301111_1_Rev-E';
+
+  // In demo mode show the default placeholder new label
+  const effectiveNewLabels = isDemoMode
+    ? [{ src: '/LCN-187301111_1_Rev-E.png', subtitle: 'LCN-187301111_1_Rev-E' }]
+    : resolvedNewLabels;
 
   const effectiveShow = (show === 'both' && !hasCurrent) ? 'master' : show;
 
@@ -156,30 +175,44 @@ export function LabelComparison({
       <LegendBar />
 
       {effectiveShow === 'both' ? (
-        // Side-by-side layout: Current Version | New Version
-        <div className="grid grid-cols-2 gap-4">
+        // Side-by-side layout: Current Version | New Version(s)
+        <div
+          style={{
+            display: 'grid',
+            gridTemplateColumns: `repeat(${1 + effectiveNewLabels.length}, 1fr)`,
+            gap: '1rem',
+          }}
+        >
           <LabelBox
             src={currentSrc}
             title="Current Version"
             subtitle={currentSubtitle}
             drawnBoxes={resolvedCurrentBoxes}
           />
-          <LabelBox
-            src={newSrc}
-            title="New Version"
-            subtitle={newSubtitle}
-            drawnBoxes={resolvedNewBoxes}
-            showNoChangesBadge={!isDemoMode && resolvedNewBoxes.length === 0}
-          />
+          {effectiveNewLabels.map((label, i) => (
+            <LabelBox
+              key={i}
+              src={label.src}
+              title="New Version"
+              subtitle={label.subtitle}
+              drawnBoxes={i === 0 ? resolvedNewBoxes : []}
+              showNoChangesBadge={!isDemoMode && i === 0 && resolvedNewBoxes.length === 0}
+            />
+          ))}
         </div>
       ) : (
-        <LabelBox
-          src={newSrc}
-          title="New Version"
-          subtitle={newSubtitle}
-          drawnBoxes={resolvedNewBoxes}
-          showNoChangesBadge={!isDemoMode && resolvedNewBoxes.length === 0}
-        />
+        <div className="space-y-4">
+          {effectiveNewLabels.map((label, i) => (
+            <LabelBox
+              key={i}
+              src={label.src}
+              title="New Version"
+              subtitle={label.subtitle}
+              drawnBoxes={i === 0 ? resolvedNewBoxes : []}
+              showNoChangesBadge={!isDemoMode && i === 0 && resolvedNewBoxes.length === 0}
+            />
+          ))}
+        </div>
       )}
     </div>
   );
