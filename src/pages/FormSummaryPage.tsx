@@ -39,9 +39,9 @@ const changeTypeColor: Record<string, string> = {
 };
 
 const changeTypeLabel: Record<string, string> = {
-  Added: "Add", Add: "Add",
-  Removed: "Remove", Remove: "Remove", Deleted: "Remove",
-  Modified: "Modify", Modify: "Modify",
+  Added: "Added", Add: "Added",
+  Removed: "Deleted", Remove: "Deleted", Deleted: "Deleted",
+  Modified: "Modified", Modify: "Modified",
 };
 
 const FormSummaryPage = () => {
