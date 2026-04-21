@@ -27,6 +27,7 @@ const Index = () => {
   // apiResults indexing) works off these expanded arrays.
   const [expandedBaseFiles, setExpandedBaseFiles] = useState<File[]>([]);
   const [expandedChildFiles, setExpandedChildFiles] = useState<File[]>([]);
+  const [isExpandingBase, setIsExpandingBase] = useState(false);
 
   // Restored from location state when navigating back from the report page
   const [apiResults, setApiResults] = useState<any[]>(location.state?.apiResults || []);
@@ -48,9 +49,11 @@ const Index = () => {
   useEffect(() => {
     if (baseFile.length === 0) {
       setExpandedBaseFiles([]);
+      setIsExpandingBase(false);
       return;
     }
     let cancelled = false;
+    setIsExpandingBase(true);
 
     (async () => {
       try {
@@ -63,10 +66,16 @@ const Index = () => {
             expanded.push(file);
           }
         }
-        if (!cancelled) setExpandedBaseFiles(expanded);
+        if (!cancelled) {
+          setExpandedBaseFiles(expanded);
+          setIsExpandingBase(false);
+        }
       } catch (e) {
         console.error("Failed to expand base PDF pages:", e);
-        if (!cancelled) toast.error("Failed to process base PDF pages.");
+        if (!cancelled) {
+          setIsExpandingBase(false);
+          toast.error("Failed to process base PDF pages.");
+        }
       }
     })();
 
@@ -106,12 +115,15 @@ const Index = () => {
     };
   }, [childFiles]);
 
-  // Auto-run analysis for Scenario 3 (only when results are not already restored)
+  // Auto-run analysis for Scenario 3 (only when results are not already restored).
+  // Guard: when a base file is present, wait for its PDF expansion to finish before
+  // running — otherwise expandedBaseFiles is still [] and the count-match check fails.
   useEffect(() => {
     if (formData && expandedChildFiles.length > 0 && !analysisRun && !loading) {
+      if (!lrfOnly && isExpandingBase) return;
       handleRunAnalysis();
     }
-  }, [formData, baseFile, expandedChildFiles, analysisRun, loading]);
+  }, [formData, lrfOnly, isExpandingBase, expandedBaseFiles, expandedChildFiles, analysisRun, loading]);
 
   const [selectedResultIndex, setSelectedResultIndex] = useState<number>(
     location.state?.selectedResultIndex ?? 0
@@ -1118,10 +1130,10 @@ const Index = () => {
               <div className="flex justify-center">
                 <button
                   onClick={handleRunAnalysis}
-                  disabled={loading}
+                  disabled={loading || isExpandingBase}
                   className="px-8 py-3 bg-primary text-white font-bold rounded shadow-md hover:bg-primary/90 disabled:opacity-50 flex items-center gap-2 tracking-wide text-sm"
                 >
-                  {loading ? "ANALYZING..." : "RUN COMPARATOR ANALYSIS"}
+                  {loading ? "ANALYZING..." : isExpandingBase ? "PROCESSING PDF..." : "RUN COMPARATOR ANALYSIS"}
                 </button>
               </div>
             </div>
