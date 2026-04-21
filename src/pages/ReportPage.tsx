@@ -443,8 +443,10 @@ const ReportPageInner = () => {
   const effectiveNewUrls  = childPreviewUrls.length > 0 ? childPreviewUrls : (childUrl ? [childUrl] : []);
   const effectiveNewNames = childFileNames.length   > 0 ? childFileNames   : (childFileName ? [childFileName] : []);
 
-  // ── Multi-pair report data ────────────────────────────────────────────────
-  // allPairs is set by PreviewPage when N > 1 label pairs were uploaded.
+  // ── Pair report data ─────────────────────────────────────────────────────
+  // allPairs is set by PreviewPage whenever at least 1 result is available.
+  // isMultiPair controls the multi-pair content layout (>1); the sidebar is
+  // shown whenever pairReportData.length >= 1 (including single-pair).
   const rawPairs: any[] = location.state?.allPairs ?? [];
   const isMultiPair = rawPairs.length > 1;
 
@@ -616,8 +618,8 @@ const ReportPageInner = () => {
       />
       <MetadataRow data={activePairAsReportData ?? reportData} />
 
-      {isMultiPair && activePairAsReportData ? (
-        // ── Multi-pair: sidebar + single-pair viewer ──────────────────────────
+      {pairReportData.length >= 1 ? (
+        // ── Sidebar layout (1 or more pairs) ─────────────────────────────────
         <div className="flex flex-1 min-h-0 overflow-hidden">
 
           {/* Left sidebar — screen only */}
@@ -681,44 +683,80 @@ const ReportPageInner = () => {
             </div>
           </aside>
 
-          {/* Screen: active pair report */}
-          <div className="report-pair-screen flex-1 overflow-y-auto report-content-wrap max-w-none px-8 py-6 pb-24">
-            <FrameA
-              data={activePairAsReportData}
-              summaryData={activePairSummaryData}
-              onDiscardUnexpected={onDiscard}
-            />
-          </div>
-
-          {/* Print: all pairs rendered; CSS hides non-selected via data-pair-print */}
-          <div className="hidden print:block w-full report-content-wrap">
-            {pairReportData.map(pair => (
-              <div key={pair.pairIndex} data-pair-print={pair.pairIndex}>
+          {/* Content area — multi-pair viewer or single-pair frames */}
+          {isMultiPair && activePairAsReportData ? (
+            <>
+              {/* Screen: active pair report */}
+              <div className="report-pair-screen flex-1 overflow-y-auto report-content-wrap max-w-none px-8 py-6 pb-24">
                 <FrameA
-                  data={{
-                    ...reportData,
-                    currentLabelName:      pair.baseFileName,
-                    newLabelName:          pair.childFileName,
-                    currentLabelUrl:       pair.baseUrl  || undefined,
-                    newLabelUrl:           pair.childUrl || undefined,
-                    newLabelUrls:          undefined,
-                    newLabelNames:         undefined,
-                    currentBoxes:          pair.currentBoxes,
-                    newBoxes:              pair.newBoxes,
-                    requirements:          pair.requirements,
-                    unexpectedChanges:     pair.unexpectedChanges,
-                    discrepancyCategories: pair.discrepancyCategories,
-                  }}
-                  summaryData={buildSummaryData(pair.requirements, pair.unexpectedChanges)}
+                  data={activePairAsReportData}
+                  summaryData={activePairSummaryData}
                   onDiscardUnexpected={onDiscard}
                 />
               </div>
-            ))}
-          </div>
+
+              {/* Print: all pairs rendered; CSS hides non-selected via data-pair-print */}
+              <div className="hidden print:block w-full report-content-wrap">
+                {pairReportData.map(pair => (
+                  <div key={pair.pairIndex} data-pair-print={pair.pairIndex}>
+                    <FrameA
+                      data={{
+                        ...reportData,
+                        currentLabelName:      pair.baseFileName,
+                        newLabelName:          pair.childFileName,
+                        currentLabelUrl:       pair.baseUrl  || undefined,
+                        newLabelUrl:           pair.childUrl || undefined,
+                        newLabelUrls:          undefined,
+                        newLabelNames:         undefined,
+                        currentBoxes:          pair.currentBoxes,
+                        newBoxes:              pair.newBoxes,
+                        requirements:          pair.requirements,
+                        unexpectedChanges:     pair.unexpectedChanges,
+                        discrepancyCategories: pair.discrepancyCategories,
+                      }}
+                      summaryData={buildSummaryData(pair.requirements, pair.unexpectedChanges)}
+                      onDiscardUnexpected={onDiscard}
+                    />
+                  </div>
+                ))}
+              </div>
+            </>
+          ) : (
+            // Single pair — render scenario-appropriate frame alongside sidebar
+            <div className="flex-1 report-content-wrap max-w-[1600px] mx-auto px-8 py-6 pb-24">
+              {!hasChanges ? (
+                <FrameNoChange
+                  labelName={childFileName || baseFileName || undefined}
+                  labelUrl={childUrl || baseUrl || undefined}
+                  crNumber={reportData.crNumber || undefined}
+                  sku={reportData.sku || undefined}
+                />
+              ) : (
+                <>
+                  {activeScenario === 'A' && (
+                    <FrameA data={reportData} summaryData={summaryData} onDiscardUnexpected={onDiscard} />
+                  )}
+                  {activeScenario === 'B' && (
+                    <FrameB formData={formData} summaryData={summaryData} />
+                  )}
+                  {activeScenario === 'C' && (
+                    <FrameC
+                      data={reportData}
+                      formData={formData}
+                      summaryData={summaryData}
+                      satisfiedItems={satisfiedItems}
+                      missingItems={missingItems}
+                      onDiscardUnexpected={onDiscard}
+                    />
+                  )}
+                </>
+              )}
+            </div>
+          )}
         </div>
 
       ) : (
-        // ── Single pair (or no-change) ─────────────────────────────────────────
+        // ── No pairs: single pair or no-change without sidebar ────────────────
         <div className="flex-1 report-content-wrap max-w-[1600px] mx-auto px-8 py-6 pb-24">
           {!hasChanges ? (
             <FrameNoChange
@@ -751,14 +789,14 @@ const ReportPageInner = () => {
       )}
 
       {/* ── Sticky footer — hidden during print ── */}
-      {isMultiPair ? (
+      {pairReportData.length >= 1 ? (
         <div className="print:hidden sticky bottom-0 left-0 right-0 bg-white border-t border-gray-200 shadow-[0_-4px_12px_rgba(0,0,0,0.06)] px-6 py-3 flex items-center justify-between z-10">
           <div className="flex items-center gap-3">
             <div className="w-8 h-8 rounded-full bg-green-100 flex items-center justify-center flex-shrink-0">
               <CheckCircle className="w-4 h-4 text-green-600" />
             </div>
             <div>
-              {checkedPairIndices.size > 0 ? (
+              {isMultiPair && checkedPairIndices.size > 0 ? (
                 <>
                   <p className="text-sm font-medium text-gray-700">
                     {checkedPairIndices.size} label{checkedPairIndices.size > 1 ? 's' : ''} selected
@@ -776,7 +814,7 @@ const ReportPageInner = () => {
             </div>
           </div>
           <div className="flex items-center gap-2">
-            {checkedPairIndices.size > 0 && (
+            {isMultiPair && checkedPairIndices.size > 0 && (
               <button
                 onClick={() => downloadPairs([...checkedPairIndices])}
                 className="flex items-center gap-2 bg-[#d51900] hover:bg-red-800 text-white text-sm font-medium px-5 py-2.5 rounded-lg transition-colors"
@@ -786,15 +824,15 @@ const ReportPageInner = () => {
               </button>
             )}
             <button
-              onClick={() => downloadPairs([activePairIndex])}
+              onClick={isMultiPair ? () => downloadPairs([activePairIndex]) : handleDownloadPDF}
               className={`flex items-center gap-2 text-sm font-medium px-5 py-2.5 rounded-lg transition-colors ${
-                checkedPairIndices.size > 0
+                isMultiPair && checkedPairIndices.size > 0
                   ? 'border border-gray-300 bg-white hover:bg-gray-50 text-gray-700'
                   : 'bg-[#d51900] hover:bg-red-800 text-white'
               }`}
             >
               <Download className="w-4 h-4" />
-              {checkedPairIndices.size > 0 ? 'Download This Label' : 'Download PDF'}
+              {isMultiPair && checkedPairIndices.size > 0 ? 'Download This Label' : 'Download PDF'}
             </button>
           </div>
         </div>

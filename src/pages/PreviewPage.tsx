@@ -1160,7 +1160,7 @@ const PreviewPage = () => {
         // render independent label comparisons + change tables for every pair.
         allPairs: (() => {
           const allApiResults: any[] = state.apiResults ?? [];
-          if (allApiResults.length <= 1) return [];
+          if (allApiResults.length === 0) return [];
           return allApiResults.map((result: any, i: number) => ({
             pairIndex:    i,
             // Fall back to index 0 when fewer base labels were uploaded than child labels
