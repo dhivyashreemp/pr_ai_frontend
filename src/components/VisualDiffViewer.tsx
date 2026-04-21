@@ -287,6 +287,9 @@ const DraggableBoxOverlay = ({
           const s          = states[idx] ?? { x: box.x, y: box.y, w: box.width, h: box.height };
           const isSelected = selectedIdx === idx;
           const { color, bg } = getBoxVisuals(box);
+          const conf        = (box as any).confidence as string | undefined;
+          const opacity     = conf === 'low' ? 0.5 : conf === 'medium' ? 0.75 : 1;
+          const borderStyle = conf === 'low' ? 'dashed' : 'solid';
           return (
             <div
               key={box.id}
@@ -298,8 +301,9 @@ const DraggableBoxOverlay = ({
                 top:    `${s.y * 100}%`,
                 width:  `${s.w * 100}%`,
                 height: `${s.h * 100}%`,
-                border: `1px solid ${color}`,
+                border: `1px ${borderStyle} ${color}`,
                 backgroundColor: bg,
+                opacity,
                 boxSizing: "border-box",
                 cursor: "move",
                 userSelect: "none",
@@ -316,12 +320,12 @@ const DraggableBoxOverlay = ({
                 className="no-pan"
                 style={{
                   position: "absolute",
-                  top: -16, left: -1,
+                  top: -12, left: -1,
                   background: color,
                   color: "white",
-                  fontSize: "8px",
-                  lineHeight: "12px",
-                  padding: "1px 5px 1px 3px",
+                  fontSize: "6px",
+                  lineHeight: "9px",
+                  padding: "1px 3px 1px 2px",
                   borderRadius: "2px 2px 0 0",
                   fontFamily: "sans-serif",
                   fontWeight: 600,
@@ -336,7 +340,7 @@ const DraggableBoxOverlay = ({
                   boxShadow: "0 -1px 3px rgba(0,0,0,0.15)",
                 }}
               >
-                <Move style={{ width: 7, height: 7, flexShrink: 0 }} />
+                <Move style={{ width: 5, height: 5, flexShrink: 0 }} />
                 {box.label.length > 24 ? box.label.slice(0, 24) + "…" : box.label}
               </div>
 

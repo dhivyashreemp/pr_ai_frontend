@@ -919,15 +919,24 @@ const Index = () => {
       (r: any) => !isFullImageBox(r)
     );
 
+    // When yolo_review is empty the backend has no pixel-accurate symbol detector running.
+    // Symbol annotations in that case come from a rough visual estimate — mark them low confidence
+    // so the overlay renders them with reduced opacity.
+    const yoloAvailable = (result.yolo_review ?? []).length > 0;
+
     // Replace each placeholder annotation with the next usable diff_region.
     // Annotations without placeholder coords pass through unchanged.
     let drIdx = 0;
     const resolvedAnnotations = (result.annotations ?? [])
       .map((a: any) => {
-        if (!isFullImageBox(a)) return a;
+        // Downgrade symbol confidence when YOLO data is absent
+        const base = (!yoloAvailable && a.category === 'Symbol')
+          ? { ...a, confidence: 'low' as const }
+          : a;
+        if (!isFullImageBox(base)) return base;
         if (drIdx < usableDiffRegions.length) {
           const r = usableDiffRegions[drIdx++];
-          return { ...a, x: r.x, y: r.y, width: r.width, height: r.height };
+          return { ...base, x: r.x, y: r.y, width: r.width, height: r.height };
         }
         return null; // No region available → drop this annotation
       })
@@ -1005,6 +1014,9 @@ const Index = () => {
       });
     });
 
+    // Labels that should never be shown as bounding boxes.
+    const hiddenLabels = new Set(['changed region']);
+
     const combined = [
       ...resolvedAnnotations,
       // Filter out placeholder full-image discrepancy boxes — the same change is already
@@ -1012,7 +1024,7 @@ const Index = () => {
       ...discrepancyBoxes.filter((b: any) => !isFullImageBox(b)),
       ...yoloBoxes,
       ...barcodeSummaryBoxes,
-    ];
+    ].filter((b: any) => !hiddenLabels.has((b.label ?? '').toLowerCase().trim()));
 
     // Deduplicate by spatial proximity (center within 5%).
     // Category-aware: different-category boxes are never merged.
