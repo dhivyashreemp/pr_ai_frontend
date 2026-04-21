@@ -874,6 +874,152 @@ const Index = () => {
     [discardedUnexpectedIds],
   );
 
+  // ── Shared annotation array for both VisualDiffViewer and PreviewPage ───────
+  // Single source of truth so analysis page and preview page always show the same
+  // bounding boxes. Deduplication is category-aware: boxes of different categories
+  // (e.g. Text vs Barcode/DataMatrix) are never merged even when spatially close.
+  const currentAnnotations = useMemo<any[]>(() => {
+    if (adjustedAnnotations.length > 0) return adjustedAnnotations;
+    if (!analysisRun || lrfOnly || apiResults.length === 0) return [];
+    const result = apiResults[selectedResultIndex];
+    if (!result) return [];
+
+    const existingDiscrepancyIds = new Set(
+      (result.annotations ?? [])
+        .filter((a: any) => a.discrepancy_id != null)
+        .map((a: any) => a.discrepancy_id)
+    );
+
+    // Defensive normalizer: converts 0-100 scale coords to 0-1 (no-op for already-0-1 values).
+    const n = (v: number | undefined): number =>
+      (v ?? 0) > 1 ? (v ?? 0) / 100 : (v ?? 0);
+
+    // Helper: detect placeholder "full-image" bounding boxes (x≈0, y≈0, w≈1, h≈1).
+    // The backend emits these when it knows about a change but can't localise it exactly
+    // (e.g. the DataMatrix barcode when ZXing decodes it but doesn't return pixel coords).
+    const isFullImageBox = (box: any) =>
+      (box.x ?? 0) < 0.01 && (box.y ?? 0) < 0.01 &&
+      (box.width ?? 1) > 0.99 && (box.height ?? 1) > 0.99;
+
+    // diff_regions gives the actual visual diff areas on the child image.
+    // Filter out the full-image placeholder to get real, localised regions.
+    const usableDiffRegions = (result.diff_regions ?? []).filter(
+      (r: any) => !isFullImageBox(r)
+    );
+
+    // Replace each placeholder annotation with the next usable diff_region.
+    // Annotations without placeholder coords pass through unchanged.
+    let drIdx = 0;
+    const resolvedAnnotations = (result.annotations ?? [])
+      .map((a: any) => {
+        if (!isFullImageBox(a)) return a;
+        if (drIdx < usableDiffRegions.length) {
+          const r = usableDiffRegions[drIdx++];
+          return { ...a, x: r.x, y: r.y, width: r.width, height: r.height };
+        }
+        return null; // No region available → drop this annotation
+      })
+      .filter(Boolean);
+
+    const discrepancyBoxes: any[] = [];
+    if (result.discrepancies) {
+      let idx = 0;
+      for (const status of ['Added', 'Deleted', 'Modified', 'Repositioned']) {
+        const items = (result.discrepancies[status] ?? []) as any[];
+        items.forEach((item: any) => {
+          const bb = item.bounding_box;
+          if (bb && bb.x != null && bb.y != null && !existingDiscrepancyIds.has(idx)) {
+            discrepancyBoxes.push({
+              label: item.Value ?? '',
+              change_type: status as any,
+              category: item.Category ?? '',
+              x: n(bb.x), y: n(bb.y), width: n(bb.width), height: n(bb.height),
+              confidence: (bb.confidence ?? 'medium') as any,
+            });
+          }
+          idx++;
+        });
+      }
+    }
+
+    const yoloBoxes = (result.yolo_review ?? [])
+      .filter((item: any) => item.x != null && item.y != null && item.width != null && item.height != null)
+      .map((item: any) => ({
+        label: item.name ?? item.label ?? '',
+        change_type: (item.change_type ?? 'Modified') as any,
+        category: item.yolo_class ?? '',
+        x: n(item.x), y: n(item.y), width: n(item.width), height: n(item.height),
+        confidence: 'low' as const,
+      }));
+
+    // Extract per-barcode bounding boxes from the barcode_summary pipeline.
+    // The main result.annotations only carries a single "Barcode" annotation for the
+    // 1D barcode region; the DataMatrix position lives in barcode_summary and must be
+    // pulled out separately so the QR/DataMatrix symbol gets its own overlay box.
+    const barcodeSummaryBoxes: any[] = [];
+    const barcodeChanges: any[] = result.barcode_summary?.comparison?.changes ?? [];
+    barcodeChanges.forEach((change: any) => {
+      // Try all plausible field names the backend might use for the child-side bbox.
+      const bb = change.child_bbox ?? change.child_bounding_box ?? change.bounding_box ?? change.bbox;
+      if (!bb || bb.x == null) return;
+      const btRaw = (change.barcode_type || '').toLowerCase();
+      const isDm = btRaw.includes('matrix') || btRaw.includes('datamatrix') || btRaw.includes('qr');
+      barcodeSummaryBoxes.push({
+        label: change.new_value ?? change.old_value ?? (isDm ? 'DataMatrix' : 'Barcode'),
+        change_type: (change.change_type ?? 'Modified') as any,
+        category: isDm ? 'DataMatrix' : 'Barcode',
+        x: n(bb.x), y: n(bb.y),
+        width:  n(bb.width  ?? bb.w),
+        height: n(bb.height ?? bb.h),
+        confidence: 'medium' as const,
+      });
+    });
+
+    // Also try individual barcode elements on the child label (ZXing positions).
+    const childBarcodeElements: any[] = result.barcode_summary?.child?.barcode_elements ?? [];
+    childBarcodeElements.forEach((elem: any) => {
+      const bb = elem.bounding_box ?? elem.bbox ?? elem.rect;
+      if (!bb || bb.x == null) return;
+      const btRaw = (elem.barcode_type || '').toLowerCase();
+      const isDm = btRaw.includes('matrix') || btRaw.includes('datamatrix') || btRaw.includes('qr');
+      barcodeSummaryBoxes.push({
+        label: elem.decoded_value ?? (isDm ? 'DataMatrix' : 'Barcode'),
+        change_type: 'Modified' as any,
+        category: isDm ? 'DataMatrix' : 'Barcode',
+        x: n(bb.x), y: n(bb.y),
+        width:  n(bb.width  ?? bb.w),
+        height: n(bb.height ?? bb.h),
+        confidence: 'low' as const,
+      });
+    });
+
+    const combined = [
+      ...resolvedAnnotations,
+      // Filter out placeholder full-image discrepancy boxes — the same change is already
+      // captured by the resolved annotation above (with the correct diff_region position).
+      ...discrepancyBoxes.filter((b: any) => !isFullImageBox(b)),
+      ...yoloBoxes,
+      ...barcodeSummaryBoxes,
+    ];
+
+    // Deduplicate by spatial proximity (center within 5%).
+    // Category-aware: different-category boxes are never merged.
+    const deduped: any[] = [];
+    for (const box of combined) {
+      const cx = (box.x ?? 0) + (box.width ?? 0) / 2;
+      const cy = (box.y ?? 0) + (box.height ?? 0) / 2;
+      const isDuplicate = deduped.some(existing => {
+        if (box.category && existing.category && box.category !== existing.category) return false;
+        const ex = (existing.x ?? 0) + (existing.width ?? 0) / 2;
+        const ey = (existing.y ?? 0) + (existing.height ?? 0) / 2;
+        return Math.abs(cx - ex) < 0.05 && Math.abs(cy - ey) < 0.05;
+      });
+      if (!isDuplicate) deduped.push(box);
+    }
+
+    return deduped;
+  }, [adjustedAnnotations, analysisRun, lrfOnly, apiResults, selectedResultIndex]);
+
   return (
     <div className="min-h-screen bg-[#f8f9fa] flex flex-col">
 
@@ -986,65 +1132,12 @@ const Index = () => {
             baseImage={basePreviewUrl || undefined}
             childImage={childPreviewUrls[selectedResultIndex] || childPreviewUrls[0] || undefined}
             annotations={
-              (() => {
-                const result = apiResults[selectedResultIndex];
-
-                // IDs already covered by the backend annotations array (by discrepancy index)
-                const existingDiscrepancyIds = new Set(
-                  (result?.annotations ?? [])
-                    .filter((a: any) => a.discrepancy_id != null)
-                    .map((a: any) => a.discrepancy_id)
-                );
-
-                // Extract bboxes from every discrepancy that has a bounding_box but is NOT
-                // already represented in the backend annotations array.
-                const discrepancyBoxes: any[] = [];
-                if (result?.discrepancies) {
-                  let idx = 0;
-                  for (const status of ['Added', 'Deleted', 'Modified', 'Repositioned']) {
-                    const items = (result.discrepancies[status] ?? []) as any[];
-                    items.forEach((item: any) => {
-                      const bb = item.bounding_box;
-                      if (bb && bb.x != null && bb.y != null && !existingDiscrepancyIds.has(idx)) {
-                        discrepancyBoxes.push({
-                          label: item.Value ?? '',
-                          change_type: status as any,
-                          category: item.Category ?? '',
-                          x: bb.x, y: bb.y, width: bb.width, height: bb.height,
-                          confidence: (bb.confidence ?? 'medium') as any,
-                        });
-                      }
-                      idx++;
-                    });
-                  }
-                }
-
-                const yoloBoxes = (result?.yolo_review ?? [])
-                  .filter((item: any) => item.x != null && item.y != null && item.width != null && item.height != null)
-                  .map((item: any) => ({
-                    label: item.name ?? item.label ?? '',
-                    change_type: (item.change_type ?? 'Modified') as any,
-                    category: item.yolo_class ?? '',
-                    x: item.x, y: item.y, width: item.width, height: item.height,
-                    confidence: 'low' as const,
-                  }));
-
-                const base = formData
-                  ? (adjustedAnnotations.length > 0 ? adjustedAnnotations : [...(unexpectedAnnotations ?? []), ...yoloBoxes])
-                  : analysisRun && !lrfOnly && apiResults.length > 0
-                    ? (adjustedAnnotations.length > 0 ? adjustedAnnotations : [
-                        ...(result?.annotations ?? []),
-                        ...discrepancyBoxes,
-                        ...yoloBoxes,
-                      ])
-                    : [];
-                return base.filter((_: any, i: number) => !discardedAnnotationBoxIds.includes(`annotation-${i}`));
-              })()
+              currentAnnotations.filter((_: any, i: number) => !discardedAnnotationBoxIds.includes(`annotation-${i}`))
             }
-            requirementBoxes={formData ? (adjustedBoxes.length > 0 ? adjustedBoxes : (requirementBoxes ?? [])) : []}
-            onBoxesChange={formData ? setAdjustedBoxes : undefined}
-            onAddBox={formData ? handleAddBox : undefined}
-            onDeleteBox={formData ? handleDeleteBox : undefined}
+            requirementBoxes={[]}
+            onBoxesChange={undefined}
+            onAddBox={undefined}
+            onDeleteBox={undefined}
             onAnnotationsChange={setAdjustedAnnotations}
           />
 
@@ -1088,46 +1181,7 @@ const Index = () => {
             parsedItems: validatedParsedItems ?? (analysisRun && apiResults.length > 0 ? apiResults[selectedResultIndex]?.parsedItems : []) ?? [],
             missingItems,
             satisfiedItems,
-            annotations: adjustedAnnotations.length > 0
-              ? adjustedAnnotations
-              : (analysisRun && apiResults.length > 0 ? (() => {
-                  const result = apiResults[selectedResultIndex];
-                  const existingIds = new Set(
-                    (result?.annotations ?? [])
-                      .filter((a: any) => a.discrepancy_id != null)
-                      .map((a: any) => a.discrepancy_id)
-                  );
-                  const discrepancyBoxes: any[] = [];
-                  if (result?.discrepancies) {
-                    let idx = 0;
-                    for (const status of ['Added', 'Deleted', 'Modified', 'Repositioned']) {
-                      const items = (result.discrepancies[status] ?? []) as any[];
-                      items.forEach((item: any) => {
-                        const bb = item.bounding_box;
-                        if (bb && bb.x != null && bb.y != null && !existingIds.has(idx)) {
-                          discrepancyBoxes.push({
-                            label: item.Value ?? '',
-                            change_type: status as any,
-                            category: item.Category ?? '',
-                            x: bb.x, y: bb.y, width: bb.width, height: bb.height,
-                            confidence: (bb.confidence ?? 'medium') as any,
-                          });
-                        }
-                        idx++;
-                      });
-                    }
-                  }
-                  const yoloBoxes = (result?.yolo_review ?? [])
-                    .filter((item: any) => item.x != null && item.y != null && item.width != null && item.height != null)
-                    .map((item: any) => ({
-                      label: item.name ?? item.label ?? '',
-                      change_type: (item.change_type ?? 'Modified') as any,
-                      category: item.yolo_class ?? '',
-                      x: item.x, y: item.y, width: item.width, height: item.height,
-                      confidence: 'low' as const,
-                    }));
-                  return [...(result?.annotations ?? []), ...discrepancyBoxes, ...yoloBoxes];
-                })() : []),
+            annotations: currentAnnotations,
             // User-adjusted requirement box positions (proof-request mode only)
             requirementBoxes: adjustedBoxes.length > 0 ? adjustedBoxes : (requirementBoxes ?? []),
             // Barcode pipeline results for report summary + changes made
