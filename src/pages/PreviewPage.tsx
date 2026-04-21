@@ -1059,7 +1059,11 @@ const PreviewPage = () => {
   // Prefer the pre-rendered URL for the selected child (survives navigation);
   // fall back to the URL built from childFileArr[0] for the no-sidebar path.
   const activeChildUrl = expandedChildPreviewUrls[selectedChildIndex] || childUrl;
-  const activeBaseUrl  = expandedBasePreviewUrls[selectedChildIndex]  || baseUrl;
+  // Fall back to index 0 when fewer base labels were uploaded than child labels
+  // (e.g. 1 base vs N children — the single base is shown alongside every child).
+  const activeBaseUrl  = expandedBasePreviewUrls[selectedChildIndex] || expandedBasePreviewUrls[0] || baseUrl;
+  // Corresponding base label filename for the panel subtitle
+  const activeBaseFileName = expandedBaseFileNames[selectedChildIndex] || expandedBaseFileNames[0] || baseFileName;
   const hasBase = !!activeBaseUrl;
   const hasNew  = !!activeChildUrl;
 
@@ -1204,6 +1208,7 @@ const PreviewPage = () => {
         // URLs carry the visual state through location.state as plain strings).
         childFiles:               state.childFiles               ?? [],
         basePreviewUrl:           state.basePreviewUrl           ?? '',
+        expandedBasePreviewUrls:  state.expandedBasePreviewUrls  ?? [],
         expandedChildPreviewUrls: state.expandedChildPreviewUrls ?? [],
         analysisRun:              state.analysisRun              ?? true,
         selectedResultIndex:      selectedChildIndex,
@@ -1287,6 +1292,7 @@ const PreviewPage = () => {
         <LabelSidebar
           baseFile={baseFileArr[0] ?? null}
           basePreviewUrl={activeBaseUrl || null}
+          baseFileName={baseFileName}
           childFiles={childFilesAll}
           childPreviewUrls={expandedChildPreviewUrls}
           apiResults={state.apiResults ?? []}
@@ -1299,7 +1305,7 @@ const PreviewPage = () => {
         <div className="max-w-[1600px] mx-auto px-6 py-5 space-y-4">
 
           {/* Instructions + controls bar */}
-          <div className="bg-white border border-gray-200 px-5 py-3.5 flex flex-wrap items-center justify-between gap-3">
+          <div className="bg-white border border-gray-200 px-5 py-3.5 flex flex-col gap-2">
             <div className="space-y-0.5">
               <h2 className="text-sm font-bold text-gray-800">Preview &amp; Annotate Labels</h2>
               <p className="text-xs text-gray-500">
@@ -1308,7 +1314,7 @@ const PreviewPage = () => {
                 AI-detected boxes can be <strong>clicked to select</strong>, then <strong>dragged to reposition</strong> or resized via corner handles.
               </p>
             </div>
-            <div className="flex items-center gap-3">
+            <div className="flex items-center justify-end gap-4">
               {/* Legend */}
               <div className="flex items-center gap-4 text-xs">
                 {(['Modified', 'Added', 'Deleted'] as AnnotationType[]).map((t) => (
@@ -1325,8 +1331,8 @@ const PreviewPage = () => {
                   onClick={() => setIsDrawingMode(m => !m)}
                   className={`flex items-center gap-1.5 px-4 py-2 text-xs font-bold uppercase tracking-wide border-2 transition-all ${
                     isDrawingMode
-                      ? 'bg-blue-600 text-white border-blue-600 shadow-md ring-2 ring-blue-300'
-                      : 'bg-white text-gray-700 border-gray-300 hover:border-blue-400 hover:text-blue-600'
+                      ? 'bg-red-600 text-white border-red-600 shadow-md ring-2 ring-red-300'
+                      : 'bg-blue-600 text-white border-blue-600 hover:bg-blue-700 hover:border-blue-700'
                   }`}
                   title={isDrawingMode ? 'Click to exit draw mode' : 'Click to enable draw mode — stays on until you turn it off'}
                 >
@@ -1388,7 +1394,7 @@ const PreviewPage = () => {
               <DrawableImagePanel
                 src={activeBaseUrl}
                 title="Current Version"
-                subtitle={baseFileName}
+                subtitle={activeBaseFileName}
                 target="base"
                 aiBoxes={[]}
                 userBoxes={userBaseBoxes}

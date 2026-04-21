@@ -6,6 +6,7 @@ import { useSidebarState, MIN_WIDTH, MAX_WIDTH, COLLAPSED_WIDTH } from "@/hooks/
 interface LabelSidebarProps {
   baseFile: File | null;
   basePreviewUrl: string | null;
+  baseFileName?: string;
   childFiles: File[];
   childPreviewUrls: string[];
   apiResults: any[];
@@ -68,7 +69,7 @@ const useThumbnailUrl = (
 };
 
 /** Portrait thumbnail panel used at the top of each card. */
-const CardThumbnail = ({ file, url }: { file: File; url: string | null }) => {
+const CardThumbnail = ({ file, url }: { file: File | null; url: string | null }) => {
   const { url: resolved, error } = useThumbnailUrl(file, url);
   const shell =
     "h-40 w-full bg-white flex items-center justify-center rounded-t-lg overflow-hidden";
@@ -156,6 +157,7 @@ const CardFooter = ({
 const LabelSidebar = ({
   baseFile,
   basePreviewUrl,
+  baseFileName,
   childFiles,
   childPreviewUrls,
   apiResults,
@@ -244,12 +246,12 @@ const LabelSidebar = ({
         <span className="inline-flex items-center gap-1 bg-blue-100 text-blue-700 text-[10px] font-bold px-2 py-0.5 rounded-full uppercase tracking-wider mb-2">Labels</span>
       </div>
       <div className="p-3 pt-0">
-        {baseFile ? (
+        {(baseFile || basePreviewUrl) ? (
           <>
             <div className="bg-blue-50 rounded-lg overflow-hidden border border-blue-200 border-l-4 border-l-blue-500 shadow-sm">
               <CardThumbnail file={baseFile} url={basePreviewUrl} />
               <CardFooter
-                filename={baseFile.name}
+                filename={baseFile?.name ?? baseFileName ?? ''}
                 badge={<BaseBadge />}
                 dotColor="bg-blue-500"
               />
