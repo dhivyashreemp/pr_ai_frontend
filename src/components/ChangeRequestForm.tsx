@@ -230,7 +230,7 @@ const ChangeRequestForm = () => {
           </Link>
           <div className="flex items-center gap-2">
             <ScanLine size={18} />
-            <span className="text-sm font-bold tracking-tight uppercase">LabelX Proofreading</span>
+            <span className="text-sm font-bold tracking-tight uppercase">LabelIX Proofreading</span>
             <span className="text-white/30 mx-1">|</span>
             <span className="text-xs text-primary-foreground/70 font-medium">Proofing Request</span>
           </div>

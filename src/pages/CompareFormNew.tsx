@@ -54,7 +54,7 @@ const CompareFormNew = () => {
           </Link>
           <div className="flex items-center gap-2">
             <ScanLine size={18} />
-            <span className="text-sm font-bold tracking-tight uppercase">LabelX Proofreading</span>
+            <span className="text-sm font-bold tracking-tight uppercase">LabelIX Proofreading</span>
             <span className="text-white/30 mx-1">|</span>
             <span className="text-xs text-white/70 font-medium">Proofing Analysis</span>
           </div>

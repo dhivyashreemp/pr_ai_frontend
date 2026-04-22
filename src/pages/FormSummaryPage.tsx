@@ -97,7 +97,7 @@ const FormSummaryPage = () => {
     // Save the LRF submission to the backend (non-blocking on failure)
     let submissionId: string | null = null;
     try {
-      const API_URL = import.meta.env.VITE_API_BASE_URL || "https://label-comparator-new.azurewebsites.net";
+      const API_URL = import.meta.env.VITE_API_BASE_URL || "http://localhost:8000";
       const resp = await fetch(`${API_URL}/api/submissions`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -137,7 +137,7 @@ const FormSummaryPage = () => {
           </button>
           <div className="flex items-center gap-2">
             <ScanLine size={18} />
-            <span className="text-sm font-bold tracking-tight uppercase">LabelX Proofreading</span>
+            <span className="text-sm font-bold tracking-tight uppercase">LabelIX Proofreading</span>
             <span className="text-white/30 mx-1">|</span>
             <span className="text-xs text-white/70 font-medium">Review & Upload</span>
           </div>

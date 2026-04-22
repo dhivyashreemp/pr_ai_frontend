@@ -37,7 +37,7 @@ const Dashboard = () => {
         <div className="flex items-center gap-3 h-[52px]">
           <ScanLine className="h-5 w-5" />
           <div className="flex items-center gap-2">
-            <span className="text-sm font-bold uppercase tracking-widest">LabelX Proofreading</span>
+            <span className="text-sm font-bold uppercase tracking-widest">LabelIX Proofreading</span>
           </div>
           <span className="hidden sm:block text-white/30 mx-2">|</span>
           <span className="hidden sm:block text-xs text-white/60 font-medium">Regulatory Affairs · Document Control</span>
@@ -55,7 +55,7 @@ const Dashboard = () => {
               <span className="text-[11px] font-bold uppercase tracking-widest text-primary">Workflow Selection</span>
             </div>
             <h1 className="text-3xl font-bold text-gray-900 leading-tight">
-              {user.name ? `Welcome, ${user.name.split(" ")[0]}` : "LabelX Proofreading"}
+              {user.name ? `Welcome, ${user.name.split(" ")[0]}` : "LabelIX Proofreading"}
             </h1>
             <p className="text-gray-500 mt-2 text-sm max-w-xl leading-relaxed">
               Select a workflow to begin validating label changes against comparator inspection output.
@@ -149,7 +149,7 @@ const Dashboard = () => {
       {/* Footer */}
       <footer className="sticky bottom-0 z-40 border-t border-[#e2e8f0] bg-white px-8 py-2.5 flex items-center justify-between shadow-[0_-4px_12px_rgba(0,0,0,0.05)] shrink-0">
         <span className="text-[10px] text-gray-400 font-mono uppercase tracking-wider font-medium">
-          LabelX Proofreading · Internal Use Only
+          LabelIX Proofreading · Internal Use Only
         </span>
         <span className="text-[10px] text-gray-400 font-mono font-medium">
           v1.0 · {new Date().getFullYear()}
