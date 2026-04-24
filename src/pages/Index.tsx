@@ -128,9 +128,15 @@ const Index = () => {
   const [selectedResultIndex, setSelectedResultIndex] = useState<number>(
     location.state?.selectedResultIndex ?? 0
   );
-  // Tracks requirement box positions after user drags/resizes/duplicates them in VisualDiffViewer
-  const [adjustedBoxes, setAdjustedBoxes] = useState<RequirementBox[]>([]);
-  const [adjustedAnnotations, setAdjustedAnnotations] = useState<Annotation[]>([]);
+  // Tracks requirement box positions after user drags/resizes/duplicates them in VisualDiffViewer.
+  // Restored from location.state when navigating back from PreviewPage so label edits survive.
+  const [adjustedBoxes, setAdjustedBoxes] = useState<RequirementBox[]>(
+    location.state?.requirementBoxes ?? []
+  );
+  // Restored from location.state when navigating back from PreviewPage so annotation label edits survive.
+  const [adjustedAnnotations, setAdjustedAnnotations] = useState<Annotation[]>(
+    location.state?.annotations ?? []
+  );
   const [basePreviewUrls, setBasePreviewUrls] = useState<string[]>(
     location.state?.expandedBasePreviewUrls || []
   );
@@ -212,7 +218,14 @@ const Index = () => {
     return () => { cancelled = true; };
   }, [expandedChildFiles]);
 
+  // Skip the first run so boxes/annotations restored from navigation state (back from PreviewPage)
+  // are not immediately wiped. Only reset when the user actually changes the selected child.
+  const isFirstResultIndexRender = useRef(true);
   useEffect(() => {
+    if (isFirstResultIndexRender.current) {
+      isFirstResultIndexRender.current = false;
+      return;
+    }
     setAdjustedBoxes([]);
     setAdjustedAnnotations([]);
   }, [selectedResultIndex]);

@@ -1,6 +1,7 @@
 import { useState, useRef, useCallback, useEffect, useMemo } from 'react';
 import { useNavigate, useLocation } from 'react-router-dom';
-import { ArrowLeft, FileText, ScanLine, Trash2, Pencil, X, Check, MapPin, Copy, Lock } from 'lucide-react';
+import { ArrowLeft, FileText, ScanLine, Trash2, Pencil, X, Check, MapPin, Copy, Lock, ZoomIn, ZoomOut, RotateCcw } from 'lucide-react';
+import { TransformWrapper, TransformComponent } from 'react-zoom-pan-pinch';
 import ProfileDropdown from '@/components/ProfileDropdown';
 import StepIndicator from '@/components/StepIndicator';
 import type { DrawnBox } from '@/report/types';
@@ -66,6 +67,8 @@ interface DrawableImagePanelProps {
   highlightedGroupId?: string | null;
   isReadOnly?: boolean;
   initialAiOverrides?: Record<string, { top: number; left: number; width: number; height: number }>;
+  transformRef?: React.RefObject<any>;
+  onTransformed?: (_: any, state: { scale: number; positionX: number; positionY: number }) => void;
 }
 
 function DrawableImagePanel({
@@ -75,8 +78,12 @@ function DrawableImagePanel({
   highlightedGroupId,
   isReadOnly = false,
   initialAiOverrides,
+  transformRef,
+  onTransformed,
 }: DrawableImagePanelProps) {
   const containerRef = useRef<HTMLDivElement>(null);
+  const localPanRef = useRef<any>(null);
+  const panRef = transformRef ?? localPanRef;
   const [draw, setDraw] = useState<DrawState | null>(null);
 
   // Duplicate / selection state
@@ -251,27 +258,47 @@ function DrawableImagePanel({
           </div>
           {subtitle && <div className="text-[10px] text-gray-400 mt-0.5 truncate max-w-xs">{subtitle}</div>}
         </div>
-        {isDrawingMode && !isReadOnly && (
-          <span className="text-[10px] font-bold text-white bg-blue-600 px-2 py-0.5 flex items-center gap-1">
-            <Pencil className="w-2.5 h-2.5" />
-            {activeGroupId ? 'Adding location…' : 'Drawing active'}
-          </span>
-        )}
+        <div className="flex items-center gap-1 ml-2">
+          {isDrawingMode && !isReadOnly && (
+            <span className="text-[10px] font-bold text-white bg-blue-600 px-2 py-0.5 flex items-center gap-1 mr-1">
+              <Pencil className="w-2.5 h-2.5" />
+              {activeGroupId ? 'Adding location…' : 'Drawing active'}
+            </span>
+          )}
+          <button onClick={() => panRef.current?.zoomIn(0.3)} className="p-1 hover:bg-black/10 rounded transition-colors" title="Zoom in"><ZoomIn className="h-3.5 w-3.5 text-gray-600" /></button>
+          <button onClick={() => panRef.current?.zoomOut(0.3)} className="p-1 hover:bg-black/10 rounded transition-colors" title="Zoom out"><ZoomOut className="h-3.5 w-3.5 text-gray-600" /></button>
+          <button onClick={() => panRef.current?.resetTransform()} className="p-1 hover:bg-black/10 rounded transition-colors" title="Reset zoom"><RotateCcw className="h-3.5 w-3.5 text-gray-600" /></button>
+        </div>
       </div>
 
       {/* Image area */}
-      <div
-        ref={containerRef}
-        className={`relative select-none flex-1${isReadOnly ? ' pointer-events-none' : ''}`}
-        style={{ cursor: isReadOnly ? 'default' : isDrawingMode ? 'crosshair' : 'default' }}
-        onPointerDown={isReadOnly ? undefined : handlePointerDown}
-        onPointerMove={isReadOnly ? undefined : handlePointerMove}
-        onPointerUp={isReadOnly ? undefined : handlePointerUp}
-        onClick={isReadOnly ? undefined : () => { if (!isDrawingMode && !placing) setSelectedBoxId(null); }}
-      >
-        <img src={src} alt={title} className="w-full h-auto block" draggable={false} />
+      <div className="relative overflow-hidden">
+        <TransformWrapper
+          ref={panRef}
+          minScale={0.5}
+          maxScale={4}
+          initialScale={1}
+          disabled={isDrawingMode || !!activeGroupId}
+          panning={{ disabled: isDrawingMode || !!activeGroupId || !!placing }}
+          doubleClick={{ disabled: true }}
+          onTransformed={onTransformed}
+        >
+          <TransformComponent
+            wrapperStyle={{ width: '100%' }}
+            contentStyle={{ width: '100%' }}
+          >
+            <div
+              ref={containerRef}
+              className={`relative select-none w-full${isReadOnly ? ' pointer-events-none' : ''}`}
+              style={{ cursor: isReadOnly ? 'default' : isDrawingMode ? 'crosshair' : 'default' }}
+              onPointerDown={isReadOnly ? undefined : handlePointerDown}
+              onPointerMove={isReadOnly ? undefined : handlePointerMove}
+              onPointerUp={isReadOnly ? undefined : handlePointerUp}
+              onClick={isReadOnly ? undefined : () => { if (!isDrawingMode && !placing) setSelectedBoxId(null); }}
+            >
+              <img src={src} alt={title} className="w-full h-auto block" draggable={false} />
 
-        {/* AI / requirement boxes — selectable, draggable, resizable */}
+              {/* AI / requirement boxes — selectable, draggable, resizable */}
         {aiBoxes.map((box) => {
           const eff        = { ...box, ...(aiOverrides[box.id] ?? {}) };
           const color      = TYPE_COLORS[eff.type as AnnotationType] ?? '#6b7280';
@@ -602,6 +629,9 @@ function DrawableImagePanel({
             }}
           />
         )}
+            </div>
+          </TransformComponent>
+        </TransformWrapper>
       </div>
     </div>
   );
@@ -930,6 +960,23 @@ const PreviewPage = () => {
   const [isDrawingMode,   setIsDrawingMode]   = useState(false);
   const [pendingBox,      setPendingBox]       = useState<PendingBox | null>(null);
 
+  // Synchronized zoom/pan between base and new panels
+  const basePanRef   = useRef<any>(null);
+  const newPanRef    = useRef<any>(null);
+  const isSyncing    = useRef(false);
+  const handleBaseTransformed = useCallback((_: any, s: { scale: number; positionX: number; positionY: number }) => {
+    if (isSyncing.current) return;
+    isSyncing.current = true;
+    newPanRef.current?.setTransform(s.positionX, s.positionY, s.scale, 0);
+    isSyncing.current = false;
+  }, []);
+  const handleNewTransformed = useCallback((_: any, s: { scale: number; positionX: number; positionY: number }) => {
+    if (isSyncing.current) return;
+    isSyncing.current = true;
+    basePanRef.current?.setTransform(s.positionX, s.positionY, s.scale, 0);
+    isSyncing.current = false;
+  }, []);
+
   /**
    * When set, the next draw will add to an EXISTING annotation group
    * (bypasses the dialog — type + comment are inherited from the group).
@@ -1216,6 +1263,8 @@ const PreviewPage = () => {
         lrfAnalysis:  state.lrfAnalysis ?? null,
         discardedUnexpectedIds: [...discardedUnexpectedIds],
         userAnnotations,
+        requirementBoxes,
+        annotations: state.annotations ?? [],
       },
     });
   };
@@ -1407,6 +1456,8 @@ const PreviewPage = () => {
                 onAdjustAiBox={handleAdjustAiBox}
                 highlightedGroupId={hoveredAnnotationId ?? selectedAnnotationId}
                 isReadOnly={true}
+                transformRef={basePanRef}
+                onTransformed={handleBaseTransformed}
               />
             )}
             {hasNew && (
@@ -1427,6 +1478,8 @@ const PreviewPage = () => {
                 onAdjustAiBox={handleAdjustAiBox}
                 highlightedGroupId={hoveredAnnotationId ?? selectedAnnotationId}
                 initialAiOverrides={aiBoxAdjustments[selectedChildIndex]}
+                transformRef={newPanRef}
+                onTransformed={handleNewTransformed}
               />
             )}
             {!hasBase && !hasNew && (
