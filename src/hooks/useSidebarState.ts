@@ -25,7 +25,7 @@ interface SidebarOptions {
 
 const FALLBACK_DEFAULT: SidebarState = { isCollapsed: false, width: 280 };
 
-export function useSidebarState(key: string = "labelx-sidebar", options?: SidebarOptions) {
+export function useSidebarState(key: string = "labelix-sidebar", options?: SidebarOptions) {
   const min          = options?.min          ?? MIN_WIDTH;
   const max          = options?.max          ?? MAX_WIDTH;
   const defaultWidth = options?.defaultWidth ?? FALLBACK_DEFAULT.width;

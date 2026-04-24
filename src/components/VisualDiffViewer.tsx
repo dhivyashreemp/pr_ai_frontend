@@ -134,6 +134,8 @@ const DraggableBoxOverlay = ({
     initialBoxes.map(b => ({ x: b.x, y: b.y, w: b.width, h: b.height }))
   );
   const [selectedIdx, setSelectedIdx] = useState<number | null>(null);
+  const [editingIdx,  setEditingIdx]  = useState<number | null>(null);
+  const [editingText, setEditingText] = useState("");
 
   const statesRef = useRef(states);
   useEffect(() => { statesRef.current = states; }, [states]);
@@ -153,6 +155,14 @@ const DraggableBoxOverlay = ({
     );
   }, [initialBoxes]);
 
+  const commitLabel = useCallback((idx: number, text: string) => {
+    const finalText = text.trim() || (initialBoxes[idx]?.label ?? "");
+    onBoxesChangeRef.current?.(
+      initialBoxes.map((box, i) => i === idx ? { ...box, label: finalText } : box)
+    );
+    setEditingIdx(null);
+  }, [initialBoxes]);
+
   const drag = useRef<{
     type: "move" | ResizeDir;
     idx: number;
@@ -165,6 +175,7 @@ const DraggableBoxOverlay = ({
   useEffect(() => {
     setStates(initialBoxes.map(b => ({ x: b.x, y: b.y, w: b.width, h: b.height })));
     setSelectedIdx(null);
+    setEditingIdx(null);
     onBoxesChangeRef.current?.(initialBoxes);
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [boxKey]);
@@ -280,7 +291,7 @@ const DraggableBoxOverlay = ({
         style={{ position: "absolute", inset: 0, pointerEvents: "none" }}
         onPointerMove={onPointerMove}
         onPointerUp={onPointerUp}
-        onPointerDown={() => setSelectedIdx(null)}
+        onPointerDown={() => { setSelectedIdx(null); setEditingIdx(null); }}
       >
         {initialBoxes.map((box, idx) => {
           // states syncs via boxKey effect — guard against the one render before it fires
@@ -294,7 +305,7 @@ const DraggableBoxOverlay = ({
             <div
               key={box.id}
               className="no-pan"
-              title={isSelected ? "Click again to deselect" : "Click to select • Drag to move • Handles to resize"}
+              title={isSelected ? "Click on the deselect button to deselect" : "Click to select • Drag to move • Handles to resize"}
               style={{
                 position: "absolute",
                 left:   `${s.x * 100}%`,
@@ -315,34 +326,80 @@ const DraggableBoxOverlay = ({
               }}
               onPointerDown={e => onBoxPointerDown(e, idx)}
             >
-              {/* Label badge */}
-              <div
-                className="no-pan"
-                style={{
-                  position: "absolute",
-                  top: -12, left: -1,
-                  background: color,
-                  color: "white",
-                  fontSize: "6px",
-                  lineHeight: "9px",
-                  padding: "1px 3px 1px 2px",
-                  borderRadius: "2px 2px 0 0",
-                  fontFamily: "sans-serif",
-                  fontWeight: 600,
-                  whiteSpace: "nowrap",
-                  maxWidth: "100%",
-                  overflow: "hidden",
-                  textOverflow: "ellipsis",
-                  display: "flex",
-                  alignItems: "center",
-                  gap: 2,
-                  pointerEvents: "none",
-                  boxShadow: "0 -1px 3px rgba(0,0,0,0.15)",
-                }}
-              >
-                <Move style={{ width: 5, height: 5, flexShrink: 0 }} />
-                {box.label.length > 24 ? box.label.slice(0, 24) + "…" : box.label}
-              </div>
+              {/* Label badge — double-click to edit */}
+              {editingIdx === idx ? (
+                <div
+                  className="no-pan"
+                  style={{ position: "absolute", top: -14, left: -1, zIndex: 22, pointerEvents: "all" }}
+                  onPointerDown={e => { e.stopPropagation(); e.nativeEvent.stopImmediatePropagation(); }}
+                >
+                  <input
+                    autoFocus
+                    value={editingText}
+                    onChange={e => setEditingText(e.target.value)}
+                    onKeyDown={e => {
+                      e.stopPropagation();
+                      if (e.key === "Enter")  { e.preventDefault(); commitLabel(idx, editingText); }
+                      if (e.key === "Escape") { e.preventDefault(); setEditingIdx(null); }
+                    }}
+                    onBlur={() => commitLabel(idx, editingText)}
+                    style={{
+                      background: color,
+                      color: "white",
+                      fontSize: "8px",
+                      lineHeight: "12px",
+                      padding: "1px 4px 1px 4px",
+                      borderRadius: "2px 2px 0 0",
+                      fontFamily: "monospace",
+                      fontWeight: 700,
+                      whiteSpace: "nowrap",
+                      border: "1.5px solid rgba(255,255,255,0.8)",
+                      outline: "none",
+                      minWidth: "80px",
+                      boxShadow: "0 -1px 3px rgba(0,0,0,0.25)",
+                      cursor: "text",
+                    }}
+                  />
+                </div>
+              ) : (
+                <div
+                  className="no-pan"
+                  title="Double-click to edit text"
+                  style={{
+                    position: "absolute",
+                    top: -12, left: -1,
+                    background: color,
+                    color: "white",
+                    fontSize: "6px",
+                    lineHeight: "9px",
+                    padding: "1px 3px 1px 2px",
+                    borderRadius: "2px 2px 0 0",
+                    fontFamily: "sans-serif",
+                    fontWeight: 600,
+                    whiteSpace: "nowrap",
+                    maxWidth: "100%",
+                    overflow: "hidden",
+                    textOverflow: "ellipsis",
+                    display: "flex",
+                    alignItems: "center",
+                    gap: 2,
+                    pointerEvents: "all",
+                    cursor: "text",
+                    userSelect: "none",
+                    boxShadow: "0 -1px 3px rgba(0,0,0,0.15)",
+                  }}
+                  onPointerDown={e => { e.stopPropagation(); e.nativeEvent.stopImmediatePropagation(); setSelectedIdx(idx); }}
+                  onDoubleClick={e => {
+                    e.stopPropagation();
+                    setEditingIdx(idx);
+                    setEditingText(box.label);
+                    setSelectedIdx(idx);
+                  }}
+                >
+                  <Move style={{ width: 5, height: 5, flexShrink: 0 }} />
+                  {box.label.length > 24 ? box.label.slice(0, 24) + "…" : box.label}
+                </div>
+              )}
 
               {/* Action toolbar (when selected) */}
               {isSelected && (
@@ -1094,17 +1151,26 @@ const VisualDiffViewer = ({
 
                   {(useReqBoxes || annotations.length > 0) && (
                     <DraggableBoxOverlay
-                      initialBoxes={useReqBoxes ? requirementBoxes : editableAnnotationBoxes}
+                      initialBoxes={useReqBoxes
+                        ? [...requirementBoxes, ...editableAnnotationBoxes]
+                        : editableAnnotationBoxes}
                       containerRef={wrapperRef}
-                      onBoxesChange={useReqBoxes ? onBoxesChange : handleAnnotationBoxesChange}
-                      onAddBox={useReqBoxes ? onAddBox : handleAddAnnotation}
-                      onDeleteBox={useReqBoxes ? onDeleteBox : handleDeleteAnnotation}
+                      onBoxesChange={useReqBoxes
+                        ? (boxes) => {
+                            const reqCount = requirementBoxes.length;
+                            onBoxesChange?.(boxes.slice(0, reqCount) as RequirementBox[]);
+                            if (boxes.length > reqCount) handleAnnotationBoxesChange(boxes.slice(reqCount));
+                          }
+                        : handleAnnotationBoxesChange}
+                      onAddBox={useReqBoxes
+                        ? (box) => (box.id.startsWith('annotation-') ? handleAddAnnotation(box) : onAddBox?.(box))
+                        : handleAddAnnotation}
+                      onDeleteBox={useReqBoxes
+                        ? (id) => (id.startsWith('annotation-') ? handleDeleteAnnotation(id) : onDeleteBox?.(id))
+                        : handleDeleteAnnotation}
                       onRequestPlacement={handleRequestPlacement}
                       placingGhost={placing && ghostPos ? { ...placing, ...ghostPos } : null}
                     />
-                  )}
-                  {annotations.length > 0 && !useReqBoxes && false && (
-                    <AnnotationOverlay annotations={annotations} naturalW={childNatural.w} naturalH={childNatural.h} />
                   )}
                 </div>
               ) : (

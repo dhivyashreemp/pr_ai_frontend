@@ -963,7 +963,7 @@ const PreviewPage = () => {
             disposition: leader.disposition,
           }];
         });
-        // Draw mode stays on so user can keep adding locations
+        // Edit mode stays on so user can keep adding locations
       } else {
         // Normal first-box flow — open dialog
         setPendingBox({ target, ...box });
@@ -1000,7 +1000,7 @@ const PreviewPage = () => {
     };
     setUserAnnotations(prev => [...prev, newBox]);
     setPendingBox(null);
-    // Draw mode stays on
+    // Edit mode stays on
   };
 
   const handleDeleteBox = (id: string) => {
@@ -1226,7 +1226,7 @@ const PreviewPage = () => {
     : '';
 
   return (
-    <div className="min-h-screen bg-[#f8f9fa] flex flex-col">
+    <div className="h-screen bg-[#f8f9fa] flex flex-col overflow-hidden">
 
       {/* Navbar */}
       <nav
@@ -1309,7 +1309,7 @@ const PreviewPage = () => {
             <div className="space-y-0.5">
               <h2 className="text-sm font-bold text-gray-800">Preview &amp; Annotate Labels</h2>
               <p className="text-xs text-gray-500">
-                Toggle <strong>Draw Mode</strong> and click-drag to add annotations.
+                Toggle <strong>Edit Mode</strong> and click-drag to add annotations.
                 Use <strong>Add Location</strong> on any annotation to mark the same change in multiple places — they share a single report entry.
                 AI-detected boxes can be <strong>clicked to select</strong>, then <strong>dragged to reposition</strong> or resized via corner handles.
               </p>
@@ -1325,7 +1325,7 @@ const PreviewPage = () => {
                 ))}
               </div>
 
-              {/* Draw mode toggle — only shown when NOT in add-location mode */}
+              {/* Edit mode toggle — only shown when NOT in add-location mode */}
               {!activeGroupId && (
                 <button
                   onClick={() => setIsDrawingMode(m => !m)}
@@ -1334,10 +1334,10 @@ const PreviewPage = () => {
                       ? 'bg-red-600 text-white border-red-600 shadow-md ring-2 ring-red-300'
                       : 'bg-blue-600 text-white border-blue-600 hover:bg-blue-700 hover:border-blue-700'
                   }`}
-                  title={isDrawingMode ? 'Click to exit draw mode' : 'Click to enable draw mode — stays on until you turn it off'}
+                  title={isDrawingMode ? 'Click to exit edit mode' : 'Click to enable edit mode — stays on until you turn it off'}
                 >
                   <Pencil className="w-3.5 h-3.5" />
-                  {isDrawingMode ? 'Exit Draw Mode' : 'Draw Mode'}
+                  {isDrawingMode ? 'Exit Edit Mode' : 'Edit Mode'}
                 </button>
               )}
             </div>
@@ -1369,14 +1369,14 @@ const PreviewPage = () => {
             </div>
           )}
 
-          {/* Regular draw mode banner */}
+          {/* Regular edit mode banner */}
           {isDrawingMode && !activeGroupId && (
             <div className="bg-blue-50 border border-blue-300 px-5 py-2.5 flex items-center justify-between">
               <div className="flex items-center gap-2 text-blue-700">
                 <Pencil className="w-4 h-4 animate-pulse" />
-                <span className="text-sm font-bold">Draw Mode is ON</span>
+                <span className="text-sm font-bold">Edit Mode is ON</span>
                 <span className="text-xs font-normal text-blue-500">
-                  — Click and drag on either label image to draw a bounding box. Draw mode stays active until you turn it off.
+                  — Click and drag on either label image to draw a bounding box. Edit mode stays active until you turn it off.
                 </span>
               </div>
               <button

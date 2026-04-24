@@ -397,7 +397,7 @@ const PanelContent = (props: PanelContentProps) => {
               <p className="text-xs text-gray-400 leading-relaxed">
                 No annotations yet
                 <br />
-                <span className="text-gray-300">Enable Draw Mode to start</span>
+                <span className="text-gray-300">Enable Edit Mode to start</span>
               </p>
             </div>
           ) : (
@@ -507,7 +507,7 @@ const CollapsedView = ({ hasAnalysis, hasAnnotations, onExpand }: CollapsedViewP
 
 const DesktopPanel = (props: ReportDetailsPanelProps) => {
   const { isCollapsed, width, toggleCollapse, setWidth } = useSidebarState(
-    'labelx-review-panel',
+    'labelix-review-panel',
     { min: PANEL_MIN_WIDTH, max: PANEL_MAX_WIDTH, defaultWidth: 320 },
   );
 

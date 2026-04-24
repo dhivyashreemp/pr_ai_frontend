@@ -611,7 +611,7 @@ const ReportPageInner = () => {
     setDiscardedUnexpectedIds((prev) => prev.includes(id) ? prev : [...prev, id]);
 
   return (
-    <div className="min-h-screen bg-white flex flex-col">
+    <div className="h-screen bg-white flex flex-col overflow-hidden">
       <ReportHeader
         activeScenario={activeScenario}
         onScenarioChange={setActiveScenario}

@@ -72,7 +72,7 @@ const useThumbnailUrl = (
 const CardThumbnail = ({ file, url }: { file: File | null; url: string | null }) => {
   const { url: resolved, error } = useThumbnailUrl(file, url);
   const shell =
-    "h-40 w-full bg-white flex items-center justify-center rounded-t-lg overflow-hidden";
+    "h-40 w-full bg-white flex items-center justify-center overflow-hidden";
   if (error) {
     return (
       <div className={`${shell} text-[10px] uppercase tracking-widest text-gray-400`}>PDF</div>
@@ -142,7 +142,7 @@ const CardFooter = ({
 }) => {
   const display = formatDisplayName(filename);
   return (
-    <div className="bg-gray-50 px-2 py-1.5 border-t border-gray-100 rounded-b-lg flex items-center justify-between gap-2">
+    <div className="bg-gray-50 px-2 py-1.5 border-t border-gray-100 flex items-center justify-between gap-2">
       <div className="flex items-center gap-1.5 flex-1 min-w-0">
         {dotColor && <span className={`w-2 h-2 rounded-full flex-shrink-0 ${dotColor}`} />}
         <div className="text-[11px] font-medium text-gray-600 truncate min-w-0" title={filename}>

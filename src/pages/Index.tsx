@@ -1045,7 +1045,7 @@ const Index = () => {
   }, [adjustedAnnotations, analysisRun, lrfOnly, apiResults, selectedResultIndex]);
 
   return (
-    <div className="min-h-screen bg-[#f8f9fa] flex flex-col">
+    <div className="h-screen bg-[#f8f9fa] flex flex-col overflow-hidden">
 
       <AnalysisProgressModal isOpen={loading} />
 
@@ -1063,7 +1063,7 @@ const Index = () => {
           </button>
           <div className="flex items-center gap-2">
             <ScanLine size={18} />
-            <span className="text-sm font-bold tracking-tight uppercase">LabelX Proofreading</span>
+            <span className="text-sm font-bold tracking-tight uppercase">LabelIX Proofreading</span>
             <span className="text-white/30 mx-1">|</span>
             <span className="text-xs text-white/70 font-medium">{formData ? "Proofing Analysis" : "Comparison Analysis"}</span>
           </div>
@@ -1158,10 +1158,12 @@ const Index = () => {
             annotations={
               currentAnnotations.filter((_: any, i: number) => !discardedAnnotationBoxIds.includes(`annotation-${i}`))
             }
-            requirementBoxes={[]}
-            onBoxesChange={undefined}
-            onAddBox={undefined}
-            onDeleteBox={undefined}
+            requirementBoxes={(adjustedBoxes.length > 0 ? adjustedBoxes : (requirementBoxes ?? [])).map(
+              ({ satisfied: _, ...rest }) => rest as RequirementBox
+            )}
+            onBoxesChange={(boxes) => setAdjustedBoxes(boxes)}
+            onAddBox={handleAddBox}
+            onDeleteBox={handleDeleteBox}
             onAnnotationsChange={setAdjustedAnnotations}
           />
 
@@ -1233,7 +1235,7 @@ const Index = () => {
           className="flex items-center gap-2 bg-[#d51900] text-white px-8 py-3 text-[13px] font-bold uppercase tracking-widest hover:bg-[#b01300] transition-colors rounded-lg shadow-md"
         >
           <FileText className="w-4 h-4" />
-          Preview &amp; Report
+          Review &amp; Edit
         </button>
       </div>
     </div>
