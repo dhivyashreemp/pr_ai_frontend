@@ -66,7 +66,9 @@ interface DrawableImagePanelProps {
   onAdjustAiBox?: (id: string, pos: { top: number; left: number; width: number; height: number }) => void;
   highlightedGroupId?: string | null;
   isReadOnly?: boolean;
-  initialAiOverrides?: Record<string, { top: number; left: number; width: number; height: number }>;
+  initialAiOverrides?: Record<string, { top: number; left: number;
+    
+    width: number; height: number }>;
   transformRef?: React.RefObject<any>;
   onTransformed?: (_: any, state: { scale: number; positionX: number; positionY: number }) => void;
 }
