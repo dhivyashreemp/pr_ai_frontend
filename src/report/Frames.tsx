@@ -141,59 +141,36 @@ export function FrameC({ data, formData, summaryData, satisfiedItems, missingIte
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Scene No Change — Label reviewed with no changes identified
-//   Single page: confirmation banner + full label image
+//   Single page: requirement summary + centered no-change status + full label image
 // ─────────────────────────────────────────────────────────────────────────────
 export function FrameNoChange({ labelName, labelUrl, baseLabelUrl, baseLabelName, crNumber, sku }: NoChangeProps) {
   const { theme } = useTheme();
 
   return (
     <div className="report-section space-y-6">
-      {/* Confirmation banner */}
-      <div className="bg-white border border-gray-300 p-5">
-        <div className="flex items-center justify-between mb-4">
-          <div className="space-y-1">
-            {(crNumber || sku) && (
-              <div className="flex items-center gap-4 text-xs text-gray-500">
-                {crNumber && <span>CR: <span className="font-bold text-gray-700">{crNumber}</span></span>}
-                {sku      && <span>SKU: <span className="font-bold text-gray-700">{sku}</span></span>}
-              </div>
-            )}
-            {labelName && (
-              <div className="text-sm font-semibold text-gray-800">{labelName}</div>
-            )}
-          </div>
-          {/* No Change badge */}
-          <div
-            className="flex items-center gap-2 px-4 py-2 border text-sm font-bold uppercase tracking-widest"
-            style={{ backgroundColor: `${theme.statusColors.added}15`, color: theme.statusColors.added, borderColor: `${theme.statusColors.added}60` }}
-          >
-            <svg className="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2.5}>
-              <path d="M20 6L9 17l-5-5" strokeLinecap="square" strokeLinejoin="miter" />
-            </svg>
-            No Change
-          </div>
-        </div>
+      {/* Requirement summary placeholder */}
+      <MissingChanges />
 
-        {/* Horizontal rule with status text */}
-        <div className="flex items-center gap-3 my-4">
-          <div className="flex-1 h-px bg-gray-200" />
-          <span className="text-[10px] uppercase tracking-widest text-gray-400 font-bold">Label reviewed — no changes identified</span>
-          <div className="flex-1 h-px bg-gray-200" />
+      {/* No Change summary panel */}
+      <div className="w-full border border-gray-300 rounded-none bg-[#ecf7ee] px-6 py-6 text-center"
+        style={{ borderColor: `${theme.statusColors.added}30` }}
+      >
+        <div
+          className="inline-flex items-center justify-center gap-3 rounded-none border px-4 py-2 text-sm font-semibold uppercase tracking-widest"
+          style={{ backgroundColor: `${theme.statusColors.added}15`, color: theme.statusColors.added, borderColor: `${theme.statusColors.added}60` }}
+        >
+          <svg className="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2.5}>
+            <path d="M20 6L9 17l-5-5" strokeLinecap="square" strokeLinejoin="miter" />
+          </svg>
+          No Change
         </div>
-
-        {/* Inspection summary row */}
-        <div className="grid grid-cols-3 gap-4 text-center">
-          {[
-            { label: 'Add',    count: 0, color: theme.statusColors.added },
-            { label: 'Remove', count: 0, color: theme.statusColors.deleted },
-            { label: 'Modify', count: 0, color: theme.statusColors.modified },
-          ].map(({ label, count, color }) => (
-            <div key={label} className="border border-gray-200 py-3">
-              <div className="text-lg font-bold" style={{ color }}>{count}</div>
-              <div className="text-[10px] uppercase tracking-wide text-gray-500">{label}</div>
-            </div>
-          ))}
-        </div>
+        <p className="mt-3 text-sm text-gray-600">Label reviewed — no changes identified</p>
+        {(crNumber || sku) && (
+          <div className="mt-3 text-xs text-gray-500">
+            {crNumber && <span>CR: <span className="font-semibold text-gray-700">{crNumber}</span></span>}
+            {crNumber && sku && <span className="mx-2">|</span>}
+          </div>
+        )}
       </div>
 
       {/* Label images */}

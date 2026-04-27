@@ -110,9 +110,14 @@ export function ReportHeader({
         @bottom-right  { content: "${dateStr} ${timeStr}"; font-size: 7pt; color: #888; font-family: sans-serif; }
       }
       @media print {
+        html, body, .h-screen, .flex, .flex-1, .overflow-hidden, .overflow-y-auto {
+          height: auto !important;
+          min-height: auto !important;
+          overflow: visible !important;
+        }
         body { margin: 0; background: #fff !important; }
 
-        .report-content-wrap { max-width: none !important; padding-left: 0 !important; padding-right: 0 !important; }
+        .report-content-wrap { max-width: none !important; padding: 0 !important; margin: 0 auto !important; overflow: visible !important; }
 
         .report-banner {
           padding: 22px 28px !important;
@@ -140,7 +145,8 @@ export function ReportHeader({
 
         .report-metadata-bar { font-size: 8.5pt !important; }
 
-        .report-page-break { page-break-before: always !important; break-before: page !important; }
+        .report-page-break { page-break-before: always !important; break-before: page !important; display: block !important; }
+        .report-page-break:last-of-type { page-break-after: auto !important; break-after: auto !important; }
 
         .report-label-page {
           page-break-inside: avoid !important;
@@ -154,7 +160,8 @@ export function ReportHeader({
           margin: 0 auto !important;
         }
 
-        .report-section { page-break-inside: avoid; }
+        .report-section { page-break-inside: avoid !important; break-inside: avoid !important; margin-bottom: 0 !important; }
+        .report-section:last-of-type { page-break-after: auto !important; }
         .report-section-header { page-break-after: avoid; }
 
         table { width: 100% !important; font-size: 8pt !important; }
@@ -169,7 +176,7 @@ export function ReportHeader({
     document.head.appendChild(style);
     const prevTitle = document.title;
     document.title = reportId;
-    window.print();
+    window.scrollTo(0, 0);
     document.title = prevTitle;
     document.head.removeChild(style);
   };
