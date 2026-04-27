@@ -554,6 +554,7 @@ function PlacementOverlay({
   onGhostMove: (pos: { x: number; y: number } | null) => void;
 }) {
   const [draft, setDraft] = useState<PlacementDraft | null>(null);
+  const [cursorPos, setCursorPos] = useState<{ x: number; y: number } | null>(null);
 
   const getNormalizedPoint = useCallback((clientX: number, clientY: number) => {
     const rect = wrapperRef.current?.getBoundingClientRect();
@@ -663,13 +664,38 @@ function PlacementOverlay({
       onPointerMove={(e) => {
         const point = getNormalizedPoint(e.clientX, e.clientY);
         if (!point) return;
+        setCursorPos({ x: point.x, y: point.y });
         const nextDraft = draft
           ? { ...draft, currentX: point.x, currentY: point.y }
           : { startX: point.x, startY: point.y, currentX: point.x, currentY: point.y };
         if (draft) setDraft(nextDraft);
         previewPlacement(nextDraft);
       }}
+      onPointerLeave={() => setCursorPos(null)}
     >
+      {/* Crosshair lines that follow the cursor */}
+      {cursorPos && (
+        <>
+          <div style={{
+            position: "absolute",
+            top: `${cursorPos.y * 100}%`,
+            left: 0, right: 0,
+            height: 0,
+            borderTop: "1px dashed rgba(80,80,80,0.65)",
+            pointerEvents: "none",
+            zIndex: 51,
+          }} />
+          <div style={{
+            position: "absolute",
+            left: `${cursorPos.x * 100}%`,
+            top: 0, bottom: 0,
+            width: 0,
+            borderLeft: "1px dashed rgba(80,80,80,0.65)",
+            pointerEvents: "none",
+            zIndex: 51,
+          }} />
+        </>
+      )}
       {/* Instruction banner */}
       <div style={{
         position: "absolute", top: 8, left: "50%",

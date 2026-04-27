@@ -277,8 +277,32 @@ function _makePrintHandler(reportId: string): () => void {
     document.head.appendChild(style);
     const prevTitle = document.title;
     document.title = reportId;
+
+    // Temporarily expand all overflow-clipped containers so the browser can
+    // lay out the full content across pages instead of clipping to the
+    // visible scroll viewport.
+    const clipped = Array.from(
+      document.querySelectorAll<HTMLElement>('.overflow-y-auto,.overflow-hidden,.overflow-auto')
+    );
+    clipped.forEach(el => {
+      el.dataset._printOverflow = el.style.overflow;
+      el.dataset._printHeight   = el.style.height;
+      el.dataset._printMaxH     = el.style.maxHeight;
+      el.style.overflow  = 'visible';
+      el.style.height    = 'auto';
+      el.style.maxHeight = 'none';
+    });
+
     window.scrollTo(0, 0);
     window.print();
+
+    // Restore overflow styles
+    clipped.forEach(el => {
+      el.style.overflow  = el.dataset._printOverflow ?? '';
+      el.style.height    = el.dataset._printHeight   ?? '';
+      el.style.maxHeight = el.dataset._printMaxH     ?? '';
+    });
+
     document.title = prevTitle;
     document.head.removeChild(style);
   };
@@ -599,8 +623,28 @@ const ReportPageInner = () => {
     document.head.appendChild(style);
     const prevTitle = document.title;
     document.title = computedReportId;
+
+    const clipped = Array.from(
+      document.querySelectorAll<HTMLElement>('.overflow-y-auto,.overflow-hidden,.overflow-auto')
+    );
+    clipped.forEach(el => {
+      el.dataset._printOverflow = el.style.overflow;
+      el.dataset._printHeight   = el.style.height;
+      el.dataset._printMaxH     = el.style.maxHeight;
+      el.style.overflow  = 'visible';
+      el.style.height    = 'auto';
+      el.style.maxHeight = 'none';
+    });
+
     window.scrollTo(0, 0);
     window.print();
+
+    clipped.forEach(el => {
+      el.style.overflow  = el.dataset._printOverflow ?? '';
+      el.style.height    = el.dataset._printHeight   ?? '';
+      el.style.maxHeight = el.dataset._printMaxH     ?? '';
+    });
+
     document.title = prevTitle;
     document.head.removeChild(style);
   };

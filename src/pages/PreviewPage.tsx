@@ -87,6 +87,7 @@ function DrawableImagePanel({
   const localPanRef = useRef<any>(null);
   const panRef = transformRef ?? localPanRef;
   const [draw, setDraw] = useState<DrawState | null>(null);
+  const [cursorPos, setCursorPos] = useState<{ x: number; y: number } | null>(null);
 
   // Duplicate / selection state
   const [selectedBoxId, setSelectedBoxId] = useState<string | null>(null);
@@ -209,8 +210,9 @@ function DrawableImagePanel({
   };
 
   const handlePointerMove = (e: React.PointerEvent<HTMLDivElement>) => {
-    if (!draw) return;
     const { x, y } = toPercent(e.clientX, e.clientY);
+    if (isDrawingMode) setCursorPos({ x, y });
+    if (!draw) return;
     setDraw(d => d ? { ...d, curX: x, curY: y } : null);
   };
 
@@ -280,8 +282,8 @@ function DrawableImagePanel({
           minScale={0.5}
           maxScale={4}
           initialScale={1}
-          disabled={isDrawingMode || !!activeGroupId}
           panning={{ disabled: isDrawingMode || !!activeGroupId || !!placing }}
+          wheel={{ step: 0.05, activationKeys: ['Control'] }}
           doubleClick={{ disabled: true }}
           onTransformed={onTransformed}
         >
@@ -296,9 +298,26 @@ function DrawableImagePanel({
               onPointerDown={isReadOnly ? undefined : handlePointerDown}
               onPointerMove={isReadOnly ? undefined : handlePointerMove}
               onPointerUp={isReadOnly ? undefined : handlePointerUp}
+              onPointerLeave={() => setCursorPos(null)}
               onClick={isReadOnly ? undefined : () => { if (!isDrawingMode && !placing) setSelectedBoxId(null); }}
             >
               <img src={src} alt={title} className="w-full h-auto block" draggable={false} />
+
+              {/* Crosshair — only visible in drawing mode */}
+              {isDrawingMode && !isReadOnly && cursorPos && (
+                <>
+                  <div style={{
+                    position: 'absolute', top: `${cursorPos.y}%`, left: 0, right: 0,
+                    height: 0, borderTop: '1px dashed rgba(60,60,60,0.6)',
+                    pointerEvents: 'none', zIndex: 48,
+                  }} />
+                  <div style={{
+                    position: 'absolute', left: `${cursorPos.x}%`, top: 0, bottom: 0,
+                    width: 0, borderLeft: '1px dashed rgba(60,60,60,0.6)',
+                    pointerEvents: 'none', zIndex: 48,
+                  }} />
+                </>
+              )}
 
               {/* AI / requirement boxes — selectable, draggable, resizable */}
         {aiBoxes.map((box) => {
@@ -970,13 +989,13 @@ const PreviewPage = () => {
     if (isSyncing.current) return;
     isSyncing.current = true;
     newPanRef.current?.setTransform(s.positionX, s.positionY, s.scale, 0);
-    isSyncing.current = false;
+    setTimeout(() => { isSyncing.current = false; }, 0);
   }, []);
   const handleNewTransformed = useCallback((_: any, s: { scale: number; positionX: number; positionY: number }) => {
     if (isSyncing.current) return;
     isSyncing.current = true;
     basePanRef.current?.setTransform(s.positionX, s.positionY, s.scale, 0);
-    isSyncing.current = false;
+    setTimeout(() => { isSyncing.current = false; }, 0);
   }, []);
 
   /**
