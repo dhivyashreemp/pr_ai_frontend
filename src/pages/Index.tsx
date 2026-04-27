@@ -137,6 +137,11 @@ const Index = () => {
   const [adjustedAnnotations, setAdjustedAnnotations] = useState<Annotation[]>(
     location.state?.annotations ?? []
   );
+  // Track whether user has intentionally edited annotations — even if the array becomes empty,
+  // we should NOT fall back to API results. This prevents deleted bboxes from reappearing.
+  const [hasUserEditedAnnotations, setHasUserEditedAnnotations] = useState<boolean>(
+    (location.state?.annotations?.length ?? 0) > 0
+  );
   const [basePreviewUrls, setBasePreviewUrls] = useState<string[]>(
     location.state?.expandedBasePreviewUrls || []
   );
@@ -228,6 +233,7 @@ const Index = () => {
     }
     setAdjustedBoxes([]);
     setAdjustedAnnotations([]);
+    setHasUserEditedAnnotations(false);
   }, [selectedResultIndex]);
 
   // Derived: URL for the base label of the currently selected pair
@@ -323,6 +329,7 @@ const Index = () => {
         setApiResults(processedResults);
         setSelectedResultIndex(0);
         setAdjustedAnnotations([]);
+        setHasUserEditedAnnotations(false);
         setAnalysisRun(true);
       }
     } catch (error) {
@@ -889,6 +896,24 @@ const Index = () => {
     });
   }, [requirementBoxes]);
 
+  // Filter missingItems and satisfiedItems based on which requirement boxes are still visible.
+  // When a user deletes a requirement box from VisualDiffViewer, the corresponding row in
+  // the inspection details should also disappear.
+  const visibleRequirementBoxIds = useMemo(() => {
+    const current = adjustedBoxes.length > 0 ? adjustedBoxes : (requirementBoxes ?? []);
+    return new Set(current.map(b => b.id));
+  }, [adjustedBoxes, requirementBoxes]);
+
+  const filteredMissingItems = useMemo(
+    () => missingItems,  // Missing items have no boxes, so nothing to filter
+    [missingItems]
+  );
+
+  const filteredSatisfiedItems = useMemo(
+    () => satisfiedItems.filter(item => visibleRequirementBoxIds.has(item.id)),
+    [satisfiedItems, visibleRequirementBoxIds]
+  );
+
   const [discardedUnexpectedIds] = useState<Set<string>>(
     new Set(location.state?.discardedUnexpectedIds ?? [])
   );
@@ -904,7 +929,8 @@ const Index = () => {
   // bounding boxes. Deduplication is category-aware: boxes of different categories
   // (e.g. Text vs Barcode/DataMatrix) are never merged even when spatially close.
   const currentAnnotations = useMemo<any[]>(() => {
-    if (adjustedAnnotations.length > 0) return adjustedAnnotations;
+    // If user has intentionally edited annotations (even if array is now empty), use them
+    if (hasUserEditedAnnotations) return adjustedAnnotations;
     if (!analysisRun || lrfOnly || apiResults.length === 0) return [];
     const result = apiResults[selectedResultIndex];
     if (!result) return [];
@@ -1055,7 +1081,7 @@ const Index = () => {
     }
 
     return deduped;
-  }, [adjustedAnnotations, analysisRun, lrfOnly, apiResults, selectedResultIndex]);
+  }, [adjustedAnnotations, analysisRun, lrfOnly, apiResults, selectedResultIndex, hasUserEditedAnnotations]);
 
   return (
     <div className="h-screen bg-[#f8f9fa] flex flex-col overflow-hidden">
@@ -1125,7 +1151,7 @@ const Index = () => {
           childPreviewUrls={childPreviewUrls}
           apiResults={apiResults}
           selectedIndex={selectedResultIndex}
-          onSelectChild={(i) => { setSelectedResultIndex(i); setAdjustedAnnotations([]); }}
+          onSelectChild={(i) => { setSelectedResultIndex(i); setAdjustedAnnotations([]); setHasUserEditedAnnotations(false); }}
           analysisRun={analysisRun}
         />
 
@@ -1177,7 +1203,10 @@ const Index = () => {
             onBoxesChange={(boxes) => setAdjustedBoxes(boxes)}
             onAddBox={handleAddBox}
             onDeleteBox={handleDeleteBox}
-            onAnnotationsChange={setAdjustedAnnotations}
+            onAnnotationsChange={(annotations) => { 
+              setAdjustedAnnotations(annotations); 
+              setHasUserEditedAnnotations(true);
+            }}
           />
 
           {/* ── Inspection Summary + Details ── */}
@@ -1191,8 +1220,8 @@ const Index = () => {
                 ? (validatedParsedItems ?? apiResults[selectedResultIndex]?.parsedItems ?? [])
                 : undefined
             }
-            missingItems={missingItems}
-            satisfiedItems={satisfiedItems}
+            missingItems={filteredMissingItems}
+            satisfiedItems={filteredSatisfiedItems}
             yoloReview={apiResults[selectedResultIndex]?.yolo_review ?? []}
             childFields={apiResults[selectedResultIndex]?.child_fields ?? {}}
           />
@@ -1218,8 +1247,8 @@ const Index = () => {
             // Pass ALL validated items (valid + invalid).
             // ReportPage splits them: isValid===true → Expected Changes, isValid===false → Unexpected Changes.
             parsedItems: validatedParsedItems ?? (analysisRun && apiResults.length > 0 ? apiResults[selectedResultIndex]?.parsedItems : []) ?? [],
-            missingItems,
-            satisfiedItems,
+            missingItems: filteredMissingItems,
+            satisfiedItems: filteredSatisfiedItems,
             annotations: currentAnnotations,
             // User-adjusted requirement box positions (proof-request mode only)
             requirementBoxes: adjustedBoxes.length > 0 ? adjustedBoxes : (requirementBoxes ?? []),
