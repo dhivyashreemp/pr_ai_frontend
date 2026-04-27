@@ -425,8 +425,13 @@ const ReportPageInner = () => {
   const summaryData           = buildSummaryData(requirements, allUnexpected);
 
   // Annotation boxes for the label comparison images
-  const newBoxes     = buildAnnotationBoxes(annotations, formData ? reqBoxes : undefined, userBoxesNew)
-    .filter((box) => !box.linkedRowId || !discardedUnexpectedIds.includes(box.linkedRowId));
+  const newBoxes = buildAnnotationBoxes(annotations, formData ? reqBoxes : undefined, userBoxesNew)
+    .filter((box) => !box.linkedRowId || !discardedUnexpectedIds.includes(box.linkedRowId))
+    .map(box => {
+      if (!box.linkedRowId) return box;
+      const idx = allUnexpected.findIndex(uc => String(uc.id) === box.linkedRowId);
+      return idx >= 0 ? { ...box, rowNumber: idx + 1 } : box;
+    });
   const currentBoxes = buildAnnotationBoxes([], undefined, userBoxesBase)
     .filter((box) => !box.linkedRowId || !discardedUnexpectedIds.includes(box.linkedRowId));
 
@@ -818,8 +823,10 @@ const ReportPageInner = () => {
               <div className="flex-1 overflow-y-auto report-content-wrap px-8 py-6 pb-24">
                 {!hasChanges ? (
                   <FrameNoChange
-                    labelName={childFileName || baseFileName || undefined}
-                    labelUrl={childUrl || baseUrl || undefined}
+                    labelName={childFileName || undefined}
+                    labelUrl={childUrl || undefined}
+                    baseLabelName={baseFileName || undefined}
+                    baseLabelUrl={baseUrl || undefined}
                     crNumber={reportData.crNumber || undefined}
                     sku={reportData.sku || undefined}
                   />
@@ -855,8 +862,10 @@ const ReportPageInner = () => {
         <div className="flex-1 report-content-wrap max-w-[1600px] mx-auto px-8 py-6 pb-24">
           {!hasChanges ? (
             <FrameNoChange
-              labelName={childFileName || baseFileName || undefined}
-              labelUrl={childUrl || baseUrl || undefined}
+              labelName={childFileName || undefined}
+              labelUrl={childUrl || undefined}
+              baseLabelName={baseFileName || undefined}
+              baseLabelUrl={baseUrl || undefined}
               crNumber={reportData.crNumber || undefined}
               sku={reportData.sku || undefined}
             />

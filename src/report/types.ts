@@ -13,6 +13,7 @@ export interface DrawnBox {
   disposition?: 'Expected' | 'Unexpected';
   groupId?: string;
   linkedRowId?: string;
+  rowNumber?: number;
 }
 
 export type RequirementStatus = 'Match' | 'Mismatch';

@@ -118,10 +118,32 @@ function LabelBox({
                   left:   `${box.left}%`,
                   width:  `${box.width}%`,
                   height: `${box.height}%`,
-                  border: `1px solid ${color}80`,
-                  backgroundColor: `${color}12`,
+                  border: `1.5px solid ${color}`,
+                  backgroundColor: `${color}22`,
                 }}
-              />
+              >
+                {box.rowNumber != null && (
+                  <div
+                    style={{
+                      position: 'absolute',
+                      top: -1,
+                      left: -1,
+                      background: color,
+                      color: 'white',
+                      fontSize: '7px',
+                      fontWeight: 700,
+                      fontFamily: 'sans-serif',
+                      lineHeight: '11px',
+                      padding: '0 3px',
+                      borderRadius: '2px 2px 2px 0',
+                      whiteSpace: 'nowrap',
+                      pointerEvents: 'none',
+                    }}
+                  >
+                    {box.rowNumber}
+                  </div>
+                )}
+              </div>
             );
           })}
         </div>
