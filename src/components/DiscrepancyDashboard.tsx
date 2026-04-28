@@ -547,50 +547,7 @@ const DiscrepancyDashboard = ({ formData, passedDiscrepancies, missingItems = []
 
   return (
     <div className="space-y-4">
-      {/* Scenario 2 Top Banner for Form Data */}
-      {formData && (
-        <div 
-          onClick={() => setIsModalOpen(true)}
-          className="bg-[#fce8e6] border border-[#D51900]/20 rounded-md p-4 mb-4 flex justify-between items-center shadow-sm cursor-pointer hover:bg-[#fae1de] transition-colors group"
-        >
-          <div>
-            <span className="text-xs font-bold text-[#D51900] uppercase tracking-wider mb-1 block group-hover:underline">Context: Form Submitted (Click to View)</span>
-            <div className="text-sm text-[#333333]">
-              Comparing against <span className="font-semibold">CR: {formData.metadata.cr_number || 'N/A'}</span> 
-              {" "}({formData.metadata.product_name || 'N/A'})
-            </div>
-          </div>
-          <div className="text-xs px-3 py-1 bg-white text-[#D51900] rounded-full border border-[#D51900]/20 font-semibold shadow-sm group-hover:bg-[#D51900] group-hover:text-white transition-colors">
-            Read-Only Context Active
-          </div>
-        </div>
-      )}
 
-      {/* Modal Overlay */}
-      {isModalOpen && formData && (
-        <div 
-          className="fixed inset-0 bg-black/40 backdrop-blur-sm z-50 flex items-center justify-center p-4"
-          onClick={() => setIsModalOpen(false)}
-        >
-          <div 
-            className="bg-white w-full max-w-3xl max-h-[90vh] overflow-y-auto rounded-xl shadow-2xl relative flex flex-col"
-            onClick={e => e.stopPropagation()} // exclude background click from closing
-          >
-            <div className="sticky top-0 bg-white border-b border-gray-200 p-4 flex justify-between items-center z-10">
-              <h2 className="text-xl font-bold text-[#D51900]">Proof Request Context</h2>
-              <button 
-                onClick={() => setIsModalOpen(false)} 
-                className="text-gray-500 hover:text-black p-1 hover:bg-gray-100 rounded"
-              >
-                <X className="w-5 h-5" />
-              </button>
-            </div>
-            <div className="p-8 bg-[#F4F4F4]/30 min-h-0 flex-1">
-              <FormDataContextView formData={formData} />
-            </div>
-          </div>
-        </div>
-      )}
 
       <InspectionSummary items={displayItems} formData={formData} missingItems={missingItems} satisfiedItems={satisfiedItems} />
       <div className="bg-card border border-border">

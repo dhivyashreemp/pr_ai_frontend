@@ -124,7 +124,7 @@ const FormSummaryPage = () => {
   };
 
   return (
-    <div className="min-h-screen bg-[#f5f5f5]">
+    <div className="min-h-screen bg-[#f5f5f5] flex flex-col">
       {/* Navbar */}
       <nav className="bg-primary text-white px-6 py-0 flex items-center justify-between shadow-md sticky top-0 z-40" style={{ minHeight: 52 }}>
         <div className="flex items-center gap-4 h-[52px]">
@@ -150,7 +150,7 @@ const FormSummaryPage = () => {
         </div>
       </nav>
 
-      <div className="mx-auto max-w-5xl px-6 py-8 space-y-6">
+      <div className="flex-1 w-full mx-auto max-w-5xl px-6 py-8 space-y-6 pb-24">
         {/* Page title */}
         <div className="flex items-start justify-between">
           <div>
@@ -313,33 +313,7 @@ const FormSummaryPage = () => {
               </div>
             </div>
 
-            {/* Action buttons */}
-            <div className="bg-white border border-gray-200 shadow-sm px-6 py-5 space-y-5 text-left">
-              <div className="text-[11px] font-bold uppercase tracking-[0.1em] text-[#94a3b8] mb-1">Actions</div>
-              <button
-                onClick={handleSubmit}
-                disabled={submitting || childFile.length === 0}
-                className={`w-full flex items-center justify-center gap-3 py-3.5 text-[14px] font-bold uppercase tracking-widest transition-all ${(!submitting && childFile.length > 0)
-                  ? "bg-primary text-white hover:opacity-90 shadow-sm"
-                  : "bg-[#f1f5f9] text-[#94a3b8] cursor-not-allowed"
-                  }`}
-              >
-                {submitting ? "Saving…" : "Submit for Analysis"}
-                <ArrowRight className="h-4 w-4" />
-              </button>
-              {childFile.length === 0 && (
-                <p className="text-[13px] text-[#94a3b8] text-center">
-                  Upload the new version label to enable submission
-                </p>
-              )}
-              <button
-                onClick={() => navigate(`/form?flow=${flow}`, { state: { formData } })}
-                className="w-full flex items-center justify-center gap-3 py-3.5 text-[14px] font-bold uppercase tracking-[0.05em] border border-[#e2e8f0] text-[#0f172a] hover:bg-slate-50 transition-colors"
-              >
-                <ArrowLeft className="h-4 w-4" />
-                Back to Form
-              </button>
-            </div>
+
 
             {/* Info card */}
             <div className="bg-blue-50 border border-blue-200 px-4 py-3">
@@ -351,6 +325,40 @@ const FormSummaryPage = () => {
               </ul>
             </div>
           </div>
+        </div>
+      </div>
+
+      {/* Sticky footer */}
+      <div className="sticky bottom-0 left-0 right-0 bg-white border-t border-gray-200 shadow-[0_-4px_12px_rgba(0,0,0,0.06)] px-8 py-3 flex items-center justify-between z-10 shrink-0">
+        <div></div>
+
+        <div className="flex items-center gap-4">
+          <button
+            onClick={() => navigate(`/form?flow=${flow}`, { state: { formData } })}
+            className="text-[13px] font-bold uppercase tracking-widest text-slate-400 hover:text-slate-700 transition-colors mr-2"
+          >
+            BACK
+          </button>
+          {childFile.length === 0 ? (
+            <span className="text-[12px] text-[#94a3b8] font-medium hidden sm:block">
+              Upload the new version label to enable submission
+            </span>
+          ) : (parsedChanges.length === 0 && childFile.length > 1) ? (
+            <span className="text-[12px] text-red-500 font-medium hidden sm:block">
+              Cannot upload multiple new version labels without filling the form
+            </span>
+          ) : null}
+          <button
+            onClick={handleSubmit}
+            disabled={submitting || childFile.length === 0 || (parsedChanges.length === 0 && childFile.length > 1)}
+            className={`flex items-center gap-2 px-8 py-2.5 text-[13px] font-bold uppercase tracking-widest transition-all rounded-lg shadow-sm ${(!submitting && childFile.length > 0 && !(parsedChanges.length === 0 && childFile.length > 1))
+              ? "bg-primary text-white hover:opacity-90"
+              : "bg-[#f1f5f9] text-[#94a3b8] cursor-not-allowed"
+              }`}
+          >
+            {submitting ? "Saving…" : "Submit for Analysis"}
+            <ArrowRight className="h-4 w-4" />
+          </button>
         </div>
       </div>
     </div>

@@ -1,7 +1,6 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useUser } from '@/context/UserContext';
-import { toast } from 'sonner';
 
 const MicrosoftLogo = () => (
   <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 21 21" className="w-5 h-5 mr-3">
@@ -18,14 +17,20 @@ const LoginPage = () => {
   const { setUser } = useUser();
   const [isLoading, setIsLoading] = useState(false);
 
+  useEffect(() => {
+    const params = new URLSearchParams(window.location.search);
+    const token = params.get('token');
+    if (token) {
+      localStorage.setItem('token', token);
+      const payload = JSON.parse(atob(token.split('.')[1]));
+      setUser({ name: payload.name, role: payload.role });
+      navigate('/');
+    }
+  }, []);
+
   const handleLogin = () => {
     setIsLoading(true);
-    // Simulate login delay
-    setTimeout(() => {
-      setUser({ name: 'Admin User', role: 'admin' });
-      toast.success('Successfully signed in with Microsoft');
-      navigate('/');
-    }, 1200);
+    window.location.href = `${import.meta.env.VITE_API_URL}/auth/login`;
   };
 
   return (

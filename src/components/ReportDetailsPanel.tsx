@@ -508,7 +508,7 @@ const CollapsedView = ({ hasAnalysis, hasAnnotations, onExpand }: CollapsedViewP
 const DesktopPanel = (props: ReportDetailsPanelProps) => {
   const { isCollapsed, width, toggleCollapse, setWidth } = useSidebarState(
     'labelix-review-panel',
-    { min: PANEL_MIN_WIDTH, max: PANEL_MAX_WIDTH, defaultWidth: 320 },
+    { min: PANEL_MIN_WIDTH, max: PANEL_MAX_WIDTH, defaultWidth: 320, defaultCollapsed: true, forceClosedOnMount: true },
   );
 
   const panelRef     = useRef<HTMLElement>(null);

@@ -13,6 +13,7 @@ interface LabelSidebarProps {
   selectedIndex: number;
   onSelectChild: (index: number) => void;
   analysisRun: boolean;
+  forceClosedOnMount?: boolean;
 }
 
 /**
@@ -164,8 +165,9 @@ const LabelSidebar = ({
   selectedIndex,
   onSelectChild,
   analysisRun,
+  forceClosedOnMount,
 }: LabelSidebarProps) => {
-  const { isCollapsed, width, toggleCollapse, setWidth } = useSidebarState();
+  const { isCollapsed, width, toggleCollapse, setWidth } = useSidebarState("labelix-sidebar", { forceClosedOnMount });
   const sidebarRef = useRef<HTMLElement>(null);
   const dragWidthRef = useRef<number>(width);
 

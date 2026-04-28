@@ -1161,27 +1161,35 @@ const ReportPageInner = () => {
               )}
             </div>
           </div>
-          <div className="flex items-center gap-2">
-            {isMultiPair && checkedPairIndices.size > 0 && (
+          <div className="flex items-center gap-6">
+            <button
+              onClick={() => navigate(-1)}
+              className="text-[13px] font-bold uppercase tracking-widest text-slate-400 hover:text-slate-700 transition-colors"
+            >
+              BACK
+            </button>
+            <div className="flex items-center gap-2">
+              {isMultiPair && checkedPairIndices.size > 0 && (
+                <button
+                  onClick={() => downloadPairs([...checkedPairIndices])}
+                  className="flex items-center gap-2 bg-[#d51900] hover:bg-red-800 text-white text-sm font-medium px-5 py-2.5 rounded-lg transition-colors"
+                >
+                  <Download className="w-4 h-4" />
+                  Download Selected ({checkedPairIndices.size})
+                </button>
+              )}
               <button
-                onClick={() => downloadPairs([...checkedPairIndices])}
-                className="flex items-center gap-2 bg-[#d51900] hover:bg-red-800 text-white text-sm font-medium px-5 py-2.5 rounded-lg transition-colors"
+                onClick={pairReportData.length >= 1 ? () => downloadPairs([activePairIndex]) : handleDownloadPDF}
+                className={`flex items-center gap-2 text-sm font-medium px-5 py-2.5 rounded-lg transition-colors ${
+                  isMultiPair && checkedPairIndices.size > 0
+                    ? 'border border-gray-300 bg-white hover:bg-gray-50 text-gray-700'
+                    : 'bg-[#d51900] hover:bg-red-800 text-white'
+                }`}
               >
                 <Download className="w-4 h-4" />
-                Download Selected ({checkedPairIndices.size})
+                {isMultiPair && checkedPairIndices.size > 0 ? 'Download This Label' : 'Download PDF'}
               </button>
-            )}
-            <button
-              onClick={pairReportData.length >= 1 ? () => downloadPairs([activePairIndex]) : handleDownloadPDF}
-              className={`flex items-center gap-2 text-sm font-medium px-5 py-2.5 rounded-lg transition-colors ${
-                isMultiPair && checkedPairIndices.size > 0
-                  ? 'border border-gray-300 bg-white hover:bg-gray-50 text-gray-700'
-                  : 'bg-[#d51900] hover:bg-red-800 text-white'
-              }`}
-            >
-              <Download className="w-4 h-4" />
-              {isMultiPair && checkedPairIndices.size > 0 ? 'Download This Label' : 'Download PDF'}
-            </button>
+            </div>
           </div>
         </div>
       ) : (
@@ -1195,13 +1203,21 @@ const ReportPageInner = () => {
               <p className="text-xs text-gray-400">Generated: {generatedDate}</p>
             </div>
           </div>
-          <button
-            onClick={handleDownloadPDF}
-            className="flex items-center gap-2 bg-[#d51900] hover:bg-red-800 text-white text-sm font-medium px-5 py-2.5 rounded-lg transition-colors"
-          >
-            <Download className="w-4 h-4" />
-            Download PDF
-          </button>
+          <div className="flex items-center gap-6">
+            <button
+              onClick={() => navigate(-1)}
+              className="text-[13px] font-bold uppercase tracking-widest text-slate-400 hover:text-slate-700 transition-colors"
+            >
+              BACK
+            </button>
+            <button
+              onClick={handleDownloadPDF}
+              className="flex items-center gap-2 bg-[#d51900] hover:bg-red-800 text-white text-sm font-medium px-5 py-2.5 rounded-lg transition-colors"
+            >
+              <Download className="w-4 h-4" />
+              Download PDF
+            </button>
+          </div>
         </div>
       )}
     </div>

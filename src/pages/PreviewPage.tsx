@@ -285,7 +285,7 @@ function DrawableImagePanel({
           maxScale={4}
           initialScale={1}
           panning={{ disabled: isDrawingMode || !!activeGroupId || !!placing }}
-          wheel={{ step: 0.05, activationKeys: ['Control'] }}
+          wheel={{ step: 0.05 }}
           doubleClick={{ disabled: true }}
           onTransformed={onTransformed}
         >
@@ -1337,29 +1337,44 @@ const PreviewPage = () => {
         </div>
       </nav>
 
-      {/* Metadata bar (form mode only) */}
-      {formData && (
-        <div className="bg-white border-b border-gray-200 px-6 py-2.5 flex items-center justify-between text-xs sticky top-[52px] z-30 shadow-sm">
-          <div className="flex items-center gap-8">
-            <div className="flex items-center gap-2">
-              <span className="text-[#94a3b8] font-bold tracking-widest uppercase text-[10px]">CR Number</span>
-              <span className="text-[#334155] font-semibold text-[13px]">{formData.metadata?.cr_number || '—'}</span>
-            </div>
-            <div className="flex items-center gap-2">
-              <span className="text-[#94a3b8] font-bold tracking-widest uppercase text-[10px]">SKU</span>
-              <span className="text-[#334155] font-semibold text-[13px]">{formData.metadata?.part_number || '—'}</span>
-            </div>
-            <div className="flex items-center gap-2">
-              <span className="text-[#94a3b8] font-bold tracking-widest uppercase text-[10px]">Revision</span>
-              <span className="text-[#334155] font-semibold text-[13px]">{formData.metadata?.label_version || '—'}</span>
-            </div>
-          </div>
-          <div className="flex items-center gap-2">
-            <span className="text-[#94a3b8] font-bold tracking-widest uppercase text-[11px]">Requested By</span>
-            <span className="text-[#334155] font-semibold text-[13px]">{formData.metadata?.requested_by || '—'}</span>
-          </div>
+      {/* Instructions + controls bar (replaces metadata bar) */}
+      <div className="bg-white border-b border-gray-200 px-6 py-3 flex items-center justify-between shadow-sm sticky top-[52px] z-30">
+        <div className="space-y-0.5 max-w-3xl">
+          <h2 className="text-sm font-bold text-gray-800">Preview &amp; Annotate Labels</h2>
+          <p className="text-xs text-gray-500">
+            Toggle <strong>Edit Mode</strong> and click-drag to add annotations.
+            Use <strong>Add Location</strong> on any annotation to mark the same change in multiple places — they share a single report entry.
+            AI-detected boxes can be <strong>clicked to select</strong>, then <strong>dragged to reposition</strong> or resized via corner handles.
+          </p>
         </div>
-      )}
+        <div className="flex items-center gap-4">
+          {/* Legend */}
+          <div className="flex items-center gap-4 text-xs">
+            {(['Modified', 'Added', 'Deleted'] as AnnotationType[]).map((t) => (
+              <div key={t} className="flex items-center gap-1.5">
+                <div className="w-3.5 h-3.5 border-2" style={{ borderColor: TYPE_COLORS[t], backgroundColor: `${TYPE_COLORS[t]}20` }} />
+                <span className="text-gray-600 font-medium">{t}</span>
+              </div>
+            ))}
+          </div>
+
+          {/* Edit mode toggle — only shown when NOT in add-location mode */}
+          {!activeGroupId && (
+            <button
+              onClick={() => setIsDrawingMode(m => !m)}
+              className={`flex items-center gap-1.5 px-4 py-2 text-xs font-bold uppercase tracking-wide border-2 transition-all ${
+                isDrawingMode
+                  ? 'bg-red-600 text-white border-red-600 shadow-md ring-2 ring-red-300'
+                  : 'bg-blue-600 text-white border-blue-600 hover:bg-blue-700 hover:border-blue-700'
+              }`}
+              title={isDrawingMode ? 'Click to exit edit mode' : 'Click to enable edit mode — stays on until you turn it off'}
+            >
+              <Pencil className="w-3.5 h-3.5" />
+              {isDrawingMode ? 'Exit Edit Mode' : 'Edit Mode'}
+            </button>
+          )}
+        </div>
+      </div>
 
       {/* Main content */}
       <main className="flex-1 overflow-hidden flex flex-row">
@@ -1374,49 +1389,12 @@ const PreviewPage = () => {
           selectedIndex={selectedChildIndex}
           onSelectChild={handleSelectChild}
           analysisRun={true}
+          forceClosedOnMount={true}
         />
 
         <div className="flex-1 overflow-y-auto">
         <div className="max-w-[1600px] mx-auto px-6 py-5 space-y-4">
 
-          {/* Instructions + controls bar */}
-          <div className="bg-white border border-gray-200 px-5 py-3.5 flex flex-col gap-2">
-            <div className="space-y-0.5">
-              <h2 className="text-sm font-bold text-gray-800">Preview &amp; Annotate Labels</h2>
-              <p className="text-xs text-gray-500">
-                Toggle <strong>Edit Mode</strong> and click-drag to add annotations.
-                Use <strong>Add Location</strong> on any annotation to mark the same change in multiple places — they share a single report entry.
-                AI-detected boxes can be <strong>clicked to select</strong>, then <strong>dragged to reposition</strong> or resized via corner handles.
-              </p>
-            </div>
-            <div className="flex items-center justify-end gap-4">
-              {/* Legend */}
-              <div className="flex items-center gap-4 text-xs">
-                {(['Modified', 'Added', 'Deleted'] as AnnotationType[]).map((t) => (
-                  <div key={t} className="flex items-center gap-1.5">
-                    <div className="w-3.5 h-3.5 border-2" style={{ borderColor: TYPE_COLORS[t], backgroundColor: `${TYPE_COLORS[t]}20` }} />
-                    <span className="text-gray-600 font-medium">{t}</span>
-                  </div>
-                ))}
-              </div>
-
-              {/* Edit mode toggle — only shown when NOT in add-location mode */}
-              {!activeGroupId && (
-                <button
-                  onClick={() => setIsDrawingMode(m => !m)}
-                  className={`flex items-center gap-1.5 px-4 py-2 text-xs font-bold uppercase tracking-wide border-2 transition-all ${
-                    isDrawingMode
-                      ? 'bg-red-600 text-white border-red-600 shadow-md ring-2 ring-red-300'
-                      : 'bg-blue-600 text-white border-blue-600 hover:bg-blue-700 hover:border-blue-700'
-                  }`}
-                  title={isDrawingMode ? 'Click to exit edit mode' : 'Click to enable edit mode — stays on until you turn it off'}
-                >
-                  <Pencil className="w-3.5 h-3.5" />
-                  {isDrawingMode ? 'Exit Edit Mode' : 'Edit Mode'}
-                </button>
-              )}
-            </div>
-          </div>
 
           {/* ── Active state banners ─────────────────────────────────────── */}
 
@@ -1548,13 +1526,21 @@ const PreviewPage = () => {
             ? `${annotationGroups.length} annotation${annotationGroups.length > 1 ? 's' : ''} · ${userAnnotations.length} box${userAnnotations.length > 1 ? 'es' : ''} total`
             : 'No reviewer annotations added'}
         </div>
-        <button
-          onClick={handleGenerateReport}
-          className="flex items-center gap-2 bg-[#D71500] text-white px-8 py-3 text-[13px] font-bold uppercase tracking-widest hover:bg-[#b01300] transition-colors rounded-lg shadow-md"
-        >
-          <FileText className="w-4 h-4" />
-          Generate Report
-        </button>
+        <div className="flex items-center gap-6">
+          <button
+            onClick={handleBack}
+            className="text-[13px] font-bold uppercase tracking-widest text-slate-400 hover:text-slate-700 transition-colors"
+          >
+            BACK
+          </button>
+          <button
+            onClick={handleGenerateReport}
+            className="flex items-center gap-2 bg-[#D71500] text-white px-8 py-3 text-[13px] font-bold uppercase tracking-widest hover:bg-[#b01300] transition-colors rounded-lg shadow-md"
+          >
+            <FileText className="w-4 h-4" />
+            Generate Report
+          </button>
+        </div>
       </div>
 
       {/* Annotation dialog — only for the first box of a new group */}

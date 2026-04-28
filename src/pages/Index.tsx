@@ -1307,49 +1307,57 @@ const Index = () => {
             <span>Ref: {formData?.metadata?.cr_number || "CR-2025-0042"}</span>
           )}
         </div>
-        <button
-          onClick={() => navigate('/preview', {
-            state: {
-              scenario: formData ? 'C' : 'A',
-              formData,
-              submissionId,
-              // Pass ALL validated items (valid + invalid).
-              // ReportPage splits them: isValid===true → Expected Changes, isValid===false → Unexpected Changes.
-              parsedItems: filteredValidatedParsedItems ?? (analysisRun && apiResults.length > 0 ? apiResults[selectedResultIndex]?.parsedItems : []) ?? [],
-              missingItems: filteredMissingItems,
-              satisfiedItems: filteredSatisfiedItems,
-              annotations: currentAnnotations,
-              deletedDiscrepancyIds: [...deletedDiscrepancyIds],
-              reportId,
-              // User-adjusted requirement box positions (proof-request mode only)
-              requirementBoxes: (adjustedBoxes?.length ?? 0) > 0 ? adjustedBoxes : (requirementBoxes ?? []),
-              // Barcode pipeline results for report summary + changes made
-              barcode_summary: analysisRun && apiResults.length > 0 ? apiResults[selectedResultIndex]?.barcode_summary ?? null : null,
-              // Pass as arrays — PreviewPage unpacks [0] for display, passes single File to ReportPage
-              baseFile: expandedBaseFiles[selectedResultIndex] ? [expandedBaseFiles[selectedResultIndex]] : [],
-              childFile: expandedChildFiles[selectedResultIndex] ? [expandedChildFiles[selectedResultIndex]] : [],
-              baseFileName: expandedBaseFiles[selectedResultIndex]?.name ?? '',
-              childFileName: expandedChildFiles[selectedResultIndex]?.name ?? '',
-              // Stored so compare page can be fully restored when navigating back.
-              // Preview URLs (strings) are the source of truth on remount because
-              // File objects may not survive location.state across all remount paths.
-              apiResults,
-              lrfAnalysis,
-              childFiles: expandedChildFiles,
-              basePreviewUrl,
-              expandedBasePreviewUrls: basePreviewUrls,
-              expandedChildPreviewUrls: childPreviewUrls,
-              expandedBaseFileNames: expandedBaseFiles.map(f => f.name),
-              analysisRun,
-              selectedResultIndex,
-              userAnnotations: restoredUserAnnotations,
-            },
-          })}
-          className="flex items-center gap-2 bg-[#d51900] text-white px-8 py-3 text-[13px] font-bold uppercase tracking-widest hover:bg-[#b01300] transition-colors rounded-lg shadow-md"
-        >
-          <FileText className="w-4 h-4" />
-          Review &amp; Edit
-        </button>
+        <div className="flex items-center gap-6">
+          <button
+            onClick={() => navigate(-1)}
+            className="text-[13px] font-bold uppercase tracking-widest text-slate-400 hover:text-slate-700 transition-colors"
+          >
+            BACK
+          </button>
+          <button
+            onClick={() => navigate('/preview', {
+              state: {
+                scenario: formData ? 'C' : 'A',
+                formData,
+                submissionId,
+                // Pass ALL validated items (valid + invalid).
+                // ReportPage splits them: isValid===true → Expected Changes, isValid===false → Unexpected Changes.
+                parsedItems: filteredValidatedParsedItems ?? (analysisRun && apiResults.length > 0 ? apiResults[selectedResultIndex]?.parsedItems : []) ?? [],
+                missingItems: filteredMissingItems,
+                satisfiedItems: filteredSatisfiedItems,
+                annotations: currentAnnotations,
+                deletedDiscrepancyIds: [...deletedDiscrepancyIds],
+                reportId,
+                // User-adjusted requirement box positions (proof-request mode only)
+                requirementBoxes: (adjustedBoxes?.length ?? 0) > 0 ? adjustedBoxes : (requirementBoxes ?? []),
+                // Barcode pipeline results for report summary + changes made
+                barcode_summary: analysisRun && apiResults.length > 0 ? apiResults[selectedResultIndex]?.barcode_summary ?? null : null,
+                // Pass as arrays — PreviewPage unpacks [0] for display, passes single File to ReportPage
+                baseFile: expandedBaseFiles[selectedResultIndex] ? [expandedBaseFiles[selectedResultIndex]] : [],
+                childFile: expandedChildFiles[selectedResultIndex] ? [expandedChildFiles[selectedResultIndex]] : [],
+                baseFileName: expandedBaseFiles[selectedResultIndex]?.name ?? '',
+                childFileName: expandedChildFiles[selectedResultIndex]?.name ?? '',
+                // Stored so compare page can be fully restored when navigating back.
+                // Preview URLs (strings) are the source of truth on remount because
+                // File objects may not survive location.state across all remount paths.
+                apiResults,
+                lrfAnalysis,
+                childFiles: expandedChildFiles,
+                basePreviewUrl,
+                expandedBasePreviewUrls: basePreviewUrls,
+                expandedChildPreviewUrls: childPreviewUrls,
+                expandedBaseFileNames: expandedBaseFiles.map(f => f.name),
+                analysisRun,
+                selectedResultIndex,
+                userAnnotations: restoredUserAnnotations,
+              },
+            })}
+            className="flex items-center gap-2 bg-[#d51900] text-white px-8 py-3 text-[13px] font-bold uppercase tracking-widest hover:bg-[#b01300] transition-colors rounded-lg shadow-md"
+          >
+            <FileText className="w-4 h-4" />
+            Review &amp; Edit
+          </button>
+        </div>
       </div>
     </div>
   );

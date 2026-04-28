@@ -21,6 +21,8 @@ interface SidebarOptions {
   min?: number;
   max?: number;
   defaultWidth?: number;
+  defaultCollapsed?: boolean;
+  forceClosedOnMount?: boolean;
 }
 
 const FALLBACK_DEFAULT: SidebarState = { isCollapsed: false, width: 280 };
@@ -29,6 +31,8 @@ export function useSidebarState(key: string = "labelix-sidebar", options?: Sideb
   const min          = options?.min          ?? MIN_WIDTH;
   const max          = options?.max          ?? MAX_WIDTH;
   const defaultWidth = options?.defaultWidth ?? FALLBACK_DEFAULT.width;
+  const defaultCollapsed = options?.defaultCollapsed ?? FALLBACK_DEFAULT.isCollapsed;
+  const forceClosed  = options?.forceClosedOnMount ?? false;
 
   const clamp = useCallback(
     (w: number) => Math.max(min, Math.min(max, w)),
@@ -38,16 +42,16 @@ export function useSidebarState(key: string = "labelix-sidebar", options?: Sideb
   const [state, setState] = useState<SidebarState>(() => {
     try {
       const raw = localStorage.getItem(key);
-      if (!raw) return { isCollapsed: false, width: defaultWidth };
+      if (!raw) return { isCollapsed: forceClosed ? true : defaultCollapsed, width: defaultWidth };
       const parsed = JSON.parse(raw);
       return {
-        isCollapsed: !!parsed.isCollapsed,
+        isCollapsed: forceClosed ? true : (parsed.isCollapsed ?? defaultCollapsed),
         width: Math.max(min, Math.min(max,
           typeof parsed.width === "number" ? parsed.width : defaultWidth,
         )),
       };
     } catch {
-      return { isCollapsed: false, width: defaultWidth };
+      return { isCollapsed: forceClosed ? true : defaultCollapsed, width: defaultWidth };
     }
   });
 

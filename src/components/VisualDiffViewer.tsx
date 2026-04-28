@@ -721,6 +721,7 @@ function PlacementOverlay({
 // ── Expanded fullscreen modal ─────────────────────────────────────────────────
 
 const ExpandedLabelModal = ({
+  baseImage,
   childImage,
   requirementBoxes,
   onBoxesChange,
@@ -728,6 +729,7 @@ const ExpandedLabelModal = ({
   onDeleteBox,
   onClose,
 }: {
+  baseImage?: string;
   childImage: string;
   requirementBoxes: RequirementBox[];
   onBoxesChange?: (boxes: RequirementBox[]) => void;
@@ -736,6 +738,7 @@ const ExpandedLabelModal = ({
   onClose: () => void;
 }) => {
   const transformRef = useRef<any>(null);
+  const baseTransformRef = useRef<any>(null);
   const wrapperRef   = useRef<HTMLDivElement>(null);
 
   // Placement state lives here so the overlay can be a sibling of TransformWrapper
@@ -785,6 +788,44 @@ const ExpandedLabelModal = ({
     cursor: "pointer",
   };
 
+  const handleZoomIn = () => {
+    transformRef.current?.zoomIn();
+    baseTransformRef.current?.zoomIn();
+  };
+  const handleZoomOut = () => {
+    transformRef.current?.zoomOut();
+    baseTransformRef.current?.zoomOut();
+  };
+  const handleResetZoom = () => {
+    transformRef.current?.resetTransform();
+    baseTransformRef.current?.resetTransform();
+  };
+  const lastState = useRef({ x: 0, y: 0, scale: 1 });
+
+  const handleBaseTransformed = useCallback((_: any, state: { positionX: number; positionY: number; scale: number; }) => {
+    if (
+      Math.abs(lastState.current.scale - state.scale) < 0.001 &&
+      Math.abs(lastState.current.x - state.positionX) < 0.5 &&
+      Math.abs(lastState.current.y - state.positionY) < 0.5
+    ) {
+      return;
+    }
+    lastState.current = { x: state.positionX, y: state.positionY, scale: state.scale };
+    transformRef.current?.setTransform(state.positionX, state.positionY, state.scale, 0);
+  }, []);
+
+  const handleChildTransformed = useCallback((_: any, state: { positionX: number; positionY: number; scale: number; }) => {
+    if (
+      Math.abs(lastState.current.scale - state.scale) < 0.001 &&
+      Math.abs(lastState.current.x - state.positionX) < 0.5 &&
+      Math.abs(lastState.current.y - state.positionY) < 0.5
+    ) {
+      return;
+    }
+    lastState.current = { x: state.positionX, y: state.positionY, scale: state.scale };
+    baseTransformRef.current?.setTransform(state.positionX, state.positionY, state.scale, 0);
+  }, []);
+
   return (
     <div
       style={{
@@ -816,7 +857,7 @@ const ExpandedLabelModal = ({
           <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
             <Maximize2 style={{ width: 13, height: 13, opacity: 0.7 }} />
             <span style={{ fontSize: 11, fontWeight: 700, letterSpacing: "0.06em", textTransform: "uppercase" }}>
-              New Version Label — Full View
+              {baseImage ? "Labels — Full View" : "New Version Label — Full View"}
             </span>
             <span
               style={{
@@ -835,13 +876,13 @@ const ExpandedLabelModal = ({
             <span style={{ fontSize: 10, color: "rgba(255,255,255,0.5)", marginRight: 4 }}>
               Click box → select &amp; duplicate • Drag to move • Handles to resize • Delete from toolbar • Esc to close
             </span>
-            <button style={btnStyle} title="Zoom In"    onClick={() => transformRef.current?.zoomIn()}>
+            <button style={btnStyle} title="Zoom In"    onClick={handleZoomIn}>
               <ZoomIn  style={{ width: 13, height: 13 }} />
             </button>
-            <button style={btnStyle} title="Zoom Out"   onClick={() => transformRef.current?.zoomOut()}>
+            <button style={btnStyle} title="Zoom Out"   onClick={handleZoomOut}>
               <ZoomOut style={{ width: 13, height: 13 }} />
             </button>
-            <button style={btnStyle} title="Reset zoom" onClick={() => transformRef.current?.resetTransform()}>
+            <button style={btnStyle} title="Reset zoom" onClick={handleResetZoom}>
               <RotateCcw style={{ width: 13, height: 13 }} />
             </button>
             <div style={{ width: 1, height: 18, background: "rgba(255,255,255,0.15)", margin: "0 4px" }} />
@@ -855,48 +896,62 @@ const ExpandedLabelModal = ({
           </div>
         </div>
 
-        {/* Image area — PlacementOverlay is a SIBLING of TransformWrapper here */}
-        <div style={{ flex: 1, overflow: "hidden", background: "#f1f5f9", position: "relative" }}>
-          {placing && (
-            <PlacementOverlay
-              placing={placing}
-              wrapperRef={wrapperRef}
-              onPlace={handlePlace}
-              onCancel={handleCancelPlacement}
-              onGhostMove={setGhostPos}
-            />
+        {/* Image area */}
+        <div style={{ flex: 1, display: "flex", overflow: "hidden", background: "#f1f5f9", position: "relative" }}>
+          
+          {baseImage && (
+            <div style={{ flex: 1, borderRight: "4px solid #94a3b8", height: "100%", position: "relative" }}>
+              <TransformWrapper ref={baseTransformRef} minScale={0.2} maxScale={10} initialScale={1} panning={{ excluded: ["no-pan"] }} onTransformed={handleBaseTransformed}>
+                <TransformComponent wrapperStyle={{ width: "100%", height: "100%" }} contentStyle={{ width: "100%", height: "100%", display: "flex", alignItems: "center", justifyContent: "center" }}>
+                  <img src={baseImage} alt="Current version label — expanded" style={{ display: "block", maxWidth: "45vw", maxHeight: "calc(94vh - 100px)" }} draggable={false} />
+                </TransformComponent>
+              </TransformWrapper>
+            </div>
           )}
-          <TransformWrapper
-            ref={transformRef}
-            minScale={0.2} maxScale={10} initialScale={1}
-            panning={{ excluded: ["no-pan"] }}
-          >
-            <TransformComponent
-              wrapperStyle={{ width: "100%", height: "100%" }}
-              contentStyle={{ width: "100%", height: "100%", display: "flex", alignItems: "center", justifyContent: "center" }}
+
+          <div style={{ flex: 1, height: "100%", position: "relative" }}>
+            {placing && (
+              <PlacementOverlay
+                placing={placing}
+                wrapperRef={wrapperRef}
+                onPlace={handlePlace}
+                onCancel={handleCancelPlacement}
+                onGhostMove={setGhostPos}
+              />
+            )}
+            <TransformWrapper
+              ref={transformRef}
+              minScale={0.2} maxScale={10} initialScale={1}
+              panning={{ excluded: ["no-pan"] }}
+              onTransformed={handleChildTransformed}
             >
-              <div
-                ref={wrapperRef}
-                style={{ position: "relative", display: "inline-block", lineHeight: 0 }}
+              <TransformComponent
+                wrapperStyle={{ width: "100%", height: "100%" }}
+                contentStyle={{ width: "100%", height: "100%", display: "flex", alignItems: "center", justifyContent: "center" }}
               >
-                  <img
-                    src={childImage}
-                    alt="New version label — expanded"
-                    style={{ display: "block", maxWidth: "90vw", maxHeight: "calc(94vh - 100px)" }}
-                    draggable={false}
+                <div
+                  ref={wrapperRef}
+                  style={{ position: "relative", display: "inline-block", lineHeight: 0 }}
+                >
+                    <img
+                      src={childImage}
+                      alt="New version label — expanded"
+                      style={{ display: "block", maxWidth: baseImage ? "45vw" : "90vw", maxHeight: "calc(94vh - 100px)" }}
+                      draggable={false}
+                    />
+                  <DraggableBoxOverlay
+                    initialBoxes={requirementBoxes}
+                    containerRef={wrapperRef}
+                    onBoxesChange={onBoxesChange}
+                    onAddBox={onAddBox}
+                    onDeleteBox={onDeleteBox}
+                    onRequestPlacement={handleRequestPlacement}
+                    placingGhost={placing && ghostPos ? { ...placing, ...ghostPos } : null}
                   />
-                <DraggableBoxOverlay
-                  initialBoxes={requirementBoxes}
-                  containerRef={wrapperRef}
-                  onBoxesChange={onBoxesChange}
-                  onAddBox={onAddBox}
-                  onDeleteBox={onDeleteBox}
-                  onRequestPlacement={handleRequestPlacement}
-                  placingGhost={placing && ghostPos ? { ...placing, ...ghostPos } : null}
-                />
-              </div>
-            </TransformComponent>
-          </TransformWrapper>
+                </div>
+              </TransformComponent>
+            </TransformWrapper>
+          </div>
         </div>
 
         {/* Legend footer */}
@@ -1230,6 +1285,7 @@ const VisualDiffViewer = ({
       {/* Fullscreen expanded modal */}
       {isExpanded && childImage && (
         <ExpandedLabelModal
+          baseImage={singlePanel ? undefined : baseImage}
           childImage={childImage}
           requirementBoxes={useReqBoxes ? requirementBoxes : editableAnnotationBoxes}
           onBoxesChange={useReqBoxes ? onBoxesChange : handleAnnotationBoxesChange}
