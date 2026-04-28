@@ -12,7 +12,7 @@ interface UserContextType {
 }
 
 const UserContext = createContext<UserContextType>({
-  user: { name: "user", role: "" },
+  user: { name: "", role: "" },
   setUser: () => {},
   logout: () => {},
 });
@@ -20,14 +20,14 @@ const UserContext = createContext<UserContextType>({
 export const useUser = () => useContext(UserContext);
 
 export const UserProvider = ({ children }: { children: ReactNode }) => {
-  const [user, setUserState] = useState<UserInfo>({ name: "user", role: "" });
+  const [user, setUserState] = useState<UserInfo>({ name: "", role: "" });
 
   const setUser = (u: UserInfo) => {
     setUserState(u);
   };
 
   const logout = () => {
-    setUserState({ name: "user", role: "" });
+    setUserState({ name: "", role: "" });
   };
 
   return (

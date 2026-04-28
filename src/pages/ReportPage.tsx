@@ -9,6 +9,8 @@ import type { ReportData, PairReportData, Requirement, DiscrepancyCategory, Draw
 import type { ProofRequestMissingItem } from '@/data/dummyData';
 import type { RequirementBox } from '@/components/VisualDiffViewer';
 import { pdfToImage, isPdfFile } from '@/lib/pdfToImage';
+import { toast } from 'sonner';
+import html2pdf from 'html2pdf.js';
 
 // ── helpers ───────────────────────────────────────────────────────────────────
 
@@ -223,11 +225,12 @@ function _getISTDateParts() {
   };
 }
 
-function _makePrintHandler(reportId: string): () => void {
+function _makePrintHandler(reportId: string, sku?: string): () => void {
   return () => {
     const { yyyy, mm, dd, hh, min } = _getISTDateParts();
     const dateStr = `${yyyy}-${mm}-${dd}`;
     const timeStr = `${hh}:${min} IST`;
+    const filename = sku ? `${sku}_${reportId}` : reportId;
     const style = document.createElement('style');
     style.id = '__print-override__';
     style.textContent = `
@@ -245,29 +248,57 @@ function _makePrintHandler(reportId: string): () => void {
           overflow: visible !important;
         }
         body { margin: 0; background: #fff !important; }
+
         .report-content-wrap { max-width: none !important; padding: 0 !important; margin: 0 auto !important; overflow: visible !important; }
+
         .report-banner {
           padding: 22px 28px !important;
           -webkit-print-color-adjust: exact !important;
           print-color-adjust: exact !important;
         }
-        .report-banner-title { font-size: 24pt !important; font-weight: 700 !important; line-height: 1.2 !important; }
-        .report-banner-id { font-size: 8.5pt !important; margin-top: 4px !important; }
-        .report-banner-logo { height: 32px !important; width: auto !important; }
-        .report-banner-revision { font-size: 10pt !important; font-weight: 600 !important; margin-top: 4px !important; }
+        .report-banner-title {
+          font-size: 24pt !important;
+          font-weight: 700 !important;
+          line-height: 1.2 !important;
+        }
+        .report-banner-id {
+          font-size: 8.5pt !important;
+          margin-top: 4px !important;
+        }
+        .report-banner-logo {
+          height: 32px !important;
+          width: auto !important;
+        }
+        .report-banner-revision {
+          font-size: 10pt !important;
+          font-weight: 600 !important;
+          margin-top: 4px !important;
+        }
+
         .report-metadata-bar { font-size: 8.5pt !important; }
+
         .report-page-break { page-break-before: always !important; break-before: page !important; display: block !important; }
         .report-page-break:last-of-type { page-break-after: auto !important; break-after: auto !important; }
-        .report-label-page { page-break-inside: avoid !important; break-inside: avoid !important; }
-        .report-label-img {
-          max-height: 180mm !important; width: auto !important;
-          max-width: 100% !important; display: block !important; margin: 0 auto !important;
+
+        .report-label-page {
+          page-break-inside: avoid !important;
+          break-inside: avoid !important;
         }
+        .report-label-img {
+          max-height: 180mm !important;
+          width: auto !important;
+          max-width: 100% !important;
+          display: block !important;
+          margin: 0 auto !important;
+        }
+
         .report-section { page-break-inside: avoid !important; break-inside: avoid !important; margin-bottom: 0 !important; }
         .report-section:last-of-type { page-break-after: auto !important; }
         .report-section-header { page-break-after: avoid; }
+
         table { width: 100% !important; font-size: 8pt !important; }
         th, td { padding: 4px 6px !important; }
+
         span[class*="inline-block"] {
           -webkit-print-color-adjust: exact !important;
           print-color-adjust: exact !important;
@@ -276,7 +307,7 @@ function _makePrintHandler(reportId: string): () => void {
     `;
     document.head.appendChild(style);
     const prevTitle = document.title;
-    document.title = reportId;
+    document.title = filename;
 
     // Temporarily expand all overflow-clipped containers so the browser can
     // lay out the full content across pages instead of clipping to the
@@ -295,16 +326,66 @@ function _makePrintHandler(reportId: string): () => void {
 
     window.scrollTo(0, 0);
     window.print();
+    // window.print() is synchronous in Chrome — code resumes after the dialog closes.
 
-    // Restore overflow styles
-    clipped.forEach(el => {
-      el.style.overflow  = el.dataset._printOverflow ?? '';
-      el.style.height    = el.dataset._printHeight   ?? '';
-      el.style.maxHeight = el.dataset._printMaxH     ?? '';
+    // After the print dialog closes, also download the file via html2pdf so it
+    // appears in Chrome's downloads bar. The overflow containers are still
+    // expanded from above, so html2canvas will capture the full content.
+    const element = document.getElementById('report-print-area');
+    if (!element) {
+      clipped.forEach(el => {
+        el.style.overflow  = el.dataset._printOverflow ?? '';
+        el.style.height    = el.dataset._printHeight   ?? '';
+        el.style.maxHeight = el.dataset._printMaxH     ?? '';
+      });
+      document.title = prevTitle;
+      document.head.removeChild(style);
+      return;
+    }
+
+    // Hide screen-only UI elements (nav bar, footer buttons, sidebar) for html2pdf
+    const uiEls = Array.from(
+      document.querySelectorAll<HTMLElement>('.print\\:hidden')
+    );
+    uiEls.forEach(el => {
+      el.dataset._uiDisplay = el.style.display;
+      el.style.display = 'none';
     });
 
-    document.title = prevTitle;
-    document.head.removeChild(style);
+    const restore = () => {
+      clipped.forEach(el => {
+        el.style.overflow  = el.dataset._printOverflow ?? '';
+        el.style.height    = el.dataset._printHeight   ?? '';
+        el.style.maxHeight = el.dataset._printMaxH     ?? '';
+      });
+      uiEls.forEach(el => {
+        el.style.display = el.dataset._uiDisplay ?? '';
+      });
+      document.title = prevTitle;
+      document.head.removeChild(style);
+    };
+
+    html2pdf()
+      .set({
+        margin: [14, 12, 18, 12],
+        filename: `${filename}.pdf`,
+        image: { type: 'jpeg', quality: 0.98 },
+        html2canvas: { scale: 2, useCORS: true, logging: false },
+        jsPDF: { unit: 'mm', format: 'a4', orientation: 'portrait' },
+      })
+      .from(element)
+      .save()
+      .then(() => {
+        restore();
+        toast.success('Report saved', {
+          description: `${filename}.pdf has been sent to your downloads.`,
+          duration: 5000,
+        });
+      })
+      .catch(() => {
+        restore();
+        toast.error('Download failed. Please try again.', { duration: 4000 });
+      });
   };
 }
 
@@ -468,8 +549,9 @@ const ReportPageInner = () => {
     .filter((box) => !box.linkedRowId || !discardedUnexpectedIds.includes(box.linkedRowId));
 
   const { yyyy, mm, dd } = _getISTDateParts();
-  const computedReportId  = `${yyyy}${mm}${dd}0001`;
-  const handleDownloadPDF = _makePrintHandler(computedReportId);
+  const computedReportId  = (location.state?.reportId as string | undefined) || `${yyyy}${mm}${dd}0001`;
+  const computedSku       = (formData?.metadata?.part_number as string | undefined) || undefined;
+  const handleDownloadPDF = _makePrintHandler(computedReportId, computedSku);
 
   const labelVersion = formData?.metadata?.label_version ?? '';
   const revParts     = labelVersion.includes('→')
@@ -569,20 +651,76 @@ const ReportPageInner = () => {
     }
   };
 
-  // Print only the specified pair indices. Non-selected pairs are hidden via
-  // injected CSS using data-pair-print attributes on their wrapper divs.
+  // Download only the specified pair indices as a PDF file.
   const downloadPairs = (indices: number[]) => {
+    const filename = computedSku ? `${computedSku}_${computedReportId}` : computedReportId;
+    const element = document.getElementById('report-print-area');
+    if (!element) return;
+
+    // Expand overflow containers so html2canvas captures full content
+    const clipped = Array.from(
+      document.querySelectorAll<HTMLElement>('.overflow-y-auto,.overflow-hidden,.overflow-auto')
+    );
+    clipped.forEach(el => {
+      el.dataset._printOverflow = el.style.overflow;
+      el.dataset._printHeight   = el.style.height;
+      el.dataset._printMaxH     = el.style.maxHeight;
+      el.style.overflow  = 'visible';
+      el.style.height    = 'auto';
+      el.style.maxHeight = 'none';
+    });
+
+    // Hide screen-only UI elements (nav bar, footer buttons, sidebar)
+    const uiEls = Array.from(
+      document.querySelectorAll<HTMLElement>('.print\\:hidden')
+    );
+    uiEls.forEach(el => {
+      el.dataset._uiDisplay = el.style.display;
+      el.style.display = 'none';
+    });
+
+    // Hide non-selected pairs and screen-only pair views
+    const pairHideEls: HTMLElement[] = [];
+    pairReportData
+      .map(p => p.pairIndex)
+      .filter(idx => !indices.includes(idx))
+      .forEach(idx => {
+        document.querySelectorAll<HTMLElement>(`[data-pair-print="${idx}"]`).forEach(el => {
+          el.dataset._pairDisplay = el.style.display;
+          el.style.display = 'none';
+          pairHideEls.push(el);
+        });
+      });
+    const pairScreenEls = Array.from(
+      document.querySelectorAll<HTMLElement>('.report-pair-screen')
+    );
+    pairScreenEls.forEach(el => {
+      el.dataset._psDisplay = el.style.display;
+      el.style.display = 'none';
+    });
+
+    const restore = () => {
+      clipped.forEach(el => {
+        el.style.overflow  = el.dataset._printOverflow ?? '';
+        el.style.height    = el.dataset._printHeight   ?? '';
+        el.style.maxHeight = el.dataset._printMaxH     ?? '';
+      });
+      uiEls.forEach(el => {
+        el.style.display = el.dataset._uiDisplay ?? '';
+      });
+      pairHideEls.forEach(el => {
+        el.style.display = el.dataset._pairDisplay ?? '';
+      });
+      pairScreenEls.forEach(el => {
+        el.style.display = el.dataset._psDisplay ?? '';
+      });
+      document.title = prevTitle;
+      document.head.removeChild(style);
+    };
+
     const { yyyy, mm, dd, hh, min } = _getISTDateParts();
     const dateStr = `${yyyy}-${mm}-${dd}`;
     const timeStr = `${hh}:${min} IST`;
-
-    const hiddenIndices = pairReportData
-      .map(p => p.pairIndex)
-      .filter(idx => !indices.includes(idx));
-    const pairHideRules = hiddenIndices
-      .map(idx => `[data-pair-print="${idx}"] { display: none !important; }`)
-      .join('\n');
-
     const style = document.createElement('style');
     style.id = '__print-override__';
     style.textContent = `
@@ -600,54 +738,92 @@ const ReportPageInner = () => {
           overflow: visible !important;
         }
         body { margin: 0; background: #fff !important; }
+
         .report-content-wrap { max-width: none !important; padding: 0 !important; margin: 0 auto !important; overflow: visible !important; }
-        .report-banner { padding: 22px 28px !important; -webkit-print-color-adjust: exact !important; print-color-adjust: exact !important; }
-        .report-banner-title { font-size: 24pt !important; font-weight: 700 !important; line-height: 1.2 !important; }
-        .report-banner-id { font-size: 8.5pt !important; margin-top: 4px !important; }
-        .report-banner-logo { height: 32px !important; width: auto !important; }
-        .report-banner-revision { font-size: 10pt !important; font-weight: 600 !important; margin-top: 4px !important; }
+
+        .report-banner {
+          padding: 22px 28px !important;
+          -webkit-print-color-adjust: exact !important;
+          print-color-adjust: exact !important;
+        }
+        .report-banner-title {
+          font-size: 24pt !important;
+          font-weight: 700 !important;
+          line-height: 1.2 !important;
+        }
+        .report-banner-id {
+          font-size: 8.5pt !important;
+          margin-top: 4px !important;
+        }
+        .report-banner-logo {
+          height: 32px !important;
+          width: auto !important;
+        }
+        .report-banner-revision {
+          font-size: 10pt !important;
+          font-weight: 600 !important;
+          margin-top: 4px !important;
+        }
+
         .report-metadata-bar { font-size: 8.5pt !important; }
+
         .report-page-break { page-break-before: always !important; break-before: page !important; display: block !important; }
         .report-page-break:last-of-type { page-break-after: auto !important; break-after: auto !important; }
-        .report-label-page { page-break-inside: avoid !important; break-inside: avoid !important; }
-        .report-label-img { max-height: 180mm !important; width: auto !important; max-width: 100% !important; display: block !important; margin: 0 auto !important; }
+
+        .report-label-page {
+          page-break-inside: avoid !important;
+          break-inside: avoid !important;
+        }
+        .report-label-img {
+          max-height: 180mm !important;
+          width: auto !important;
+          max-width: 100% !important;
+          display: block !important;
+          margin: 0 auto !important;
+        }
+
         .report-section { page-break-inside: avoid !important; break-inside: avoid !important; margin-bottom: 0 !important; }
         .report-section:last-of-type { page-break-after: auto !important; }
         .report-section-header { page-break-after: avoid; }
+
         table { width: 100% !important; font-size: 8pt !important; }
         th, td { padding: 4px 6px !important; }
-        span[class*="inline-block"] { -webkit-print-color-adjust: exact !important; print-color-adjust: exact !important; }
-        .report-pair-screen { display: none !important; }
-        ${pairHideRules}
+
+        span[class*="inline-block"] {
+          -webkit-print-color-adjust: exact !important;
+          print-color-adjust: exact !important;
+        }
       }
     `;
     document.head.appendChild(style);
     const prevTitle = document.title;
-    document.title = computedReportId;
-
-    const clipped = Array.from(
-      document.querySelectorAll<HTMLElement>('.overflow-y-auto,.overflow-hidden,.overflow-auto')
-    );
-    clipped.forEach(el => {
-      el.dataset._printOverflow = el.style.overflow;
-      el.dataset._printHeight   = el.style.height;
-      el.dataset._printMaxH     = el.style.maxHeight;
-      el.style.overflow  = 'visible';
-      el.style.height    = 'auto';
-      el.style.maxHeight = 'none';
-    });
+    document.title = filename;
 
     window.scrollTo(0, 0);
     window.print();
 
-    clipped.forEach(el => {
-      el.style.overflow  = el.dataset._printOverflow ?? '';
-      el.style.height    = el.dataset._printHeight   ?? '';
-      el.style.maxHeight = el.dataset._printMaxH     ?? '';
-    });
 
-    document.title = prevTitle;
-    document.head.removeChild(style);
+    html2pdf()
+      .set({
+        margin: [14, 12, 18, 12],
+        filename: `${filename}.pdf`,
+        image: { type: 'jpeg', quality: 0.98 },
+        html2canvas: { scale: 2, useCORS: true, logging: false },
+        jsPDF: { unit: 'mm', format: 'a4', orientation: 'portrait' },
+      })
+      .from(element)
+      .save()
+      .then(() => {
+        restore();
+        toast.success('Report saved', {
+          description: `${filename}.pdf has been sent to your downloads.`,
+          duration: 5000,
+        });
+      })
+      .catch(() => {
+        restore();
+        toast.error('Download failed. Please try again.', { duration: 4000 });
+      });
   };
 
   const reportData: ReportData = {
@@ -677,11 +853,12 @@ const ReportPageInner = () => {
     setDiscardedUnexpectedIds((prev) => prev.includes(id) ? prev : [...prev, id]);
 
   return (
-    <div className="h-screen bg-white flex flex-col overflow-hidden">
+    <div id="report-print-area" className="h-screen bg-white flex flex-col overflow-hidden">
       <ReportHeader
         activeScenario={activeScenario}
         onScenarioChange={setActiveScenario}
         reportId={reportData.reportId || undefined}
+        sku={computedSku}
         currentRevision={reportData.currentRevision}
         newRevision={reportData.newRevision}
         onDownloadPDF={isMultiPair ? () => downloadPairs([activePairIndex]) : handleDownloadPDF}

@@ -306,8 +306,8 @@ const FormSummaryPage = () => {
                   <div className="flex items-center gap-2 text-xs text-green-700 font-semibold bg-green-50 border border-green-200 px-3 py-2">
                     <CheckCircle2 className="h-3.5 w-3.5 shrink-0" />
                     {baseFile.length > 0
-                    ? `${baseFile.length} base + ${childFile.length} child label${childFile.length !== 1 ? "s" : ""} ready — full diff comparison will run`
-                    : "New version ready — LRF validation will run"}
+                      ? `${baseFile.length} base + ${childFile.length} child label${childFile.length !== 1 ? "s" : ""} ready — full diff comparison will run`
+                      : "New version ready — LRF validation will run"}
                   </div>
                 )}
               </div>

@@ -1,15 +1,17 @@
-import { useState } from 'react';
 import { useTheme } from './ThemeContext';
 // import { ThemeSwitcher } from './ThemeSwitcher';
 import { useNavigate, useLocation } from 'react-router-dom';
 import { useUser } from '@/context/UserContext';
 import { ArrowLeft, Home, ScanLine } from 'lucide-react';
 import ProfileDropdown from '@/components/ProfileDropdown';
+import { toast } from 'sonner';
+import html2pdf from 'html2pdf.js';
 
 interface ReportHeaderProps {
   activeScenario: 'A' | 'B' | 'C';
   onScenarioChange: (scenario: 'A' | 'B' | 'C') => void;
   reportId?: string;
+  sku?: string;
   currentRevision?: string;
   newRevision?: string;
   onDownloadPDF?: () => void;
@@ -48,6 +50,7 @@ export function ReportHeader({
   activeScenario,
   onScenarioChange,
   reportId: propReportId,
+  sku,
   currentRevision,
   newRevision,
   onDownloadPDF,
@@ -56,8 +59,9 @@ export function ReportHeader({
   const navigate  = useNavigate();
   const location  = useLocation();
   const { user }  = useUser();
-  // Use the ID generated at analysis time; fall back to generating one if accessed directly
-  const [reportId] = useState<string>(() => propReportId || generateReportId());
+  // Use the ID generated at analysis time in Index.tsx — never generate here (would increment on every page visit)
+  const { yyyy, mm, dd } = getISTDateParts();
+  const reportId = propReportId || `${yyyy}${mm}${dd}0001`;
 
   const revisionLabel = currentRevision && newRevision
     ? `${currentRevision} \u2192 ${newRevision}`
@@ -107,6 +111,45 @@ export function ReportHeader({
   };
 
   const handleDownloadPDF = () => {
+    const filename = sku ? `${sku}_${reportId}` : reportId;
+    const element = document.getElementById('report-print-area');
+    if (!element) return;
+
+    // Expand overflow containers so html2canvas captures full content
+    const clipped = Array.from(
+      document.querySelectorAll<HTMLElement>('.overflow-y-auto,.overflow-hidden,.overflow-auto')
+    );
+    clipped.forEach(el => {
+      el.dataset._printOverflow = el.style.overflow;
+      el.dataset._printHeight   = el.style.height;
+      el.dataset._printMaxH     = el.style.maxHeight;
+      el.style.overflow  = 'visible';
+      el.style.height    = 'auto';
+      el.style.maxHeight = 'none';
+    });
+
+    // Hide screen-only UI elements (nav bar, footer buttons, sidebar)
+    const uiEls = Array.from(
+      document.querySelectorAll<HTMLElement>('.print\\:hidden')
+    );
+    uiEls.forEach(el => {
+      el.dataset._uiDisplay = el.style.display;
+      el.style.display = 'none';
+    });
+
+    const restore = () => {
+      clipped.forEach(el => {
+        el.style.overflow  = el.dataset._printOverflow ?? '';
+        el.style.height    = el.dataset._printHeight   ?? '';
+        el.style.maxHeight = el.dataset._printMaxH     ?? '';
+      });
+      uiEls.forEach(el => {
+        el.style.display = el.dataset._uiDisplay ?? '';
+      });
+      document.title = prevTitle;
+      document.head.removeChild(style);
+    };
+
     const { yyyy, mm, dd, hh, min } = getISTDateParts();
     const dateStr = `${yyyy}-${mm}-${dd}`;
     const timeStr = `${hh}:${min} IST`;
@@ -186,10 +229,32 @@ export function ReportHeader({
     `;
     document.head.appendChild(style);
     const prevTitle = document.title;
-    document.title = reportId;
+    document.title = filename;
+
     window.scrollTo(0, 0);
-    document.title = prevTitle;
-    document.head.removeChild(style);
+    window.print();
+
+    html2pdf()
+      .set({
+        margin: [14, 12, 18, 12],
+        filename: `${filename}.pdf`,
+        image: { type: 'jpeg', quality: 0.98 },
+        html2canvas: { scale: 2, useCORS: true, logging: false },
+        jsPDF: { unit: 'mm', format: 'a4', orientation: 'portrait' },
+      })
+      .from(element)
+      .save()
+      .then(() => {
+        restore();
+        toast.success('Report saved', {
+          description: `${filename}.pdf has been sent to your downloads.`,
+          duration: 5000,
+        });
+      })
+      .catch(() => {
+        restore();
+        toast.error('Download failed. Please try again.', { duration: 4000 });
+      });
   };
 
   return (

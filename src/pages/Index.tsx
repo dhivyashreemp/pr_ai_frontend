@@ -14,12 +14,12 @@ import { CATEGORIES } from "@/data/attributes";
 import type { ProofRequestMissingItem } from "@/data/dummyData";
 
 function generateReportId(): string {
-  const now  = new Date();
-  const ist  = new Date(now.getTime() + (5 * 60 + 30) * 60 * 1000);
+  const now = new Date();
+  const ist = new Date(now.getTime() + (5 * 60 + 30) * 60 * 1000);
   const yyyy = ist.getUTCFullYear();
-  const mm   = String(ist.getUTCMonth() + 1).padStart(2, '0');
-  const dd   = String(ist.getUTCDate()).padStart(2, '0');
-  const dateKey    = `${yyyy}${mm}${dd}`;
+  const mm = String(ist.getUTCMonth() + 1).padStart(2, '0');
+  const dd = String(ist.getUTCDate()).padStart(2, '0');
+  const dateKey = `${yyyy}${mm}${dd}`;
   const storageKey = `lpr_counter_${dateKey}`;
   const last = parseInt(localStorage.getItem(storageKey) ?? '0', 10);
   const next = last + 1;
@@ -319,16 +319,16 @@ const Index = () => {
                   (a: any) => a.discrepancy_id === discrepancyIdx
                 );
                 parsedItems.push({
-                  id:            `api-d${index}-${idCounter++}`,
+                  id: `api-d${index}-${idCounter++}`,
                   discrepancy_id: discrepancyIdx,
-                  category:       item.Category,
+                  category: item.Category,
                   status,
                   value,
                   oldText,
                   newText,
-                  detail:         item.detail ?? null,
-                  aiSummary:      ann?.summary ?? null,
-                  confidence:     ann?.confidence ?? null,
+                  detail: item.detail ?? null,
+                  aiSummary: ann?.summary ?? null,
+                  confidence: ann?.confidence ?? null,
                 });
                 discrepancyIdx++;
               });
@@ -389,7 +389,7 @@ const Index = () => {
       const norm = (ct: string): string => {
         const MAP: Record<string, string> = {
           Modify: 'Modified', Add: 'Added', Delete: 'Deleted',
-          Remove: 'Deleted',  Removed: 'Deleted',
+          Remove: 'Deleted', Removed: 'Deleted',
         };
         return MAP[ct] ?? ct;
       };
@@ -530,10 +530,10 @@ const Index = () => {
     // matching logic (Pass 1–4) and barcode_summary change_type comparisons.
     const norm = (ct: string): string => {
       const MAP: Record<string, string> = {
-        Modify:  'Modified',
-        Add:     'Added',
-        Delete:  'Deleted',
-        Remove:  'Deleted',
+        Modify: 'Modified',
+        Add: 'Added',
+        Delete: 'Deleted',
+        Remove: 'Deleted',
         Removed: 'Deleted',
       };
       return MAP[ct] ?? ct;
@@ -544,16 +544,16 @@ const Index = () => {
     // ("Symbol", "Barcode", "Image"). Centralising the mapping here means adding
     // a new category to the JSON never silently breaks requirement matching.
     const CATEGORY_LABEL_TO_AI: Record<string, "Text" | "Symbol" | "Barcode" | "DataMatrix" | "Image"> = {
-      "Text":       "Text",
-      "Symbols":    "Symbol",
-      "Symbol":     "Symbol",
-      "Barcodes":   "Barcode",
-      "Barcode":    "Barcode",
+      "Text": "Text",
+      "Symbols": "Symbol",
+      "Symbol": "Symbol",
+      "Barcodes": "Barcode",
+      "Barcode": "Barcode",
       // DataMatrix has its own tab — keep it distinct for per-category summary counts
       "DataMatrix": "DataMatrix",
       "Datamatrix": "DataMatrix",
-      "Images":     "Image",
-      "Image":      "Image",
+      "Images": "Image",
+      "Image": "Image",
     };
     const normCat = (label: string): "Text" | "Symbol" | "Barcode" | "DataMatrix" | "Image" =>
       CATEGORY_LABEL_TO_AI[label] ?? (label as "Text" | "Symbol" | "Barcode" | "DataMatrix" | "Image");
@@ -716,8 +716,8 @@ const Index = () => {
         if (matchingChange) {
           reqFoundIds.add(req.attrId);
           const mc = matchingChange;
-          const oldDec = mc.old_value   || "";
-          const newDec = mc.new_value   || "";
+          const oldDec = mc.old_value || "";
+          const newDec = mc.new_value || "";
           const oldPrt = mc.old_printed || "";
           const newPrt = mc.new_printed || "";
           // Always show all four combinations so the reviewer gets a complete picture.
@@ -781,19 +781,19 @@ const Index = () => {
         } else if (req.category === "Barcode" || req.category === "DataMatrix") {
           // No matching change detected — show the full 4-combination snapshot of what
           // is currently on each label so the reviewer can see the actual state.
-          const baseBarcodes: any[]  = result.barcode_summary?.base?.barcode_elements  ?? [];
+          const baseBarcodes: any[] = result.barcode_summary?.base?.barcode_elements ?? [];
           const childBarcodes: any[] = result.barcode_summary?.child?.barcode_elements ?? [];
-          const baseAiPrinted  = result.barcode_summary?.base?.ai_barcode_number  || "";
+          const baseAiPrinted = result.barcode_summary?.base?.ai_barcode_number || "";
           const childAiPrinted = result.barcode_summary?.child?.ai_barcode_number || "";
           const lines: string[] = [];
           for (const b of baseBarcodes) {
-            const dec = b.decoded_value      || "";
+            const dec = b.decoded_value || "";
             const prt = b.printed_text_below || baseAiPrinted || "";
             lines.push(`Base decoded:  ${dec || "(none)"}`);
             lines.push(`Base printed:  ${prt || "(none)"}`);
           }
           for (const b of childBarcodes) {
-            const dec = b.decoded_value      || "";
+            const dec = b.decoded_value || "";
             const prt = b.printed_text_below || childAiPrinted || "";
             lines.push(`Child decoded: ${dec || "(none)"}`);
             lines.push(`Child printed: ${prt || "(none)"}`);
@@ -829,7 +829,7 @@ const Index = () => {
     // position so the user only needs a small adjustment, not a full drag.
     const DEFAULT_W = 0.24;
     const DEFAULT_H = 0.055;
-    const GAP       = 0.010;
+    const GAP = 0.010;
 
     const aiAnnotations: any[] = apiResults[selectedResultIndex]?.annotations ?? [];
 
@@ -838,13 +838,13 @@ const Index = () => {
     const usedAnnIdx = new Set<number>();
     const findAnn = (label: string, changeType: string): any | null => {
       const words = label.toLowerCase().split(/\s+/).filter(w => w.length > 2);
-      const ct    = changeType.toLowerCase();
+      const ct = changeType.toLowerCase();
       // First pass: label word match + change type match
       for (let i = 0; i < aiAnnotations.length; i++) {
         if (usedAnnIdx.has(i)) continue;
         const ann = aiAnnotations[i];
-        const al  = ann.label?.toLowerCase() ?? "";
-        const typeOk  = ann.change_type?.toLowerCase() === ct;
+        const al = ann.label?.toLowerCase() ?? "";
+        const typeOk = ann.change_type?.toLowerCase() === ct;
         const labelOk = words.some(w => al.includes(w));
         if (labelOk && typeOk) { usedAnnIdx.add(i); return ann; }
       }
@@ -852,7 +852,7 @@ const Index = () => {
       for (let i = 0; i < aiAnnotations.length; i++) {
         if (usedAnnIdx.has(i)) continue;
         const ann = aiAnnotations[i];
-        const al  = ann.label?.toLowerCase() ?? "";
+        const al = ann.label?.toLowerCase() ?? "";
         if (words.some(w => al.includes(w))) { usedAnnIdx.add(i); return ann; }
       }
       return null;
@@ -869,28 +869,28 @@ const Index = () => {
       const ann = findAnn(item.label, item.expectedChange);
       if (ann) {
         return {
-          id:         item.attrId,
-          label:      item.label,
+          id: item.attrId,
+          label: item.label,
           changeType: item.expectedChange,
-          category:   item.category,
-          satisfied:  item.satisfied,
-          x:          ann.x,
-          y:          ann.y,
-          width:      ann.width  > 0 ? ann.width  : DEFAULT_W,
-          height:     ann.height > 0 ? ann.height : DEFAULT_H,
+          category: item.category,
+          satisfied: item.satisfied,
+          x: ann.x,
+          y: ann.y,
+          width: ann.width > 0 ? ann.width : DEFAULT_W,
+          height: ann.height > 0 ? ann.height : DEFAULT_H,
         };
       }
       // No AI annotation match — stack on left edge as fallback
       const pos = {
-        id:         item.attrId,
-        label:      item.label,
+        id: item.attrId,
+        label: item.label,
         changeType: item.expectedChange,
-        category:   item.category,
-        satisfied:  item.satisfied,
-        x:          0.01,
-        y:          0.01 + fallbackIdx * (DEFAULT_H + GAP),
-        width:      DEFAULT_W,
-        height:     DEFAULT_H,
+        category: item.category,
+        satisfied: item.satisfied,
+        x: 0.01,
+        y: 0.01 + fallbackIdx * (DEFAULT_H + GAP),
+        width: DEFAULT_W,
+        height: DEFAULT_H,
       };
       fallbackIdx++;
       return pos;
@@ -1073,7 +1073,7 @@ const Index = () => {
         change_type: (change.change_type ?? 'Modified') as any,
         category: isDm ? 'DataMatrix' : 'Barcode',
         x: n(bb.x), y: n(bb.y),
-        width:  n(bb.width  ?? bb.w),
+        width: n(bb.width ?? bb.w),
         height: n(bb.height ?? bb.h),
         confidence: 'medium' as const,
       });
@@ -1091,7 +1091,7 @@ const Index = () => {
         change_type: 'Modified' as any,
         category: isDm ? 'DataMatrix' : 'Barcode',
         x: n(bb.x), y: n(bb.y),
-        width:  n(bb.width  ?? bb.w),
+        width: n(bb.width ?? bb.w),
         height: n(bb.height ?? bb.h),
         confidence: 'low' as const,
       });
@@ -1219,83 +1219,83 @@ const Index = () => {
 
         <div className="flex-1 overflow-y-auto">
 
-        <div className="px-6 py-6 space-y-6 pb-16 max-w-[1600px] mx-auto w-full">
+          <div className="px-6 py-6 space-y-6 pb-16 max-w-[1600px] mx-auto w-full">
 
-          {/* ── Upload Section (Hidden in Scenario 3) ── */}
-          {!formData && (
-            <div className="space-y-4">
-              <div className="grid grid-cols-2 gap-4">
-                <Dropzone
-                  label="UPLOAD CURRENT VERSION LABELS (PDF / IMAGE)"
-                  files={baseFile}
-                  onFilesSelect={setBaseFile}
-                  multiple={true}
-                  alwaysShowUploadBox={true}
-                />
-                <Dropzone
-                  label="UPLOAD NEW VERSION LABEL"
-                  files={childFiles}
-                  onFilesSelect={setChildFiles}
-                  multiple={true}
-                  alwaysShowUploadBox={true}
-                />
+            {/* ── Upload Section (Hidden in Scenario 3) ── */}
+            {!formData && (
+              <div className="space-y-4">
+                <div className="grid grid-cols-2 gap-4">
+                  <Dropzone
+                    label="UPLOAD CURRENT VERSION LABELS (PDF / IMAGE)"
+                    files={baseFile}
+                    onFilesSelect={setBaseFile}
+                    multiple={true}
+                    alwaysShowUploadBox={true}
+                  />
+                  <Dropzone
+                    label="UPLOAD NEW VERSION LABEL"
+                    files={childFiles}
+                    onFilesSelect={setChildFiles}
+                    multiple={true}
+                    alwaysShowUploadBox={true}
+                  />
+                </div>
+                <div className="flex justify-center">
+                  <button
+                    onClick={handleRunAnalysis}
+                    disabled={loading || isExpandingBase}
+                    className="px-8 py-3 bg-primary text-white font-bold rounded shadow-md hover:bg-primary/90 disabled:opacity-50 flex items-center gap-2 tracking-wide text-sm"
+                  >
+                    {loading ? "ANALYZING..." : isExpandingBase ? "PROCESSING PDF..." : "RUN COMPARATOR ANALYSIS"}
+                  </button>
+                </div>
               </div>
-              <div className="flex justify-center">
-                <button
-                  onClick={handleRunAnalysis}
-                  disabled={loading || isExpandingBase}
-                  className="px-8 py-3 bg-primary text-white font-bold rounded shadow-md hover:bg-primary/90 disabled:opacity-50 flex items-center gap-2 tracking-wide text-sm"
-                >
-                  {loading ? "ANALYZING..." : isExpandingBase ? "PROCESSING PDF..." : "RUN COMPARATOR ANALYSIS"}
-                </button>
-              </div>
-            </div>
-          )}
+            )}
 
-          {/* ── Visual Diff Viewer ── */}
-          <VisualDiffViewer
-            baseImage={basePreviewUrl || undefined}
-            childImage={childPreviewUrls[selectedResultIndex] || childPreviewUrls[0] || undefined}
-            annotations={
-              currentAnnotations.filter((_: any, i: number) => !discardedAnnotationBoxIds.includes(`annotation-${i}`))
-            }
-            requirementBoxes={[]}
-            onBoxesChange={(boxes) => setAdjustedBoxes(boxes)}
-            onAddBox={handleAddBox}
-            onDeleteBox={handleDeleteBox}
-            onAnnotationsChange={(newAnnotations) => {
-              const current = adjustedAnnotations ?? currentAnnotations;
-              if (newAnnotations.length < current.length) {
-                const newIds = new Set(newAnnotations.map((a: any) => a.discrepancy_id).filter((id: any) => id != null));
-                for (const ann of current) {
-                  if (ann.discrepancy_id != null && !newIds.has(ann.discrepancy_id)) {
-                    setDeletedDiscrepancyIds(prev => new Set([...prev, ann.discrepancy_id]));
+            {/* ── Visual Diff Viewer ── */}
+            <VisualDiffViewer
+              baseImage={basePreviewUrl || undefined}
+              childImage={childPreviewUrls[selectedResultIndex] || childPreviewUrls[0] || undefined}
+              annotations={
+                currentAnnotations.filter((_: any, i: number) => !discardedAnnotationBoxIds.includes(`annotation-${i}`))
+              }
+              requirementBoxes={[]}
+              onBoxesChange={(boxes) => setAdjustedBoxes(boxes)}
+              onAddBox={handleAddBox}
+              onDeleteBox={handleDeleteBox}
+              onAnnotationsChange={(newAnnotations) => {
+                const current = adjustedAnnotations ?? currentAnnotations;
+                if (newAnnotations.length < current.length) {
+                  const newIds = new Set(newAnnotations.map((a: any) => a.discrepancy_id).filter((id: any) => id != null));
+                  for (const ann of current) {
+                    if (ann.discrepancy_id != null && !newIds.has(ann.discrepancy_id)) {
+                      setDeletedDiscrepancyIds(prev => new Set([...prev, ann.discrepancy_id]));
+                    }
                   }
                 }
-              }
-              setAdjustedAnnotations(newAnnotations);
-            }}
-          />
+                setAdjustedAnnotations(newAnnotations);
+              }}
+            />
 
-          {/* ── Inspection Summary + Details ── */}
-          <DataTables
-            formData={formData}
-            discrepancies={
-              // Only show items that have a localised bbox in the VisualDiffViewer
-              // (matches the preview page behaviour where detail count = bbox count).
-              analysisRun && apiResults.length > 0
-                ? (filteredValidatedParsedItems ?? filteredParsedItems ?? []).filter(
+            {/* ── Inspection Summary + Details ── */}
+            <DataTables
+              formData={formData}
+              discrepancies={
+                // Only show items that have a localised bbox in the VisualDiffViewer
+                // (matches the preview page behaviour where detail count = bbox count).
+                analysisRun && apiResults.length > 0
+                  ? (filteredValidatedParsedItems ?? filteredParsedItems ?? []).filter(
                     (item: any) => bboxDiscrepancyIds.has(item.discrepancy_id)
                   )
-                : undefined
-            }
-            missingItems={filteredMissingItems}
-            satisfiedItems={filteredSatisfiedItems}
-            yoloReview={apiResults[selectedResultIndex]?.yolo_review ?? []}
-            childFields={apiResults[selectedResultIndex]?.child_fields ?? {}}
-          />
+                  : undefined
+              }
+              missingItems={filteredMissingItems}
+              satisfiedItems={filteredSatisfiedItems}
+              yoloReview={apiResults[selectedResultIndex]?.yolo_review ?? []}
+              childFields={apiResults[selectedResultIndex]?.child_fields ?? {}}
+            />
 
-        </div>
+          </div>
         </div>
       </main>
 
@@ -1309,42 +1309,42 @@ const Index = () => {
         </div>
         <button
           onClick={() => navigate('/preview', {
-          state: {
-            scenario: formData ? 'C' : 'A',
-            formData,
-            submissionId,
-            // Pass ALL validated items (valid + invalid).
-            // ReportPage splits them: isValid===true → Expected Changes, isValid===false → Unexpected Changes.
-            parsedItems: filteredValidatedParsedItems ?? (analysisRun && apiResults.length > 0 ? apiResults[selectedResultIndex]?.parsedItems : []) ?? [],
-            missingItems: filteredMissingItems,
-            satisfiedItems: filteredSatisfiedItems,
-            annotations: currentAnnotations,
-            deletedDiscrepancyIds: [...deletedDiscrepancyIds],
-            reportId,
-            // User-adjusted requirement box positions (proof-request mode only)
-            requirementBoxes: (adjustedBoxes?.length ?? 0) > 0 ? adjustedBoxes : (requirementBoxes ?? []),
-            // Barcode pipeline results for report summary + changes made
-            barcode_summary: analysisRun && apiResults.length > 0 ? apiResults[selectedResultIndex]?.barcode_summary ?? null : null,
-            // Pass as arrays — PreviewPage unpacks [0] for display, passes single File to ReportPage
-            baseFile:  expandedBaseFiles[selectedResultIndex] ? [expandedBaseFiles[selectedResultIndex]] : [],
-            childFile: expandedChildFiles[selectedResultIndex] ? [expandedChildFiles[selectedResultIndex]] : [],
-            baseFileName: expandedBaseFiles[selectedResultIndex]?.name ?? '',
-            childFileName: expandedChildFiles[selectedResultIndex]?.name ?? '',
-            // Stored so compare page can be fully restored when navigating back.
-            // Preview URLs (strings) are the source of truth on remount because
-            // File objects may not survive location.state across all remount paths.
-            apiResults,
-            lrfAnalysis,
-            childFiles: expandedChildFiles,
-            basePreviewUrl,
-            expandedBasePreviewUrls: basePreviewUrls,
-            expandedChildPreviewUrls: childPreviewUrls,
-            expandedBaseFileNames: expandedBaseFiles.map(f => f.name),
-            analysisRun,
-            selectedResultIndex,
-            userAnnotations: restoredUserAnnotations,
-          },
-        })}
+            state: {
+              scenario: formData ? 'C' : 'A',
+              formData,
+              submissionId,
+              // Pass ALL validated items (valid + invalid).
+              // ReportPage splits them: isValid===true → Expected Changes, isValid===false → Unexpected Changes.
+              parsedItems: filteredValidatedParsedItems ?? (analysisRun && apiResults.length > 0 ? apiResults[selectedResultIndex]?.parsedItems : []) ?? [],
+              missingItems: filteredMissingItems,
+              satisfiedItems: filteredSatisfiedItems,
+              annotations: currentAnnotations,
+              deletedDiscrepancyIds: [...deletedDiscrepancyIds],
+              reportId,
+              // User-adjusted requirement box positions (proof-request mode only)
+              requirementBoxes: (adjustedBoxes?.length ?? 0) > 0 ? adjustedBoxes : (requirementBoxes ?? []),
+              // Barcode pipeline results for report summary + changes made
+              barcode_summary: analysisRun && apiResults.length > 0 ? apiResults[selectedResultIndex]?.barcode_summary ?? null : null,
+              // Pass as arrays — PreviewPage unpacks [0] for display, passes single File to ReportPage
+              baseFile: expandedBaseFiles[selectedResultIndex] ? [expandedBaseFiles[selectedResultIndex]] : [],
+              childFile: expandedChildFiles[selectedResultIndex] ? [expandedChildFiles[selectedResultIndex]] : [],
+              baseFileName: expandedBaseFiles[selectedResultIndex]?.name ?? '',
+              childFileName: expandedChildFiles[selectedResultIndex]?.name ?? '',
+              // Stored so compare page can be fully restored when navigating back.
+              // Preview URLs (strings) are the source of truth on remount because
+              // File objects may not survive location.state across all remount paths.
+              apiResults,
+              lrfAnalysis,
+              childFiles: expandedChildFiles,
+              basePreviewUrl,
+              expandedBasePreviewUrls: basePreviewUrls,
+              expandedChildPreviewUrls: childPreviewUrls,
+              expandedBaseFileNames: expandedBaseFiles.map(f => f.name),
+              analysisRun,
+              selectedResultIndex,
+              userAnnotations: restoredUserAnnotations,
+            },
+          })}
           className="flex items-center gap-2 bg-[#d51900] text-white px-8 py-3 text-[13px] font-bold uppercase tracking-widest hover:bg-[#b01300] transition-colors rounded-lg shadow-md"
         >
           <FileText className="w-4 h-4" />

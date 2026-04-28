@@ -103,11 +103,11 @@ const InspectionSummary = ({ items, formData, missingItems = [], satisfiedItems 
             {/* Totals Row */}
             <div className="grid grid-cols-2 gap-8 text-sm pb-3 border-b border-border">
               <div className="flex items-baseline gap-2">
-                <span className="font-semibold text-green-600">Requirements Satisfied:</span>
+                <span className="font-semibold text-green-600">Proof Requirements Satisfied:</span>
                 <span className="font-mono font-bold text-green-600">{totalSatisfied}</span>
               </div>
               <div className="flex items-baseline gap-2">
-                <span className="font-semibold text-[#D51900]">Proof Request Missing:</span>
+                <span className="font-semibold text-[#D51900]">Proof Requirements Not Satisfied:</span>
                 <span className="font-mono font-bold text-[#D51900]">{totalMissing}</span>
               </div>
             </div>
@@ -330,7 +330,7 @@ const ProofRequestMissingGroup = ({ items }: { items: ProofRequestMissingItem[] 
       >
         {open ? <ChevronDown className="h-3.5 w-3.5 text-muted-foreground" /> : <ChevronRight className="h-3.5 w-3.5 text-muted-foreground" />}
         <X className="h-3.5 w-3.5 text-[#D51900]" />
-        <span className="text-xs font-semibold uppercase tracking-wider text-[#D51900]">Proof Request Missing</span>
+        <span className="text-xs font-semibold uppercase tracking-wider text-[#D51900]">Proof Requirements Not Satisfied</span>
         <span className="text-xs text-muted-foreground font-mono">({items.length})</span>
       </button>
       {open && (

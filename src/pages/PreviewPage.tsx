@@ -1287,6 +1287,7 @@ const PreviewPage = () => {
         lrfAnalysis:  state.lrfAnalysis ?? null,
         discardedUnexpectedIds: [...discardedUnexpectedIds],
         deletedDiscrepancyIds: state.deletedDiscrepancyIds ?? [],
+        reportId: state.reportId ?? '',
         userAnnotations,
         requirementBoxes,
         annotations: state.annotations ?? [],
