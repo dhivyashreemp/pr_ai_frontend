@@ -13,6 +13,7 @@ export interface Annotation {
   width: number;
   height: number;
   confidence: "high" | "medium" | "low";
+  discrepancy_id?: number | string;
 }
 
 /** One draggable+resizable requirement box shown in proof-request mode. */
@@ -176,7 +177,6 @@ const DraggableBoxOverlay = ({
     setStates(initialBoxes.map(b => ({ x: b.x, y: b.y, w: b.width, h: b.height })));
     setSelectedIdx(null);
     setEditingIdx(null);
-    onBoxesChangeRef.current?.(initialBoxes);
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [boxKey]);
 
@@ -934,6 +934,7 @@ const VisualDiffViewer = ({
   childImage,
   annotations      = [],
   requirementBoxes = [],
+  detailCount,
   onBoxesChange,
   onAddBox,
   onDeleteBox,
@@ -943,6 +944,7 @@ const VisualDiffViewer = ({
   childImage?:        string;
   annotations?:       Annotation[];
   requirementBoxes?:  RequirementBox[];
+  detailCount?:       number;
   onBoxesChange?:     (boxes: RequirementBox[]) => void;
   onAddBox?:          (box: RequirementBox) => void;
   onDeleteBox?:       (boxId: string) => void;

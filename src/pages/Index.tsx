@@ -13,6 +13,20 @@ import { toast } from "sonner";
 import { CATEGORIES } from "@/data/attributes";
 import type { ProofRequestMissingItem } from "@/data/dummyData";
 
+function generateReportId(): string {
+  const now  = new Date();
+  const ist  = new Date(now.getTime() + (5 * 60 + 30) * 60 * 1000);
+  const yyyy = ist.getUTCFullYear();
+  const mm   = String(ist.getUTCMonth() + 1).padStart(2, '0');
+  const dd   = String(ist.getUTCDate()).padStart(2, '0');
+  const dateKey    = `${yyyy}${mm}${dd}`;
+  const storageKey = `lpr_counter_${dateKey}`;
+  const last = parseInt(localStorage.getItem(storageKey) ?? '0', 10);
+  const next = last + 1;
+  localStorage.setItem(storageKey, String(next));
+  return `${dateKey}${String(next).padStart(4, '0')}`;
+}
+
 const Index = () => {
   const location = useLocation();
   const navigate = useNavigate();
@@ -31,6 +45,7 @@ const Index = () => {
 
   // Restored from location state when navigating back from the report page
   const [apiResults, setApiResults] = useState<any[]>(location.state?.apiResults || []);
+  const [reportId, setReportId] = useState<string>(location.state?.reportId ?? '');
   const [lrfAnalysis, setLrfAnalysis] = useState<{ symbols: any[]; fields: any[] } | null>(
     location.state?.lrfAnalysis || null
   );
@@ -130,17 +145,18 @@ const Index = () => {
   );
   // Tracks requirement box positions after user drags/resizes/duplicates them in VisualDiffViewer.
   // Restored from location.state when navigating back from PreviewPage so label edits survive.
-  const [adjustedBoxes, setAdjustedBoxes] = useState<RequirementBox[]>(
-    location.state?.requirementBoxes ?? []
+  // `null` means the user has not edited anything yet.
+  const [adjustedBoxes, setAdjustedBoxes] = useState<RequirementBox[] | null>(
+    location.state?.requirementBoxes !== undefined ? location.state.requirementBoxes : null
   );
   // Restored from location.state when navigating back from PreviewPage so annotation label edits survive.
-  const [adjustedAnnotations, setAdjustedAnnotations] = useState<Annotation[]>(
-    location.state?.annotations ?? []
+  const [adjustedAnnotations, setAdjustedAnnotations] = useState<Annotation[] | null>(
+    location.state?.annotations !== undefined ? location.state.annotations : null
   );
-  // Track whether user has intentionally edited annotations — even if the array becomes empty,
-  // we should NOT fall back to API results. This prevents deleted bboxes from reappearing.
-  const [hasUserEditedAnnotations, setHasUserEditedAnnotations] = useState<boolean>(
-    (location.state?.annotations?.length ?? 0) > 0
+  // Track discrepancy IDs explicitly deleted by the user from the viewer.
+  // Using a "deleted" set (not a "visible" set) means items without a bbox still show.
+  const [deletedDiscrepancyIds, setDeletedDiscrepancyIds] = useState<Set<number | string>>(
+    new Set(location.state?.deletedDiscrepancyIds ?? [])
   );
   const [basePreviewUrls, setBasePreviewUrls] = useState<string[]>(
     location.state?.expandedBasePreviewUrls || []
@@ -231,9 +247,9 @@ const Index = () => {
       isFirstResultIndexRender.current = false;
       return;
     }
-    setAdjustedBoxes([]);
-    setAdjustedAnnotations([]);
-    setHasUserEditedAnnotations(false);
+    setAdjustedBoxes(null);
+    setAdjustedAnnotations(null);
+    setDeletedDiscrepancyIds(new Set());
   }, [selectedResultIndex]);
 
   // Derived: URL for the base label of the currently selected pair
@@ -271,6 +287,7 @@ const Index = () => {
         setLrfAnalysis(rawData);
         setApiResults([]);
         setSelectedResultIndex(0);
+        setReportId(generateReportId());
         setAnalysisRun(true);
       } else {
         // ── Full diff mode: N base labels paired positionally with N child labels ──
@@ -302,15 +319,16 @@ const Index = () => {
                   (a: any) => a.discrepancy_id === discrepancyIdx
                 );
                 parsedItems.push({
-                  id:         `api-d${index}-${idCounter++}`,
-                  category:   item.Category,
+                  id:            `api-d${index}-${idCounter++}`,
+                  discrepancy_id: discrepancyIdx,
+                  category:       item.Category,
                   status,
                   value,
                   oldText,
                   newText,
-                  detail:     item.detail ?? null,
-                  aiSummary:  ann?.summary ?? null,
-                  confidence: ann?.confidence ?? null,
+                  detail:         item.detail ?? null,
+                  aiSummary:      ann?.summary ?? null,
+                  confidence:     ann?.confidence ?? null,
                 });
                 discrepancyIdx++;
               });
@@ -320,16 +338,18 @@ const Index = () => {
           return {
             ...result,
             parsedItems,
-            yolo_review:  result.yolo_review  ?? [],
+            yolo_review: result.yolo_review ?? [],
             child_fields: result.child_fields ?? {},
           };
         });
 
         setLrfAnalysis(null);
         setApiResults(processedResults);
+        setAdjustedBoxes(null);
         setSelectedResultIndex(0);
-        setAdjustedAnnotations([]);
-        setHasUserEditedAnnotations(false);
+        setAdjustedAnnotations(null);
+        setDeletedDiscrepancyIds(new Set());
+        setReportId(generateReportId());
         setAnalysisRun(true);
       }
     } catch (error) {
@@ -467,6 +487,7 @@ const Index = () => {
           }
           return {
             id: `missing-${i}`,
+            attrId: req.attrId,
             category: req.category as ProofRequestMissingItem["category"],
             label: req.label,
             expectedChange: req.changeType,
@@ -484,6 +505,7 @@ const Index = () => {
           }
           return {
             id: `satisfied-${i}`,
+            attrId: req.attrId,
             category: req.category as ProofRequestMissingItem["category"],
             label: req.label,
             expectedChange: req.changeType,
@@ -780,6 +802,7 @@ const Index = () => {
         }
         return {
           id: `missing-${i}`,
+          attrId: req.attrId,
           category: req.category as ProofRequestMissingItem["category"],
           label: req.label,
           expectedChange: req.changeType,
@@ -793,6 +816,7 @@ const Index = () => {
       .filter(req => reqFoundIds.has(req.attrId))
       .map((req, i) => ({
         id: `satisfied-${i}`,
+        attrId: req.attrId,
         category: req.category as ProofRequestMissingItem["category"],
         label: req.label,
         expectedChange: req.changeType,
@@ -845,7 +869,7 @@ const Index = () => {
       const ann = findAnn(item.label, item.expectedChange);
       if (ann) {
         return {
-          id:         item.id,
+          id:         item.attrId,
           label:      item.label,
           changeType: item.expectedChange,
           category:   item.category,
@@ -858,7 +882,7 @@ const Index = () => {
       }
       // No AI annotation match — stack on left edge as fallback
       const pos = {
-        id:         item.id,
+        id:         item.attrId,
         label:      item.label,
         changeType: item.expectedChange,
         category:   item.category,
@@ -880,9 +904,7 @@ const Index = () => {
   // Called when user duplicates a requirement box in VisualDiffViewer
   const handleAddBox = useCallback((newBox: RequirementBox) => {
     setAdjustedBoxes(prev => {
-      // If adjustedBoxes is empty the user hasn't moved anything yet —
-      // seed from the original requirementBoxes so positions are preserved
-      const current = prev.length > 0 ? prev : (requirementBoxes ?? []);
+      const current = prev ?? (requirementBoxes ?? []);
       // Avoid adding the same id twice (safety guard)
       if (current.some(b => b.id === newBox.id)) return current;
       return [...current, newBox];
@@ -891,7 +913,7 @@ const Index = () => {
 
   const handleDeleteBox = useCallback((boxId: string) => {
     setAdjustedBoxes(prev => {
-      const current = prev.length > 0 ? prev : (requirementBoxes ?? []);
+      const current = prev ?? (requirementBoxes ?? []);
       return current.filter(box => box.id !== boxId);
     });
   }, [requirementBoxes]);
@@ -899,20 +921,41 @@ const Index = () => {
   // Filter missingItems and satisfiedItems based on which requirement boxes are still visible.
   // When a user deletes a requirement box from VisualDiffViewer, the corresponding row in
   // the inspection details should also disappear.
-  const visibleRequirementBoxIds = useMemo(() => {
-    const current = adjustedBoxes.length > 0 ? adjustedBoxes : (requirementBoxes ?? []);
-    return new Set(current.map(b => b.id));
-  }, [adjustedBoxes, requirementBoxes]);
+  const currentRequirementBoxes = useMemo(
+    () => adjustedBoxes !== null ? adjustedBoxes : (requirementBoxes ?? []),
+    [adjustedBoxes, requirementBoxes]
+  );
+
+  const visibleRequirementBoxIds = useMemo(
+    () => new Set(currentRequirementBoxes.map(b => b.id)),
+    [currentRequirementBoxes]
+  );
 
   const filteredMissingItems = useMemo(
-    () => missingItems,  // Missing items have no boxes, so nothing to filter
-    [missingItems]
+    () => missingItems.filter(item => !visibleRequirementBoxIds.has(item.attrId)),
+    [missingItems, visibleRequirementBoxIds]
   );
 
   const filteredSatisfiedItems = useMemo(
-    () => satisfiedItems.filter(item => visibleRequirementBoxIds.has(item.id)),
+    () => satisfiedItems.filter(item => visibleRequirementBoxIds.has(item.attrId)),
     [satisfiedItems, visibleRequirementBoxIds]
   );
+
+  const filteredValidatedParsedItems = useMemo(() => {
+    if (!validatedParsedItems) return undefined;
+    if (deletedDiscrepancyIds.size === 0) return validatedParsedItems;
+    return validatedParsedItems.filter((item) =>
+      item.discrepancy_id == null || !deletedDiscrepancyIds.has(item.discrepancy_id)
+    );
+  }, [validatedParsedItems, deletedDiscrepancyIds]);
+
+  const filteredParsedItems = useMemo(() => {
+    const parsedItems = apiResults[selectedResultIndex]?.parsedItems ?? [];
+    if (deletedDiscrepancyIds.size === 0) return parsedItems;
+    return parsedItems.filter((item) =>
+      item.discrepancy_id == null || !deletedDiscrepancyIds.has(item.discrepancy_id)
+    );
+  }, [apiResults, selectedResultIndex, deletedDiscrepancyIds]);
 
   const [discardedUnexpectedIds] = useState<Set<string>>(
     new Set(location.state?.discardedUnexpectedIds ?? [])
@@ -929,8 +972,8 @@ const Index = () => {
   // bounding boxes. Deduplication is category-aware: boxes of different categories
   // (e.g. Text vs Barcode/DataMatrix) are never merged even when spatially close.
   const currentAnnotations = useMemo<any[]>(() => {
-    // If user has intentionally edited annotations (even if array is now empty), use them
-    if (hasUserEditedAnnotations) return adjustedAnnotations;
+    // If user has edited or deleted annotations, use the adjusted array directly
+    if (adjustedAnnotations !== null) return adjustedAnnotations;
     if (!analysisRun || lrfOnly || apiResults.length === 0) return [];
     const result = apiResults[selectedResultIndex];
     if (!result) return [];
@@ -995,6 +1038,7 @@ const Index = () => {
               category: item.Category ?? '',
               x: n(bb.x), y: n(bb.y), width: n(bb.width), height: n(bb.height),
               confidence: (bb.confidence ?? 'medium') as any,
+              discrepancy_id: idx,
             });
           }
           idx++;
@@ -1067,21 +1111,39 @@ const Index = () => {
 
     // Deduplicate by spatial proximity (center within 5%).
     // Category-aware: different-category boxes are never merged.
+    // When an incoming duplicate carries a discrepancy_id that the surviving entry
+    // lacks (e.g. a discrepancyBox overlapping a resolvedAnnotation that the backend
+    // didn't tag), patch it in so bbox deletion can still link to the parsedItem row.
     const deduped: any[] = [];
     for (const box of combined) {
       const cx = (box.x ?? 0) + (box.width ?? 0) / 2;
       const cy = (box.y ?? 0) + (box.height ?? 0) / 2;
-      const isDuplicate = deduped.some(existing => {
+      const existingIdx = deduped.findIndex(existing => {
         if (box.category && existing.category && box.category !== existing.category) return false;
         const ex = (existing.x ?? 0) + (existing.width ?? 0) / 2;
         const ey = (existing.y ?? 0) + (existing.height ?? 0) / 2;
         return Math.abs(cx - ex) < 0.05 && Math.abs(cy - ey) < 0.05;
       });
-      if (!isDuplicate) deduped.push(box);
+      if (existingIdx === -1) {
+        deduped.push(box);
+      } else if (box.discrepancy_id != null && deduped[existingIdx].discrepancy_id == null) {
+        deduped[existingIdx] = { ...deduped[existingIdx], discrepancy_id: box.discrepancy_id };
+      }
     }
 
     return deduped;
-  }, [adjustedAnnotations, analysisRun, lrfOnly, apiResults, selectedResultIndex, hasUserEditedAnnotations]);
+  }, [adjustedAnnotations, analysisRun, lrfOnly, apiResults, selectedResultIndex]);
+
+  // Only show inspection details for items that have a visible bbox in the VisualDiffViewer.
+  // Items without a localised bbox (full-image placeholder dropped, or deduplicated away)
+  // are excluded, so the detail count always matches the annotation count.
+  const bboxDiscrepancyIds = useMemo(() => {
+    return new Set(
+      currentAnnotations
+        .filter((a: any) => a.discrepancy_id != null)
+        .map((a: any) => a.discrepancy_id)
+    );
+  }, [currentAnnotations]);
 
   return (
     <div className="h-screen bg-[#f8f9fa] flex flex-col overflow-hidden">
@@ -1151,7 +1213,7 @@ const Index = () => {
           childPreviewUrls={childPreviewUrls}
           apiResults={apiResults}
           selectedIndex={selectedResultIndex}
-          onSelectChild={(i) => { setSelectedResultIndex(i); setAdjustedAnnotations([]); setHasUserEditedAnnotations(false); }}
+          onSelectChild={(i) => { setSelectedResultIndex(i); setAdjustedAnnotations(null); setDeletedDiscrepancyIds(new Set()); }}
           analysisRun={analysisRun}
         />
 
@@ -1197,15 +1259,21 @@ const Index = () => {
             annotations={
               currentAnnotations.filter((_: any, i: number) => !discardedAnnotationBoxIds.includes(`annotation-${i}`))
             }
-            requirementBoxes={(adjustedBoxes.length > 0 ? adjustedBoxes : (requirementBoxes ?? [])).map(
-              ({ satisfied: _, ...rest }) => rest as RequirementBox
-            )}
+            requirementBoxes={[]}
             onBoxesChange={(boxes) => setAdjustedBoxes(boxes)}
             onAddBox={handleAddBox}
             onDeleteBox={handleDeleteBox}
-            onAnnotationsChange={(annotations) => { 
-              setAdjustedAnnotations(annotations); 
-              setHasUserEditedAnnotations(true);
+            onAnnotationsChange={(newAnnotations) => {
+              const current = adjustedAnnotations ?? currentAnnotations;
+              if (newAnnotations.length < current.length) {
+                const newIds = new Set(newAnnotations.map((a: any) => a.discrepancy_id).filter((id: any) => id != null));
+                for (const ann of current) {
+                  if (ann.discrepancy_id != null && !newIds.has(ann.discrepancy_id)) {
+                    setDeletedDiscrepancyIds(prev => new Set([...prev, ann.discrepancy_id]));
+                  }
+                }
+              }
+              setAdjustedAnnotations(newAnnotations);
             }}
           />
 
@@ -1213,11 +1281,12 @@ const Index = () => {
           <DataTables
             formData={formData}
             discrepancies={
-              // In form mode: pass validatedParsedItems so the dashboard can
-              // separate Expected vs Unexpected changes.
-              // In direct comparison mode: show all AI detections.
+              // Only show items that have a localised bbox in the VisualDiffViewer
+              // (matches the preview page behaviour where detail count = bbox count).
               analysisRun && apiResults.length > 0
-                ? (validatedParsedItems ?? apiResults[selectedResultIndex]?.parsedItems ?? [])
+                ? (filteredValidatedParsedItems ?? filteredParsedItems ?? []).filter(
+                    (item: any) => bboxDiscrepancyIds.has(item.discrepancy_id)
+                  )
                 : undefined
             }
             missingItems={filteredMissingItems}
@@ -1246,12 +1315,14 @@ const Index = () => {
             submissionId,
             // Pass ALL validated items (valid + invalid).
             // ReportPage splits them: isValid===true → Expected Changes, isValid===false → Unexpected Changes.
-            parsedItems: validatedParsedItems ?? (analysisRun && apiResults.length > 0 ? apiResults[selectedResultIndex]?.parsedItems : []) ?? [],
+            parsedItems: filteredValidatedParsedItems ?? (analysisRun && apiResults.length > 0 ? apiResults[selectedResultIndex]?.parsedItems : []) ?? [],
             missingItems: filteredMissingItems,
             satisfiedItems: filteredSatisfiedItems,
             annotations: currentAnnotations,
+            deletedDiscrepancyIds: [...deletedDiscrepancyIds],
+            reportId,
             // User-adjusted requirement box positions (proof-request mode only)
-            requirementBoxes: adjustedBoxes.length > 0 ? adjustedBoxes : (requirementBoxes ?? []),
+            requirementBoxes: (adjustedBoxes?.length ?? 0) > 0 ? adjustedBoxes : (requirementBoxes ?? []),
             // Barcode pipeline results for report summary + changes made
             barcode_summary: analysisRun && apiResults.length > 0 ? apiResults[selectedResultIndex]?.barcode_summary ?? null : null,
             // Pass as arrays — PreviewPage unpacks [0] for display, passes single File to ReportPage

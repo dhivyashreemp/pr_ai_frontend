@@ -356,13 +356,13 @@ const ReportPageInner = () => {
     source: 'reviewer',
   }));
 
-  const aiUnexpected: UnexpectedChange[] = annotations.map((ann: any, i: number) => ({
+  const aiUnexpected: UnexpectedChange[] = (parsedItems.length > 0 ? parsedItems : annotations).map((item: any, i: number) => ({
     id: `ai-${i}`,
-    elementType: ann.category ?? 'Text',
-    changeType: ann.change_type ?? 'Modified',
-    actual: ann.label || ann.value || ann.change_type || 'AI-detected unexpected change',
+    elementType: item.category ?? 'Text',
+    changeType: item.status ?? item.change_type ?? 'Modified',
+    actual: item.value || item.label || item.change_type || 'AI-detected unexpected change',
     linkedBoxIds: [`ai-${i}`],
-    source: 'ai',
+    source: 'ai' as const,
   }));
 
   // Prefer URLs forwarded through location.state — the full Index → Preview →
@@ -493,11 +493,12 @@ const ReportPageInner = () => {
 
   const pairReportData: PairReportData[] = rawPairs.map((pair: any) => {
     const pairReqs = buildRequirements(pair.satisfiedItems ?? [], pair.missingItems ?? []);
-    const pairAiUnexpected: UnexpectedChange[] = (pair.annotations ?? []).map((ann: any, i: number) => ({
+    const pairItems = pair.parsedItems?.length > 0 ? pair.parsedItems : (pair.annotations ?? []);
+    const pairAiUnexpected: UnexpectedChange[] = pairItems.map((item: any, i: number) => ({
       id:           `ai-p${pair.pairIndex}-${i}`,
-      elementType:  ann.category ?? 'Text',
-      changeType:   ann.change_type ?? 'Modified',
-      actual:       ann.label || ann.value || ann.change_type || 'AI-detected change',
+      elementType:  item.category ?? 'Text',
+      changeType:   item.status ?? item.change_type ?? 'Modified',
+      actual:       item.value || item.label || item.change_type || 'AI-detected change',
       linkedBoxIds: [`ai-p${pair.pairIndex}-${i}`],
       source:       'ai' as const,
     }));
@@ -541,7 +542,7 @@ const ReportPageInner = () => {
   // NOTE: reportData is defined later; build this from already-computed values
   // to avoid a temporal dead zone error.
   const activePairAsReportData: ReportData | null = activePair ? {
-    reportId:              '',
+    reportId:              location.state?.reportId ?? '',
     crNumber:              formData?.metadata?.cr_number   ?? '',
     sku:                   formData?.metadata?.part_number ?? '',
     currentRevision:       revParts[0] ?? '',
@@ -650,7 +651,7 @@ const ReportPageInner = () => {
   };
 
   const reportData: ReportData = {
-    reportId:         '',
+    reportId:         location.state?.reportId ?? '',
     crNumber:         formData?.metadata?.cr_number   ?? '',
     sku:              formData?.metadata?.part_number ?? '',
     currentRevision:  revParts[0] ?? '',

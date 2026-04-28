@@ -1,3 +1,4 @@
+import { useState } from 'react';
 import { useTheme } from './ThemeContext';
 // import { ThemeSwitcher } from './ThemeSwitcher';
 import { useNavigate, useLocation } from 'react-router-dom';
@@ -33,6 +34,16 @@ function getISTDateParts() {
   return { yyyy, mm, dd, hh, min };
 }
 
+function generateReportId(): string {
+  const { yyyy, mm, dd } = getISTDateParts();
+  const dateKey    = `${yyyy}${mm}${dd}`;
+  const storageKey = `lpr_counter_${dateKey}`;
+  const last = parseInt(localStorage.getItem(storageKey) ?? '0', 10);
+  const next = last + 1;
+  localStorage.setItem(storageKey, String(next));
+  return `${dateKey}${String(next).padStart(4, '0')}`;
+}
+
 export function ReportHeader({
   activeScenario,
   onScenarioChange,
@@ -45,8 +56,8 @@ export function ReportHeader({
   const navigate  = useNavigate();
   const location  = useLocation();
   const { user }  = useUser();
-  const { yyyy, mm, dd } = getISTDateParts();
-  const reportId  = propReportId ?? `${yyyy}${mm}${dd}0001`;
+  // Use the ID generated at analysis time; fall back to generating one if accessed directly
+  const [reportId] = useState<string>(() => propReportId || generateReportId());
 
   const revisionLabel = currentRevision && newRevision
     ? `${currentRevision} \u2192 ${newRevision}`
@@ -233,24 +244,24 @@ export function ReportHeader({
         </div>
       </div>
 
-      {/* ── Printable banner ── */}
-      <div className="report-content-wrap max-w-[1600px] mx-auto px-8 py-6 flex items-start justify-between">
-        {/* Left: title + report ID */}
+      {/* ── Printable banner (full-width: title left, logo right) ── */}
+      <div className="w-full px-8 py-6 flex items-start justify-between">
+        {/* Left corner: title + report ID */}
         <div className="space-y-1">
           <h1 className="report-banner-title text-white text-2xl font-bold tracking-tight">
             Label Proofing Report
           </h1>
           <div className="report-banner-id text-white/80 text-xs">Report ID: {reportId}</div>
-        </div>
-
-        {/* Right: logo + revision */}
-        <div className="flex flex-col items-end gap-1.5">
-          <img src="/novintix-logo.png" alt="Novintix" className="report-banner-logo h-8 w-auto" />
           {revisionLabel && (
-            <div className="report-banner-revision text-white/90 text-sm font-semibold tracking-wide">
+            <div className="report-banner-revision text-white/90 text-sm font-semibold tracking-wide mt-1">
               {revisionLabel}
             </div>
           )}
+        </div>
+
+        {/* Right corner: logo */}
+        <div className="flex flex-col items-end justify-center self-center">
+          <img src="/novintix-logo.png" alt="Novintix" className="report-banner-logo h-8 w-auto" />
         </div>
       </div>
     </header>

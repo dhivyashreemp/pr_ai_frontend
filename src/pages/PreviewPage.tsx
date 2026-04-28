@@ -202,6 +202,8 @@ function DrawableImagePanel({
 
   const handlePointerDown = (e: React.PointerEvent<HTMLDivElement>) => {
     if (!isDrawingMode || placing) return;
+    // Don't intercept clicks on buttons (e.g. the red delete X)
+    if ((e.target as HTMLElement).closest('button')) return;
     setSelectedBoxId(null);   // clear selection only when actually starting a draw
     e.preventDefault();
     e.currentTarget.setPointerCapture(e.pointerId);
@@ -488,17 +490,15 @@ function DrawableImagePanel({
               >
                 {box.text || box.type}{total > 1 ? ` (${idx}/${total})` : ''}
               </span>
-              {/* Delete button (hover, only when not selected) */}
-              {!isSelected && (
-                <button
-                  className="absolute top-0 right-0 bg-red-600 text-white opacity-0 group-hover:opacity-100 transition-opacity p-0.5"
-                  style={{ fontSize: '8px', transform: 'translate(50%, -50%)' }}
-                  onClick={(e) => { e.stopPropagation(); onDeleteBox(box.id); }}
-                  title="Remove this box"
-                >
-                  <X className="w-2.5 h-2.5" />
-                </button>
-              )}
+              {/* Delete button (hover) */}
+              <button
+                className="absolute top-0 right-0 bg-red-600 text-white opacity-0 group-hover:opacity-100 transition-opacity p-0.5"
+                style={{ fontSize: '8px', transform: 'translate(50%, -50%)' }}
+                onClick={(e) => { e.stopPropagation(); onDeleteBox(box.id); }}
+                title="Remove this box"
+              >
+                <X className="w-2.5 h-2.5" />
+              </button>
               {/* Duplicate toolbar (visible when selected) */}
               {isSelected && (
                 <div
@@ -1233,6 +1233,7 @@ const PreviewPage = () => {
         allPairs: (() => {
           const allApiResults: any[] = state.apiResults ?? [];
           if (allApiResults.length === 0) return [];
+          const deletedIds: Set<number | string> = new Set(state.deletedDiscrepancyIds ?? []);
           return allApiResults.map((result: any, i: number) => ({
             pairIndex:    i,
             // Fall back to index 0 when fewer base labels were uploaded than child labels
@@ -1241,7 +1242,9 @@ const PreviewPage = () => {
             baseFileName: expandedBaseFileNames[i]    ?? expandedBaseFileNames[0]    ?? '',
             childFileName: childFilesAll[i]?.name     ?? '',
             annotations:  result.annotations           ?? [],
-            parsedItems:  result.parsedItems            ?? [],
+            parsedItems:  (result.parsedItems ?? []).filter((item: any) =>
+              item.discrepancy_id == null || !deletedIds.has(item.discrepancy_id)
+            ),
             barcode_summary: result.barcode_summary     ?? null,
           }));
         })(),
@@ -1283,6 +1286,7 @@ const PreviewPage = () => {
         apiResults:   state.apiResults  ?? [],
         lrfAnalysis:  state.lrfAnalysis ?? null,
         discardedUnexpectedIds: [...discardedUnexpectedIds],
+        deletedDiscrepancyIds: state.deletedDiscrepancyIds ?? [],
         userAnnotations,
         requirementBoxes,
         annotations: state.annotations ?? [],
