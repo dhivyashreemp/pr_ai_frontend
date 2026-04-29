@@ -294,6 +294,7 @@ async function _generateAndSave(
       max-width: none !important;
       padding-left: 0 !important;
       padding-right: 0 !important;
+      padding-top: 0 !important;
       margin-left: 0 !important;
       margin-right: 0 !important;
     }
@@ -881,7 +882,7 @@ const ReportPageInner = () => {
             {isMultiPair && activePairAsReportData ? (
               <>
                 {/* Screen: active pair report */}
-                <div className="report-pair-screen flex-1 overflow-y-auto report-content-wrap max-w-none px-8 pt-0 pb-24">
+                <div className="report-pair-screen flex-1 overflow-y-auto report-content-wrap max-w-none px-8 pt-6 pb-24">
                   <FrameA
                     data={activePairAsReportData}
                     summaryData={activePairSummaryData}
@@ -917,7 +918,7 @@ const ReportPageInner = () => {
               </>
             ) : (
               // Single pair — render scenario-appropriate frame alongside sidebar
-              <div className="flex-1 overflow-y-auto report-content-wrap px-8 pt-0 pb-24">
+              <div className="flex-1 overflow-y-auto report-content-wrap px-8 pt-6 pb-24">
                 {!hasChanges ? (
                   <FrameNoChange
                     labelName={childFileName || undefined}
@@ -956,7 +957,7 @@ const ReportPageInner = () => {
         // ── No pairs: single pair or no-change without sidebar ────────────────
         <>
         <MetadataRow data={reportData} />
-        <div className="flex-1 report-content-wrap max-w-[1600px] mx-auto px-8 pt-0 pb-24">
+        <div className="flex-1 report-content-wrap max-w-[1600px] mx-auto px-8 pt-6 pb-24">
           {!hasChanges ? (
             <FrameNoChange
               labelName={childFileName || undefined}
@@ -1022,10 +1023,10 @@ const ReportPageInner = () => {
           </div>
           <div className="flex items-center gap-6">
             <button
-              onClick={() => navigate(-1)}
+              onClick={() => navigate('/')}
               className="text-[13px] font-bold uppercase tracking-widest text-slate-400 hover:text-slate-700 transition-colors"
             >
-              BACK
+              HOME
             </button>
             <div className="flex items-center gap-2">
               {isMultiPair && checkedPairIndices.size > 0 && (
@@ -1064,10 +1065,10 @@ const ReportPageInner = () => {
           </div>
           <div className="flex items-center gap-6">
             <button
-              onClick={() => navigate(-1)}
+              onClick={() => navigate('/')}
               className="text-[13px] font-bold uppercase tracking-widest text-slate-400 hover:text-slate-700 transition-colors"
             >
-              BACK
+              HOME
             </button>
             <button
               onClick={handleDownloadPDF}
