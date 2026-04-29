@@ -23,6 +23,7 @@ interface SidebarOptions {
   defaultWidth?: number;
   defaultCollapsed?: boolean;
   forceClosedOnMount?: boolean;
+  forceOpenOnMount?: boolean;   // always start expanded at defaultWidth, ignoring localStorage
 }
 
 const FALLBACK_DEFAULT: SidebarState = { isCollapsed: false, width: 280 };
@@ -33,6 +34,7 @@ export function useSidebarState(key: string = "labelix-sidebar", options?: Sideb
   const defaultWidth = options?.defaultWidth ?? FALLBACK_DEFAULT.width;
   const defaultCollapsed = options?.defaultCollapsed ?? FALLBACK_DEFAULT.isCollapsed;
   const forceClosed  = options?.forceClosedOnMount ?? false;
+  const forceOpen    = options?.forceOpenOnMount   ?? false;
 
   const clamp = useCallback(
     (w: number) => Math.max(min, Math.min(max, w)),
@@ -40,6 +42,8 @@ export function useSidebarState(key: string = "labelix-sidebar", options?: Sideb
   );
 
   const [state, setState] = useState<SidebarState>(() => {
+    // forceOpenOnMount wins over everything — always start expanded at defaultWidth
+    if (forceOpen) return { isCollapsed: false, width: defaultWidth };
     try {
       const raw = localStorage.getItem(key);
       if (!raw) return { isCollapsed: forceClosed ? true : defaultCollapsed, width: defaultWidth };

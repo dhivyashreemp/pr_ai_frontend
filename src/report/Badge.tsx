@@ -25,7 +25,7 @@ export function Badge({ type }: BadgeProps) {
   const color = colorMap[type];
   return (
     <span
-      className="inline-block w-20 py-1 text-xs border text-center"
+      className="inline-block px-2 py-0.5 text-xs border text-center whitespace-nowrap"
       style={{ backgroundColor: `${color}15`, color, borderColor: `${color}60` }}
     >
       {LABEL_MAP[type] ?? type}

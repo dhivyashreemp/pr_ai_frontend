@@ -78,7 +78,7 @@ function LabelBox({
   };
 
   return (
-    <div className="bg-white border border-gray-300" style={{ pageBreakInside: 'avoid', breakInside: 'avoid' }}>
+    <div className="report-label-box bg-white border border-gray-300" style={{ pageBreakInside: 'avoid', breakInside: 'avoid' }}>
       {/* Section header */}
       <div className="border-b border-gray-300 px-4 py-2.5 flex items-start justify-between">
         <div>
@@ -199,6 +199,7 @@ export function LabelComparison({
       {effectiveShow === 'both' ? (
         // Side-by-side layout: Current Version | New Version(s)
         <div
+          className="report-label-grid"
           style={{
             display: 'grid',
             gridTemplateColumns: `repeat(${1 + effectiveNewLabels.length}, 1fr)`,

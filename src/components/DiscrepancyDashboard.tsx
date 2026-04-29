@@ -83,6 +83,13 @@ const InspectionSummary = ({ items, formData, missingItems = [], satisfiedItems 
   const satisfiedCountsByCat = { Text: satisfiedCounts["Text"] || 0, Symbol: satisfiedCounts["Symbol"] || 0, Barcode: satisfiedCounts["Barcode"] || 0, DataMatrix: satisfiedCounts["DataMatrix"] || 0, Image: satisfiedCounts["Image"] || 0 };
   const totalSatisfied = satisfiedItems.length;
 
+  // Unexpected changes: sum AI-detected discrepancy items across all statuses by category
+  const unexpectedCountsByCat: Record<Category, number> = { Text: 0, Symbol: 0, Barcode: 0, DataMatrix: 0, Image: 0 };
+  (["Text", "Symbol", "Barcode", "DataMatrix", "Image"] as Category[]).forEach((cat) => {
+    unexpectedCountsByCat[cat] = statusOrder.reduce((sum, status) => sum + byStatusAndCategory[status][cat], 0);
+  });
+  const totalUnexpected = total;
+
   return (
     <div className="bg-card border border-border">
       <div className="bg-secondary/50 px-4 py-2 border-b border-border">
@@ -101,7 +108,7 @@ const InspectionSummary = ({ items, formData, missingItems = [], satisfiedItems 
         {formData ? (
           <>
             {/* Totals Row */}
-            <div className="grid grid-cols-2 gap-8 text-sm pb-3 border-b border-border">
+            <div className="grid grid-cols-3 gap-8 text-sm pb-3 border-b border-border">
               <div className="flex items-baseline gap-2">
                 <span className="font-semibold text-green-600">Proof Requirements Satisfied:</span>
                 <span className="font-mono font-bold text-green-600">{totalSatisfied}</span>
@@ -110,10 +117,14 @@ const InspectionSummary = ({ items, formData, missingItems = [], satisfiedItems 
                 <span className="font-semibold text-[#D51900]">Proof Requirements Not Satisfied:</span>
                 <span className="font-mono font-bold text-[#D51900]">{totalMissing}</span>
               </div>
+              <div className="flex items-baseline gap-2">
+                <span className="font-semibold text-orange-600">Unexpected Changes:</span>
+                <span className="font-mono font-bold text-orange-600">{totalUnexpected}</span>
+              </div>
             </div>
 
             {/* Category breakdown */}
-            <div className="grid grid-cols-2 gap-8 text-sm pt-3">
+            <div className="grid grid-cols-3 gap-8 text-sm pt-3">
               <div className="space-y-1">
                 {(["Text", "Symbol", "Barcode", "DataMatrix", "Image"] as Category[]).map((cat) => {
                   const CatIcon = categoryIcons[cat] || Type;
@@ -136,6 +147,19 @@ const InspectionSummary = ({ items, formData, missingItems = [], satisfiedItems 
                       <CatIcon className="h-4 w-4 text-[#D51900]/60 shrink-0" />
                       <span className={catCount > 0 ? "text-[#D51900]" : "text-muted-foreground"}>{cat}:</span>
                       <span className={`font-mono font-semibold ml-auto ${catCount > 0 ? "text-[#D51900]" : "text-muted-foreground"}`}>{catCount}</span>
+                    </div>
+                  );
+                })}
+              </div>
+              <div className="space-y-1">
+                {(["Text", "Symbol", "Barcode", "DataMatrix", "Image"] as Category[]).map((cat) => {
+                  const CatIcon = categoryIcons[cat] || Type;
+                  const catCount = unexpectedCountsByCat[cat];
+                  return (
+                    <div key={`unexpected-${cat}`} className="flex items-center gap-2 text-sm">
+                      <CatIcon className="h-4 w-4 text-orange-600/60 shrink-0" />
+                      <span className={catCount > 0 ? "text-orange-600" : "text-muted-foreground"}>{cat}:</span>
+                      <span className={`font-mono font-semibold ml-auto ${catCount > 0 ? "text-orange-600" : "text-muted-foreground"}`}>{catCount}</span>
                     </div>
                   );
                 })}

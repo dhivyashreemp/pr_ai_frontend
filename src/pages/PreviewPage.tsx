@@ -67,7 +67,7 @@ interface DrawableImagePanelProps {
   highlightedGroupId?: string | null;
   isReadOnly?: boolean;
   initialAiOverrides?: Record<string, { top: number; left: number;
-    
+
     width: number; height: number }>;
   transformRef?: React.RefObject<any>;
   onTransformed?: (_: any, state: { scale: number; positionX: number; positionY: number }) => void;
@@ -304,6 +304,7 @@ function DrawableImagePanel({
               onClick={isReadOnly ? undefined : () => { if (!isDrawingMode && !placing) setSelectedBoxId(null); }}
             >
               <img src={src} alt={title} className="w-full h-auto block" draggable={false} />
+
 
               {/* Crosshair — only visible in drawing mode */}
               {isDrawingMode && !isReadOnly && cursorPos && (
@@ -922,6 +923,7 @@ const PreviewPage = () => {
   );
 
   const existingNewBoxes: DrawnBox[] = useMemo(() => {
+    // Comparator AI annotation boxes
     const annotationAiBoxes = activeAnnotations.map((b: any, i: number) => ({
       id:     `annotation-${i}`,
       type:   (b.change_type ?? 'Modified') as DrawnBox['type'],
@@ -930,12 +932,30 @@ const PreviewPage = () => {
       width:  (b.width ?? 0) * ((b.width ?? 0) <= 1 ? 100 : 1),
       height: (b.height ?? 0) * ((b.height ?? 0) <= 1 ? 100 : 1),
       text:   b.label ?? b.text ?? '',
-    }));
-
-    return annotationAiBoxes.filter(
+    })).filter(
       box => !hiddenAiBoxIds.includes(box.id) && !discardedAnnotationBoxIds.includes(box.id)
     );
-  }, [activeAnnotations, hiddenAiBoxIds, discardedAnnotationBoxIds]);
+
+    // LRF requirement boxes (0-1 normalized coords → convert to %)
+    // Color matches VisualDiffViewer: satisfied → green (Added), missing → red (Deleted)
+    const reqBoxes: DrawnBox[] = activeRequirementBoxes
+      .map((b: RequirementBox, i: number) => ({
+        id:     `requirement-${i}`,
+        type:   (b.satisfied === true  ? 'Added'
+               : b.satisfied === false ? 'Deleted'
+               : b.changeType === 'Added'   || b.changeType === 'Add'    ? 'Added'
+               : b.changeType === 'Deleted' || b.changeType === 'Remove' ? 'Deleted'
+               : 'Modified') as DrawnBox['type'],
+        top:    b.y      * 100,
+        left:   b.x      * 100,
+        width:  b.width  * 100,
+        height: b.height * 100,
+        text:   b.label ?? '',
+      }))
+      .filter(box => !hiddenAiBoxIds.includes(box.id));
+
+    return annotationAiBoxes;
+  }, [activeAnnotations, activeRequirementBoxes, hiddenAiBoxIds, discardedAnnotationBoxIds]);
 
   // ── AI box position adjustments (human-in-the-loop fine-tuning) ─────────
   // Keyed by child index so each child retains its own independent adjustments.

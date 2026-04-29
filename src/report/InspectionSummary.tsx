@@ -29,12 +29,6 @@ const ImageIcon = () => (
     <path d="M21 15l-5-5L5 21" strokeLinecap="square" strokeLinejoin="miter" />
   </svg>
 );
-const UnintendedIcon = () => (
-  <svg className="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2}>
-    <circle cx="12" cy="12" r="9" />
-    <path d="M12 8v4M12 16h.01" strokeLinecap="square" />
-  </svg>
-);
 
 interface SummaryData {
   deleted:  { text: number; symbol: number; barcode: number; datamatrix: number; image: number; other: number };
@@ -48,7 +42,6 @@ interface InspectionSummaryProps {
 }
 
 // All-zero baseline — no analysis data means no differences to report.
-// FrameC/FrameA always pass computed summaryData; this only applies to FrameB (form-only, no AI).
 const defaultData: SummaryData = {
   deleted:  { text: 0, symbol: 0, barcode: 0, datamatrix: 0, image: 0, other: 0 },
   added:    { text: 0, symbol: 0, barcode: 0, datamatrix: 0, image: 0, other: 0 },
@@ -59,9 +52,12 @@ const defaultData: SummaryData = {
 export function ReportInspectionSummary({ data = defaultData }: InspectionSummaryProps) {
   const { theme } = useTheme();
 
-  const totalDeleted  = Object.values(data.deleted).reduce((a, b) => a + b, 0);
-  const totalAdded    = Object.values(data.added).reduce((a, b) => a + b, 0);
-  const totalModified = Object.values(data.modified).reduce((a, b) => a + b, 0);
+  // Only count standard element types (text/symbol/barcode/datamatrix/image).
+  // 'other' covers reviewer notes that have no element category — excluded from breakdown rows
+  // but still included in the totals via the bucket sums below.
+  const totalDeleted  = data.deleted.text  + data.deleted.symbol  + data.deleted.barcode  + data.deleted.datamatrix  + data.deleted.image  + data.deleted.other;
+  const totalAdded    = data.added.text    + data.added.symbol    + data.added.barcode    + data.added.datamatrix    + data.added.image    + data.added.other;
+  const totalModified = data.modified.text + data.modified.symbol + data.modified.barcode + data.modified.datamatrix + data.modified.image + data.modified.other;
   const totalDiffs    = totalDeleted + totalAdded + totalModified;
 
   const categories = [
@@ -71,19 +67,18 @@ export function ReportInspectionSummary({ data = defaultData }: InspectionSummar
   ];
 
   const elementTypes = [
-    { label: 'Text',              icon: <TextIcon />,        key: 'text'       as const },
-    { label: 'Symbol',            icon: <SymbolIcon />,      key: 'symbol'     as const },
-    { label: 'Barcode',           icon: <BarcodeIcon />,     key: 'barcode'    as const },
-    { label: 'DataMatrix',        icon: <DataMatrixIcon />,  key: 'datamatrix' as const },
-    { label: 'Image',             icon: <ImageIcon />,       key: 'image'      as const },
-    { label: 'Additional',        icon: <UnintendedIcon />,  key: 'other'      as const },
+    { label: 'Text',       icon: <TextIcon />,       key: 'text'       as const },
+    { label: 'Symbol',     icon: <SymbolIcon />,     key: 'symbol'     as const },
+    { label: 'Barcode',    icon: <BarcodeIcon />,    key: 'barcode'    as const },
+    { label: 'DataMatrix', icon: <DataMatrixIcon />, key: 'datamatrix' as const },
+    { label: 'Image',      icon: <ImageIcon />,      key: 'image'      as const },
   ];
 
   return (
     <div className="bg-white border border-gray-300 p-5" style={{ pageBreakInside: 'avoid', breakInside: 'avoid' }}>
       <div className="flex items-center justify-between mb-4">
         <div className="text-[10px] uppercase tracking-wide text-gray-500 font-bold">Inspection Summary</div>
-        <div className="text-sm font-bold text-gray-900">Total Differences: <span>{totalDiffs}</span></div>
+        <div className="text-sm font-bold text-gray-900">Total Changes: <span>{totalDiffs}</span></div>
       </div>
       <div className="grid grid-cols-3 gap-8 mb-4 pb-4 border-b border-gray-200">
         {categories.map((cat) => (

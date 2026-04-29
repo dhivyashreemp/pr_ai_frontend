@@ -151,7 +151,9 @@ function buildSummaryData(requirements: Requirement[], unexpectedChanges: Unexpe
   // so they go into 'other' — still counted in header totals but not in the breakdown grid.
   for (const uc of unexpectedChanges) {
     const sk = statusKey[uc.changeType as string] ?? 'modified';
-    data[sk].other++;
+    const ck = catKey[uc.elementType];
+    if (sk && ck) data[sk][ck]++;
+    else if (sk) data[sk].other++;
   }
   return data;
 }
@@ -162,9 +164,23 @@ function buildAnnotationBoxes(
   requirementBoxes?: RequirementBox[],
   userBoxes?: DrawnBox[],
 ): DrawnBox[] {
-  let base: DrawnBox[];
+  let base: DrawnBox[] = [];
 
-  if (requirementBoxes && requirementBoxes.length > 0) {
+  // Prefer AI comparator annotation boxes over LRF requirement boxes
+  if (annotations.length > 0) {
+    base = annotations.map((ann, i) => ({
+      id:     `ann-${i}`,
+      type:   ann.change_type as DrawnBox['type'],
+      top:    ann.y      * 100,
+      left:   ann.x      * 100,
+      width:  ann.width  * 100,
+      height: ann.height * 100,
+      text:   ann.label,
+      elementType: ann.category,
+      linkedRowId: `ai-${i}`,
+    }));
+  } else if (requirementBoxes && requirementBoxes.length > 0) {
+    // Fallback to LRF requirement boxes only if no AI results exist
     base = requirementBoxes.map((box, i) => {
       const ct   = (box.changeType ?? 'Modified');
       const type = (
@@ -183,18 +199,6 @@ function buildAnnotationBoxes(
         elementType: box.category,
       };
     });
-  } else {
-    base = annotations.map((ann, i) => ({
-      id:     `ann-${i}`,
-      type:   ann.change_type as DrawnBox['type'],
-      top:    ann.y      * 100,
-      left:   ann.x      * 100,
-      width:  ann.width  * 100,
-      height: ann.height * 100,
-      text:   ann.label,
-      elementType: ann.category,
-      linkedRowId: `ai-${i}`,
-    }));
   }
 
   // Append user-drawn annotations from the preview page
@@ -225,167 +229,154 @@ function _getISTDateParts() {
   };
 }
 
-function _makePrintHandler(reportId: string, sku?: string): () => void {
-  return () => {
-    const { yyyy, mm, dd, hh, min } = _getISTDateParts();
-    const dateStr = `${yyyy}-${mm}-${dd}`;
-    const timeStr = `${hh}:${min} IST`;
-    const filename = sku ? `${sku}_${reportId}` : reportId;
-    const style = document.createElement('style');
-    style.id = '__print-override__';
-    style.textContent = `
-      @page {
-        size: A4 portrait;
-        margin: 14mm 12mm 18mm 12mm;
-        @bottom-left   { content: "LPR: ${reportId}"; font-size: 7pt; color: #888; font-family: sans-serif; }
-        @bottom-center { content: "Page " counter(page); font-size: 7pt; color: #888; font-family: sans-serif; }
-        @bottom-right  { content: "${dateStr} ${timeStr}"; font-size: 7pt; color: #888; font-family: sans-serif; }
-      }
-      @media print {
-        html, body, .h-screen, .flex, .flex-1, .overflow-hidden, .overflow-y-auto {
-          height: auto !important;
-          min-height: auto !important;
-          overflow: visible !important;
-        }
-        body { margin: 0; background: #fff !important; }
+async function _generateAndSave(
+  filename: string,
+  element: HTMLElement,
+  extraPrepare?: () => void,
+  extraRestore?: () => void,
+): Promise<void> {
+  let handle: any = null;
 
-        .report-content-wrap { max-width: none !important; padding: 0 !important; margin: 0 auto !important; overflow: visible !important; }
-
-        .report-banner {
-          padding: 22px 28px !important;
-          -webkit-print-color-adjust: exact !important;
-          print-color-adjust: exact !important;
-        }
-        .report-banner-title {
-          font-size: 24pt !important;
-          font-weight: 700 !important;
-          line-height: 1.2 !important;
-        }
-        .report-banner-id {
-          font-size: 8.5pt !important;
-          margin-top: 4px !important;
-        }
-        .report-banner-logo {
-          height: 32px !important;
-          width: auto !important;
-        }
-        .report-banner-revision {
-          font-size: 10pt !important;
-          font-weight: 600 !important;
-          margin-top: 4px !important;
-        }
-
-        .report-metadata-bar { font-size: 8.5pt !important; }
-
-        .report-page-break { page-break-before: always !important; break-before: page !important; display: block !important; }
-        .report-page-break:last-of-type { page-break-after: auto !important; break-after: auto !important; }
-
-        .report-label-page {
-          page-break-inside: avoid !important;
-          break-inside: avoid !important;
-        }
-        .report-label-img {
-          max-height: 180mm !important;
-          width: auto !important;
-          max-width: 100% !important;
-          display: block !important;
-          margin: 0 auto !important;
-        }
-
-        .report-section { page-break-inside: avoid !important; break-inside: avoid !important; margin-bottom: 0 !important; }
-        .report-section:last-of-type { page-break-after: auto !important; }
-        .report-section-header { page-break-after: avoid; }
-
-        table { width: 100% !important; font-size: 8pt !important; }
-        th, td { padding: 4px 6px !important; }
-
-        span[class*="inline-block"] {
-          -webkit-print-color-adjust: exact !important;
-          print-color-adjust: exact !important;
-        }
-      }
-    `;
-    document.head.appendChild(style);
-    const prevTitle = document.title;
-    document.title = filename;
-
-    // Temporarily expand all overflow-clipped containers so the browser can
-    // lay out the full content across pages instead of clipping to the
-    // visible scroll viewport.
-    const clipped = Array.from(
-      document.querySelectorAll<HTMLElement>('.overflow-y-auto,.overflow-hidden,.overflow-auto')
-    );
-    clipped.forEach(el => {
-      el.dataset._printOverflow = el.style.overflow;
-      el.dataset._printHeight   = el.style.height;
-      el.dataset._printMaxH     = el.style.maxHeight;
-      el.style.overflow  = 'visible';
-      el.style.height    = 'auto';
-      el.style.maxHeight = 'none';
-    });
-
-    window.scrollTo(0, 0);
-    window.print();
-    // window.print() is synchronous in Chrome — code resumes after the dialog closes.
-
-    // After the print dialog closes, also download the file via html2pdf so it
-    // appears in Chrome's downloads bar. The overflow containers are still
-    // expanded from above, so html2canvas will capture the full content.
-    const element = document.getElementById('report-print-area');
-    if (!element) {
-      clipped.forEach(el => {
-        el.style.overflow  = el.dataset._printOverflow ?? '';
-        el.style.height    = el.dataset._printHeight   ?? '';
-        el.style.maxHeight = el.dataset._printMaxH     ?? '';
+  // 1. Show the OS "Save As" dialog FIRST.
+  if (typeof (window as any).showSaveFilePicker === 'function') {
+    try {
+      handle = await (window as any).showSaveFilePicker({
+        suggestedName: `${filename}.pdf`,
+        types: [{ description: 'PDF Document', accept: { 'application/pdf': ['.pdf'] } }],
       });
-      document.title = prevTitle;
-      document.head.removeChild(style);
-      return;
+    } catch (pickerErr: any) {
+      if (pickerErr?.name === 'AbortError') return;
+      throw pickerErr;
+    }
+  }
+
+  // 2. Prepare DOM for high-quality PDF capture
+  const clipped = Array.from(
+    document.querySelectorAll<HTMLElement>('.overflow-y-auto,.overflow-hidden,.overflow-auto')
+  );
+  clipped.forEach(el => {
+    el.dataset._printOverflow = el.style.overflow;
+    el.dataset._printHeight   = el.style.height;
+    el.dataset._printMaxH     = el.style.maxHeight;
+    el.style.overflow  = 'visible';
+    el.style.height    = 'auto';
+    el.style.maxHeight = 'none';
+  });
+
+  const uiEls = Array.from(
+    document.querySelectorAll<HTMLElement>('.print\\:hidden')
+  );
+  uiEls.forEach(el => {
+    el.dataset._uiDisplay = el.style.display;
+    el.style.display = 'none';
+  });
+
+  // Inject specific print layout CSS
+  const pdfLayoutStyle = document.createElement('style');
+  pdfLayoutStyle.id = '__pdf-label-layout__';
+  pdfLayoutStyle.textContent = `
+    .report-page-break { page-break-before: always !important; break-before: page !important; display: block !important; width: 100% !important; }
+    .report-label-page { display: block !important; width: 100% !important; }
+    .report-label-grid { display: block !important; width: 100% !important; padding: 0 2rem !important; box-sizing: border-box !important; }
+    .report-label-box { display: block !important; width: 100% !important; margin-bottom: 3rem !important; border-top: 1px solid #d1d5db !important; padding-top: 2px !important; box-sizing: border-box !important; }
+    .report-label-box + .report-label-box { page-break-before: always !important; break-before: page !important; border-top: 1px solid #d1d5db !important; margin-top: 3rem !important; }
+    .report-label-img  {
+      width: 100% !important;
+      height: auto !important;
+      display: block !important;
+      margin: 0 auto !important;
+    }
+    table { width: 100% !important; font-size: 8pt !important; }
+    th, td { padding: 4px 6px !important; }
+
+    /* Extend content out to match header width */
+    .report-content-wrap {
+      max-width: none !important;
+      padding-left: 0 !important;
+      padding-right: 0 !important;
+      margin-left: 0 !important;
+      margin-right: 0 !important;
     }
 
-    // Hide screen-only UI elements (nav bar, footer buttons, sidebar) for html2pdf
-    const uiEls = Array.from(
-      document.querySelectorAll<HTMLElement>('.print\\:hidden')
-    );
-    uiEls.forEach(el => {
-      el.dataset._uiDisplay = el.style.display;
-      el.style.display = 'none';
+    /* Vertically center text in badges/code blocks */
+    td span[class*="inline-block"] {
+      display: inline-flex !important;
+      align-items: center !important;
+      justify-content: center !important;
+      line-height: 1 !important;
+      padding-top: 4px !important;
+      padding-bottom: 4px !important;
+    }
+  `;
+  document.head.appendChild(pdfLayoutStyle);
+  extraPrepare?.();
+
+  const restore = () => {
+    document.getElementById('__pdf-label-layout__')?.remove();
+    clipped.forEach(el => {
+      el.style.overflow  = el.dataset._printOverflow ?? '';
+      el.style.height    = el.dataset._printHeight   ?? '';
+      el.style.maxHeight = el.dataset._printMaxH     ?? '';
     });
+    uiEls.forEach(el => {
+      el.style.display = el.dataset._uiDisplay ?? '';
+    });
+    extraRestore?.();
+  };
 
-    const restore = () => {
-      clipped.forEach(el => {
-        el.style.overflow  = el.dataset._printOverflow ?? '';
-        el.style.height    = el.dataset._printHeight   ?? '';
-        el.style.maxHeight = el.dataset._printMaxH     ?? '';
-      });
-      uiEls.forEach(el => {
-        el.style.display = el.dataset._uiDisplay ?? '';
-      });
-      document.title = prevTitle;
-      document.head.removeChild(style);
-    };
-
-    html2pdf()
+  try {
+    // 3. Generate the PDF blob via html2pdf
+    const blob: Blob = await html2pdf()
       .set({
         margin: [14, 12, 18, 12],
         filename: `${filename}.pdf`,
+        pagebreak: { mode: ['css', 'legacy'] },
         image: { type: 'jpeg', quality: 0.98 },
         html2canvas: { scale: 2, useCORS: true, logging: false },
         jsPDF: { unit: 'mm', format: 'a4', orientation: 'portrait' },
       })
       .from(element)
-      .save()
-      .then(() => {
-        restore();
-        toast.success('Report saved', {
-          description: `${filename}.pdf has been sent to your downloads.`,
-          duration: 5000,
-        });
-      })
-      .catch(() => {
-        restore();
-        toast.error('Download failed. Please try again.', { duration: 4000 });
-      });
+      .toPdf()
+      .get('pdf')
+      .then((pdf: any) => pdf.output('blob'));
+
+    restore();
+
+    // 4. Persistence: Write to file picker location AND trigger Chrome download notification
+    if (handle) {
+      const writable = await handle.createWritable();
+      await writable.write(blob);
+      await writable.close();
+    }
+
+    // This triggers the standard Chrome download bar / notification
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `${filename}.pdf`;
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    setTimeout(() => URL.revokeObjectURL(url), 30000);
+
+    toast.success('Report saved', {
+      description: `${filename}.pdf has been saved.`,
+      duration: 5000,
+    });
+  } catch (err: any) {
+    restore();
+    if (err?.name !== 'AbortError') {
+      toast.error('Save failed. Please try again.', { duration: 4000 });
+    }
+  }
+}
+
+function _makePrintHandler(reportId: string, sku?: string): () => void {
+  return () => {
+    const filename = sku ? `${sku}_${reportId}` : reportId;
+    const element = document.getElementById('report-print-area');
+    if (!element) return;
+    _generateAndSave(filename, element);
   };
 }
 
@@ -657,173 +648,41 @@ const ReportPageInner = () => {
     const element = document.getElementById('report-print-area');
     if (!element) return;
 
-    // Expand overflow containers so html2canvas captures full content
-    const clipped = Array.from(
-      document.querySelectorAll<HTMLElement>('.overflow-y-auto,.overflow-hidden,.overflow-auto')
-    );
-    clipped.forEach(el => {
-      el.dataset._printOverflow = el.style.overflow;
-      el.dataset._printHeight   = el.style.height;
-      el.dataset._printMaxH     = el.style.maxHeight;
-      el.style.overflow  = 'visible';
-      el.style.height    = 'auto';
-      el.style.maxHeight = 'none';
-    });
-
-    // Hide screen-only UI elements (nav bar, footer buttons, sidebar)
-    const uiEls = Array.from(
-      document.querySelectorAll<HTMLElement>('.print\\:hidden')
-    );
-    uiEls.forEach(el => {
-      el.dataset._uiDisplay = el.style.display;
-      el.style.display = 'none';
-    });
-
-    // Hide non-selected pairs and screen-only pair views
     const pairHideEls: HTMLElement[] = [];
-    pairReportData
-      .map(p => p.pairIndex)
-      .filter(idx => !indices.includes(idx))
-      .forEach(idx => {
-        document.querySelectorAll<HTMLElement>(`[data-pair-print="${idx}"]`).forEach(el => {
-          el.dataset._pairDisplay = el.style.display;
-          el.style.display = 'none';
-          pairHideEls.push(el);
-        });
-      });
-    const pairScreenEls = Array.from(
-      document.querySelectorAll<HTMLElement>('.report-pair-screen')
-    );
-    pairScreenEls.forEach(el => {
-      el.dataset._psDisplay = el.style.display;
-      el.style.display = 'none';
-    });
+    const pairScreenEls: HTMLElement[] = [];
 
-    const restore = () => {
-      clipped.forEach(el => {
-        el.style.overflow  = el.dataset._printOverflow ?? '';
-        el.style.height    = el.dataset._printHeight   ?? '';
-        el.style.maxHeight = el.dataset._printMaxH     ?? '';
+    const extraPrepare = () => {
+      // Hide non-selected pairs
+      pairReportData
+        .map(p => p.pairIndex)
+        .filter(idx => !indices.includes(idx))
+        .forEach(idx => {
+          document.querySelectorAll<HTMLElement>(`[data-pair-print="${idx}"]`).forEach(el => {
+            el.dataset._pairDisplay = el.style.display;
+            el.style.display = 'none';
+            pairHideEls.push(el);
+          });
+        });
+
+      // Hide screen-only pair elements
+      const ps = Array.from(document.querySelectorAll<HTMLElement>('.report-pair-screen'));
+      ps.forEach(el => {
+        el.dataset._psDisplay = el.style.display;
+        el.style.display = 'none';
+        pairScreenEls.push(el);
       });
-      uiEls.forEach(el => {
-        el.style.display = el.dataset._uiDisplay ?? '';
-      });
+    };
+
+    const extraRestore = () => {
       pairHideEls.forEach(el => {
         el.style.display = el.dataset._pairDisplay ?? '';
       });
       pairScreenEls.forEach(el => {
         el.style.display = el.dataset._psDisplay ?? '';
       });
-      document.title = prevTitle;
-      document.head.removeChild(style);
     };
 
-    const { yyyy, mm, dd, hh, min } = _getISTDateParts();
-    const dateStr = `${yyyy}-${mm}-${dd}`;
-    const timeStr = `${hh}:${min} IST`;
-    const style = document.createElement('style');
-    style.id = '__print-override__';
-    style.textContent = `
-      @page {
-        size: A4 portrait;
-        margin: 14mm 12mm 18mm 12mm;
-        @bottom-left   { content: "LPR: ${computedReportId}"; font-size: 7pt; color: #888; font-family: sans-serif; }
-        @bottom-center { content: "Page " counter(page); font-size: 7pt; color: #888; font-family: sans-serif; }
-        @bottom-right  { content: "${dateStr} ${timeStr}"; font-size: 7pt; color: #888; font-family: sans-serif; }
-      }
-      @media print {
-        html, body, .h-screen, .flex, .flex-1, .overflow-hidden, .overflow-y-auto {
-          height: auto !important;
-          min-height: auto !important;
-          overflow: visible !important;
-        }
-        body { margin: 0; background: #fff !important; }
-
-        .report-content-wrap { max-width: none !important; padding: 0 !important; margin: 0 auto !important; overflow: visible !important; }
-
-        .report-banner {
-          padding: 22px 28px !important;
-          -webkit-print-color-adjust: exact !important;
-          print-color-adjust: exact !important;
-        }
-        .report-banner-title {
-          font-size: 24pt !important;
-          font-weight: 700 !important;
-          line-height: 1.2 !important;
-        }
-        .report-banner-id {
-          font-size: 8.5pt !important;
-          margin-top: 4px !important;
-        }
-        .report-banner-logo {
-          height: 32px !important;
-          width: auto !important;
-        }
-        .report-banner-revision {
-          font-size: 10pt !important;
-          font-weight: 600 !important;
-          margin-top: 4px !important;
-        }
-
-        .report-metadata-bar { font-size: 8.5pt !important; }
-
-        .report-page-break { page-break-before: always !important; break-before: page !important; display: block !important; }
-        .report-page-break:last-of-type { page-break-after: auto !important; break-after: auto !important; }
-
-        .report-label-page {
-          page-break-inside: avoid !important;
-          break-inside: avoid !important;
-        }
-        .report-label-img {
-          max-height: 180mm !important;
-          width: auto !important;
-          max-width: 100% !important;
-          display: block !important;
-          margin: 0 auto !important;
-        }
-
-        .report-section { page-break-inside: avoid !important; break-inside: avoid !important; margin-bottom: 0 !important; }
-        .report-section:last-of-type { page-break-after: auto !important; }
-        .report-section-header { page-break-after: avoid; }
-
-        table { width: 100% !important; font-size: 8pt !important; }
-        th, td { padding: 4px 6px !important; }
-
-        span[class*="inline-block"] {
-          -webkit-print-color-adjust: exact !important;
-          print-color-adjust: exact !important;
-        }
-      }
-    `;
-    document.head.appendChild(style);
-    const prevTitle = document.title;
-    document.title = filename;
-
-    window.scrollTo(0, 0);
-    window.print();
-
-
-    html2pdf()
-      .set({
-        margin: [14, 12, 18, 12],
-        filename: `${filename}.pdf`,
-        image: { type: 'jpeg', quality: 0.98 },
-        html2canvas: { scale: 2, useCORS: true, logging: false },
-        jsPDF: { unit: 'mm', format: 'a4', orientation: 'portrait' },
-      })
-      .from(element)
-      .save()
-      .then(() => {
-        restore();
-        toast.success('Report saved', {
-          description: `${filename}.pdf has been sent to your downloads.`,
-          duration: 5000,
-        });
-      })
-      .catch(() => {
-        restore();
-        toast.error('Download failed. Please try again.', { duration: 4000 });
-      });
+    _generateAndSave(filename, element, extraPrepare, extraRestore);
   };
 
   const reportData: ReportData = {
@@ -1022,7 +881,7 @@ const ReportPageInner = () => {
             {isMultiPair && activePairAsReportData ? (
               <>
                 {/* Screen: active pair report */}
-                <div className="report-pair-screen flex-1 overflow-y-auto report-content-wrap max-w-none px-8 py-6 pb-24">
+                <div className="report-pair-screen flex-1 overflow-y-auto report-content-wrap max-w-none px-8 pt-0 pb-24">
                   <FrameA
                     data={activePairAsReportData}
                     summaryData={activePairSummaryData}
@@ -1058,7 +917,7 @@ const ReportPageInner = () => {
               </>
             ) : (
               // Single pair — render scenario-appropriate frame alongside sidebar
-              <div className="flex-1 overflow-y-auto report-content-wrap px-8 py-6 pb-24">
+              <div className="flex-1 overflow-y-auto report-content-wrap px-8 pt-0 pb-24">
                 {!hasChanges ? (
                   <FrameNoChange
                     labelName={childFileName || undefined}
@@ -1097,7 +956,7 @@ const ReportPageInner = () => {
         // ── No pairs: single pair or no-change without sidebar ────────────────
         <>
         <MetadataRow data={reportData} />
-        <div className="flex-1 report-content-wrap max-w-[1600px] mx-auto px-8 py-6 pb-24">
+        <div className="flex-1 report-content-wrap max-w-[1600px] mx-auto px-8 pt-0 pb-24">
           {!hasChanges ? (
             <FrameNoChange
               labelName={childFileName || undefined}

@@ -614,6 +614,8 @@ const Index = () => {
 
     const matchedParsedIds = new Set<string>();
     const reqFoundIds = new Set<string>();
+    // Tracks which parsedItem (by discrepancy_id) matched each requirement (attrId → discrepancy_id)
+    const reqToDiscrepancyId = new Map<string, any>();
     // Tracks the actual value detected on the label for each requirement (attrId → value)
     const actualValueMap = new Map<string, string>();
     // Declared here so Pass 1/2 can use it for accurate Text actual values
@@ -627,6 +629,7 @@ const Index = () => {
         if (valueMatches(pi.value, pi.newText, pi.oldText, pi.status, req.label, req.expectedValue)) {
           matchedParsedIds.add(pi.id);
           reqFoundIds.add(req.attrId);
+          if (pi.discrepancy_id != null) reqToDiscrepancyId.set(req.attrId, pi.discrepancy_id);
           // For Text requirements prefer the dedicated extracted field value — it is
           // more precise than parsedItem text which may be a noisy diff string.
           const textActual = req.category === "Text" && childFields[req.attrId]
@@ -651,6 +654,7 @@ const Index = () => {
           if (valueMatches(pi.value, pi.newText, pi.oldText, pi.status, req.label, req.expectedValue)) {
             matchedParsedIds.add(pi.id);
             reqFoundIds.add(req.attrId);
+            if (pi.discrepancy_id != null) reqToDiscrepancyId.set(req.attrId, pi.discrepancy_id);
             const textActual = req.category === "Text" && childFields[req.attrId]
               ? childFields[req.attrId]
               : (pi.newText || pi.value);
@@ -833,25 +837,79 @@ const Index = () => {
 
     const aiAnnotations: any[] = apiResults[selectedResultIndex]?.annotations ?? [];
 
-    // Simple label-similarity match: split req label into words and look for
-    // any word (>2 chars) appearing in the annotation label.
+    // Normalize a coordinate value from either 0-1 or 0-100 range to 0-1.
+    const nCoord = (v: number | undefined): number =>
+      (v ?? 0) > 1 ? (v ?? 0) / 100 : (v ?? 0);
+
+    // Also build the discrepancy boxes from result.discrepancies so that
+    // findAnn can locate annotations whose discrepancy_id lives there
+    // (not in result.annotations). This mirrors the discrepancyBoxes logic
+    // inside the currentAnnotations useMemo.
+    const localDiscrepancyBoxes: any[] = [];
+    if (result.discrepancies) {
+      let idx = 0;
+      for (const status of ['Added', 'Deleted', 'Modified', 'Repositioned']) {
+        const items: any[] = (result.discrepancies[status] ?? []);
+        items.forEach((item: any) => {
+          const bb = item.bounding_box;
+          if (bb && bb.x != null && bb.y != null) {
+            localDiscrepancyBoxes.push({
+              label:          item.Value ?? '',
+              change_type:    status,
+              category:       item.Category ?? '',
+              x:      nCoord(bb.x),
+              y:      nCoord(bb.y),
+              width:  nCoord(bb.width),
+              height: nCoord(bb.height),
+              discrepancy_id: idx,
+            });
+          }
+          idx++;
+        });
+      }
+    }
+    // Unified search space: result.annotations + discrepancy bounding boxes
+    const allAnnotationSources: any[] = [...aiAnnotations, ...localDiscrepancyBoxes];
+
+    // Find the best-matching AI annotation for a requirement box position.
+    // Priority:
+    //   1. Exact discrepancy_id match (most accurate — traceable to the matched parsedItem)
+    //   2. Label word + change_type match
+    //   3. Label word match only (looser fallback)
     const usedAnnIdx = new Set<number>();
-    const findAnn = (label: string, changeType: string): any | null => {
-      const words = label.toLowerCase().split(/\s+/).filter(w => w.length > 2);
+    const findAnn = (label: string, changeType: string, discrepancyId?: any): any | null => {
+      // Pass 0: exact discrepancy_id match — skip word matching entirely
+      if (discrepancyId != null) {
+        for (let i = 0; i < allAnnotationSources.length; i++) {
+          if (usedAnnIdx.has(i)) continue;
+          if (allAnnotationSources[i].discrepancy_id === discrepancyId) {
+            usedAnnIdx.add(i);
+            return allAnnotationSources[i];
+          }
+        }
+      }
+      // Pass 1: label word match + change type match
+      const words = label.toLowerCase().split(/\s+/).filter(w => w.length > 3);
       const ct = changeType.toLowerCase();
-      // First pass: label word match + change type match
-      for (let i = 0; i < aiAnnotations.length; i++) {
+      for (let i = 0; i < allAnnotationSources.length; i++) {
         if (usedAnnIdx.has(i)) continue;
-        const ann = aiAnnotations[i];
+        const ann = allAnnotationSources[i];
         const al = ann.label?.toLowerCase() ?? "";
         const typeOk = ann.change_type?.toLowerCase() === ct;
-        const labelOk = words.some(w => al.includes(w));
+        const labelOk = words.length > 0 && words.every(w => al.includes(w));
         if (labelOk && typeOk) { usedAnnIdx.add(i); return ann; }
       }
-      // Second pass: label only (looser match)
-      for (let i = 0; i < aiAnnotations.length; i++) {
+      // Pass 2: label all-words match only (looser, ignores change type)
+      for (let i = 0; i < allAnnotationSources.length; i++) {
         if (usedAnnIdx.has(i)) continue;
-        const ann = aiAnnotations[i];
+        const ann = allAnnotationSources[i];
+        const al = ann.label?.toLowerCase() ?? "";
+        if (words.length > 0 && words.every(w => al.includes(w))) { usedAnnIdx.add(i); return ann; }
+      }
+      // Pass 3: any word match (last resort)
+      for (let i = 0; i < allAnnotationSources.length; i++) {
+        if (usedAnnIdx.has(i)) continue;
+        const ann = allAnnotationSources[i];
         const al = ann.label?.toLowerCase() ?? "";
         if (words.some(w => al.includes(w))) { usedAnnIdx.add(i); return ann; }
       }
@@ -866,18 +924,22 @@ const Index = () => {
 
     let fallbackIdx = 0;
     const requirementBoxes: RequirementBox[] = allReqs.map(item => {
-      const ann = findAnn(item.label, item.expectedChange);
+      const ann = findAnn(item.label, item.expectedChange, reqToDiscrepancyId.get(item.attrId));
       if (ann) {
+        const nx = nCoord(ann.x);
+        const ny = nCoord(ann.y);
+        const nw = nCoord(ann.width);
+        const nh = nCoord(ann.height);
         return {
           id: item.attrId,
           label: item.label,
           changeType: item.expectedChange,
           category: item.category,
           satisfied: item.satisfied,
-          x: ann.x,
-          y: ann.y,
-          width: ann.width > 0 ? ann.width : DEFAULT_W,
-          height: ann.height > 0 ? ann.height : DEFAULT_H,
+          x: nx,
+          y: ny,
+          width:  nw  > 0 ? nw  : DEFAULT_W,
+          height: nh  > 0 ? nh  : DEFAULT_H,
         };
       }
       // No AI annotation match — stack on left edge as fallback
@@ -1259,7 +1321,7 @@ const Index = () => {
               annotations={
                 currentAnnotations.filter((_: any, i: number) => !discardedAnnotationBoxIds.includes(`annotation-${i}`))
               }
-              requirementBoxes={[]}
+              requirementBoxes={currentRequirementBoxes}
               onBoxesChange={(boxes) => setAdjustedBoxes(boxes)}
               onAddBox={handleAddBox}
               onDeleteBox={handleDeleteBox}
