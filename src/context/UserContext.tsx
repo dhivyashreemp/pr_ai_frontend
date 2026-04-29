@@ -19,14 +19,27 @@ const UserContext = createContext<UserContextType>({
 
 export const useUser = () => useContext(UserContext);
 
+function getUserFromStorage(): UserInfo {
+  try {
+    const token = localStorage.getItem("token");
+    if (!token) return { name: "", role: "" };
+    const payload = JSON.parse(atob(token.split(".")[1]));
+    if (payload.name) return { name: payload.name, role: payload.role || "" };
+  } catch {
+    // malformed token — ignore
+  }
+  return { name: "", role: "" };
+}
+
 export const UserProvider = ({ children }: { children: ReactNode }) => {
-  const [user, setUserState] = useState<UserInfo>({ name: "", role: "" });
+  const [user, setUserState] = useState<UserInfo>(getUserFromStorage);
 
   const setUser = (u: UserInfo) => {
     setUserState(u);
   };
 
   const logout = () => {
+    localStorage.removeItem("token");
     setUserState({ name: "", role: "" });
   };
 

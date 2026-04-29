@@ -88,6 +88,19 @@ const FormSummaryPage = () => {
 
   const [submitting, setSubmitting] = useState(false);
 
+  const isFormFilled = parsedChanges.length > 0;
+  const newCount = childFile.length;
+  const curCount = baseFile.length;
+
+  const isSubmitDisabled = submitting || (() => {
+    if (flow === "to-compare") {
+      if (newCount === 0) return true;
+      if (isFormFilled) return curCount > 0 && curCount !== newCount;
+      return curCount !== newCount;
+    }
+    return newCount === 0;
+  })();
+
   const handleSubmit = async () => {
     setSubmitAttempted(true);
     if (childFile.length === 0) return;
@@ -268,7 +281,9 @@ const FormSummaryPage = () => {
               <div className="px-6 py-6 space-y-6">
                 <p className="text-[14px] text-[#64748b] leading-relaxed">
                   {flow === "to-compare"
-                    ? "Upload the new version label (required). Optionally upload the current version to enable a side-by-side comparison."
+                    ? isFormFilled
+                      ? "Upload the new version label (required). Optionally upload the current version to enable a side-by-side comparison."
+                      : "Upload matching new and current version labels — both sections must have the same number of files to enable submission."
                     : "Upload the new label version to be inspected against the expected changes defined in the form."}
                 </p>
 
@@ -281,7 +296,7 @@ const FormSummaryPage = () => {
                       multiple={true}
                     />
                     <Dropzone
-                      label="Current Version Labels (optional — enables side-by-side diff)"
+                      label={isFormFilled ? "Current Version Labels (optional — enables side-by-side diff)" : "Current Version Labels (required — must match new version count)"}
                       files={baseFile}
                       onFilesSelect={setBaseFile}
                       multiple={true}
@@ -339,19 +354,23 @@ const FormSummaryPage = () => {
           >
             BACK
           </button>
-          {childFile.length === 0 ? (
+          {newCount === 0 ? (
             <span className="text-[12px] text-[#94a3b8] font-medium hidden sm:block">
               Upload the new version label to enable submission
             </span>
-          ) : (parsedChanges.length === 0 && childFile.length > 1) ? (
+          ) : flow === "to-compare" && !isFormFilled && curCount === 0 ? (
             <span className="text-[12px] text-red-500 font-medium hidden sm:block">
-              Cannot upload multiple new version labels without filling the form
+              Upload a matching current version label, or fill the form to submit
+            </span>
+          ) : flow === "to-compare" && curCount > 0 && curCount !== newCount ? (
+            <span className="text-[12px] text-red-500 font-medium hidden sm:block">
+              New and current version label counts must match
             </span>
           ) : null}
           <button
             onClick={handleSubmit}
-            disabled={submitting || childFile.length === 0 || (parsedChanges.length === 0 && childFile.length > 1)}
-            className={`flex items-center gap-2 px-8 py-2.5 text-[13px] font-bold uppercase tracking-widest transition-all rounded-lg shadow-sm ${(!submitting && childFile.length > 0 && !(parsedChanges.length === 0 && childFile.length > 1))
+            disabled={isSubmitDisabled}
+            className={`flex items-center gap-2 px-8 py-2.5 text-[13px] font-bold uppercase tracking-widest transition-all rounded-lg shadow-sm ${!isSubmitDisabled
               ? "bg-primary text-white hover:opacity-90"
               : "bg-[#f1f5f9] text-[#94a3b8] cursor-not-allowed"
               }`}
