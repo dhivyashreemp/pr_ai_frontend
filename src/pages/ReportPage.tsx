@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef } from 'react';
-import { useLocation } from 'react-router-dom';
+import { useLocation, useNavigate } from 'react-router-dom';
 import { CheckCircle, Download, ChevronLeft, ChevronRight } from 'lucide-react';
 import { ThemeProvider } from '@/report/ThemeContext';
 import { ReportHeader } from '@/report/ReportHeader';
@@ -271,6 +271,14 @@ async function _generateAndSave(
     el.style.display = 'none';
   });
 
+  const printEls = Array.from(
+    document.querySelectorAll<HTMLElement>('.print\\:block')
+  );
+  printEls.forEach(el => {
+    el.dataset._printDisplay = el.style.display;
+    el.style.display = 'block';
+  });
+
   // Inject specific print layout CSS
   const pdfLayoutStyle = document.createElement('style');
   pdfLayoutStyle.id = '__pdf-label-layout__';
@@ -321,6 +329,9 @@ async function _generateAndSave(
     });
     uiEls.forEach(el => {
       el.style.display = el.dataset._uiDisplay ?? '';
+    });
+    printEls.forEach(el => {
+      el.style.display = el.dataset._printDisplay ?? '';
     });
     extraRestore?.();
   };
@@ -385,6 +396,7 @@ function _makePrintHandler(reportId: string, sku?: string): () => void {
 
 const ReportPageInner = () => {
   const location = useLocation();
+  const navigate = useNavigate();
   const initialScenario = (location.state?.scenario as 'A' | 'B' | 'C') ?? 'A';
   const [activeScenario, setActiveScenario] = useState<'A' | 'B' | 'C'>(initialScenario);
 
@@ -643,47 +655,50 @@ const ReportPageInner = () => {
     }
   };
 
-  // Download only the specified pair indices as a PDF file.
-  const downloadPairs = (indices: number[]) => {
-    const filename = computedSku ? `${computedSku}_${computedReportId}` : computedReportId;
+  // Download only the specified pair indices as separate PDF files.
+  const downloadPairs = async (indices: number[]) => {
     const element = document.getElementById('report-print-area');
     if (!element) return;
 
-    const pairHideEls: HTMLElement[] = [];
-    const pairScreenEls: HTMLElement[] = [];
+    for (const idx of indices) {
+      const filename = computedSku ? `${computedSku}_${computedReportId}_${idx + 1}` : `${computedReportId}_${idx + 1}`;
 
-    const extraPrepare = () => {
-      // Hide non-selected pairs
-      pairReportData
-        .map(p => p.pairIndex)
-        .filter(idx => !indices.includes(idx))
-        .forEach(idx => {
-          document.querySelectorAll<HTMLElement>(`[data-pair-print="${idx}"]`).forEach(el => {
-            el.dataset._pairDisplay = el.style.display;
-            el.style.display = 'none';
-            pairHideEls.push(el);
+      const pairHideEls: HTMLElement[] = [];
+      const pairScreenEls: HTMLElement[] = [];
+
+      const extraPrepare = () => {
+        // Hide all OTHER pairs except the current one being downloaded
+        pairReportData
+          .map(p => p.pairIndex)
+          .filter(i => i !== idx)
+          .forEach(i => {
+            document.querySelectorAll<HTMLElement>(`[data-pair-print="${i}"]`).forEach(el => {
+              el.dataset._pairDisplay = el.style.display;
+              el.style.display = 'none';
+              pairHideEls.push(el);
+            });
           });
+
+        // Hide screen-only pair elements
+        const ps = Array.from(document.querySelectorAll<HTMLElement>('.report-pair-screen'));
+        ps.forEach(el => {
+          el.dataset._psDisplay = el.style.display;
+          el.style.display = 'none';
+          pairScreenEls.push(el);
         });
+      };
 
-      // Hide screen-only pair elements
-      const ps = Array.from(document.querySelectorAll<HTMLElement>('.report-pair-screen'));
-      ps.forEach(el => {
-        el.dataset._psDisplay = el.style.display;
-        el.style.display = 'none';
-        pairScreenEls.push(el);
-      });
-    };
+      const extraRestore = () => {
+        pairHideEls.forEach(el => {
+          el.style.display = el.dataset._pairDisplay ?? '';
+        });
+        pairScreenEls.forEach(el => {
+          el.style.display = el.dataset._psDisplay ?? '';
+        });
+      };
 
-    const extraRestore = () => {
-      pairHideEls.forEach(el => {
-        el.style.display = el.dataset._pairDisplay ?? '';
-      });
-      pairScreenEls.forEach(el => {
-        el.style.display = el.dataset._psDisplay ?? '';
-      });
-    };
-
-    _generateAndSave(filename, element, extraPrepare, extraRestore);
+      await _generateAndSave(filename, element, extraPrepare, extraRestore);
+    }
   };
 
   const reportData: ReportData = {

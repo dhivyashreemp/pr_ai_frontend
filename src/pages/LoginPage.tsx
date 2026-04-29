@@ -1,13 +1,14 @@
 import { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useUser } from '@/context/UserContext';
+import { API_URL } from '@/constants';
 
 const MicrosoftLogo = () => (
   <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 21 21" className="w-5 h-5 mr-3">
-    <rect x="1" y="1" width="9" height="9" fill="#f25022"/>
-    <rect x="11" y="1" width="9" height="9" fill="#7fba00"/>
-    <rect x="1" y="11" width="9" height="9" fill="#00a4ef"/>
-    <rect x="11" y="11" width="9" height="9" fill="#ffb900"/>
+    <rect x="1" y="1" width="9" height="9" fill="#f25022" />
+    <rect x="11" y="1" width="9" height="9" fill="#7fba00" />
+    <rect x="1" y="11" width="9" height="9" fill="#00a4ef" />
+    <rect x="11" y="11" width="9" height="9" fill="#ffb900" />
   </svg>
 );
 
@@ -30,13 +31,14 @@ const LoginPage = () => {
 
   const handleLogin = () => {
     setIsLoading(true);
-    window.location.href = `${import.meta.env.VITE_API_URL}/auth/login`;
+    window.location.href = `${API_URL}/auth/login`;
+    console.log(API_URL);
   };
 
   return (
     <div className="min-h-screen flex items-center justify-center bg-[#f5f5f5] px-4">
       <div className="w-full max-w-[420px] bg-white rounded-xl shadow-[0_8px_30px_rgb(0,0,0,0.04)] border border-gray-100 p-10 flex flex-col items-center">
-        
+
         {/* Logo */}
         <div className="mb-6 flex justify-center">
           <img src="/favicon.ico" alt="Logo" className="w-12 h-12" />
