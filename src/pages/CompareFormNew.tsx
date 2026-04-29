@@ -70,7 +70,7 @@ const CompareFormNew = () => {
         <div className="flex items-center gap-8">
           <div className="flex items-center gap-2">
             <span className="text-gray-400 mr-1.5 font-bold tracking-widest uppercase text-[10px]">CR Number</span>
-            <span className="text-[#334155] font-semibold text-[13px]">{formData.metadata.cr_number || "CR-2025-0042"}</span>
+            <span className="text-[#334155] font-semibold text-[13px]">{formData.metadata.cr_number || "—"}</span>
           </div>
           <div className="flex items-center gap-2">
             <span className="text-gray-400 mr-1.5 font-bold tracking-widest uppercase text-[10px]">SKU</span>
@@ -78,7 +78,7 @@ const CompareFormNew = () => {
           </div>
           <div className="flex items-center gap-2">
             <span className="text-gray-400 mr-1.5 font-bold tracking-widest uppercase text-[10px]">Revision</span>
-            <span className="text-[#334155] font-semibold text-[13px]">{formData.metadata.label_version || "REV-D"}</span>
+            <span className="text-[#334155] font-semibold text-[13px]">{formData.metadata.label_version || "—"}</span>
           </div>
         </div>
         <div className="flex items-center gap-2">

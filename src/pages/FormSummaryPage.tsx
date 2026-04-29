@@ -1,4 +1,5 @@
 import { useLocation, useNavigate, useSearchParams } from "react-router-dom";
+import { API_URL } from "@/constants";
 import { ScanLine, ArrowLeft, ArrowRight, ChevronRight, Edit2, FileText, Upload, X, CheckCircle2, Hash, Package, Tag, User, Calendar, Layers } from "lucide-react";
 import { useState, useEffect } from "react";
 import { CATEGORIES } from "@/data/attributes";
@@ -110,7 +111,6 @@ const FormSummaryPage = () => {
     // Save the LRF submission to the backend (non-blocking on failure)
     let submissionId: string | null = null;
     try {
-      const API_URL = import.meta.env.VITE_API_BASE_URL || "https://label-comparator-new.azurewebsites.net";
       const resp = await fetch(`${API_URL}/api/submissions`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },

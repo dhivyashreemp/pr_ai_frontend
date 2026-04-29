@@ -271,7 +271,7 @@ interface PanelContentProps extends ReportDetailsPanelProps {
 
 const PanelContent = (props: PanelContentProps) => {
   const {
-    satisfiedItems, missingItems, aiAnnotations,
+    satisfiedItems, missingItems, aiAnnotations, parsedItems,
     discardedUnexpectedIds, onDiscard, analysisRun,
     annotations, hoveredId, selectedId, isDrawMode,
     onHoverAnnotation, onSelectAnnotation, onDeleteAnnotation,
@@ -283,20 +283,25 @@ const PanelContent = (props: PanelContentProps) => {
     [satisfiedItems, missingItems],
   );
 
-  // Mirror exactly what /report does: aiUnexpected built from raw AI annotations only.
-  // parsedItems is NOT used here — /report never sources Unexpected Changes from parsedItems.
-  const unexpectedItems = useMemo(
-    () => aiAnnotations.map((ann: any, i: number) => ({
-      _panelId:    `ai-${i}`,
-      elementType: ann.category    ?? 'Text',
-      changeType:  ann.change_type ?? 'Modified',
-      category:    ann.category    ?? 'Text',
-      value:       ann.label || ann.value || ann.change_type || 'AI-detected unexpected change',
-      oldText:     undefined as string | undefined,
-      newText:     undefined as string | undefined,
-    })),
-    [aiAnnotations],
-  );
+  // Build unexpected items using aiAnnotations for structure/mapping (preserves discard),
+  // but pull value/oldText/newText from parsedItems (inspection details) via discrepancy_id.
+  const unexpectedItems = useMemo(() => {
+    const parsedByDiscrepancyId = new Map(
+      parsedItems.map((pi: any) => [pi.discrepancy_id, pi])
+    );
+    return aiAnnotations.map((ann: any, i: number) => {
+      const pi = parsedByDiscrepancyId.get(ann.discrepancy_id ?? i);
+      return {
+        _panelId:    `ai-${i}`,
+        elementType: ann.category ?? 'Text',
+        changeType:  pi?.status ?? ann.change_type ?? 'Modified',
+        category:    ann.category ?? 'Text',
+        value:       pi?.value ?? ann.label ?? ann.value ?? '—',
+        oldText:     pi?.oldText as string | undefined,
+        newText:     pi?.newText as string | undefined,
+      };
+    });
+  }, [aiAnnotations, parsedItems]);
 
   const annotationGroups = useMemo(
     () => [...groupAnnotations(annotations)].reverse(),

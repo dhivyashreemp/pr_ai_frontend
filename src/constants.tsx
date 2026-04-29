@@ -1,0 +1,1 @@
+export const API_URL = "https://label-comparator-new.azurewebsites.net";

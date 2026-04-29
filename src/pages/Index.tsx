@@ -1,4 +1,5 @@
 import { useState, useEffect, useMemo, useCallback, useRef } from "react";
+import { API_URL } from "@/constants";
 import { Download, RefreshCw, FileText, AlertCircle, Play, ScanLine, ArrowLeft } from "lucide-react";
 import AnalysisProgressModal from "@/components/AnalysisProgressModal";
 import { useLocation, useNavigate } from "react-router-dom";
@@ -274,7 +275,6 @@ const Index = () => {
     setLoading(true);
     setAnalysisRun(false);
 
-    const API_URL = import.meta.env.VITE_API_BASE_URL || "https://label-comparator-new.azurewebsites.net";
 
     try {
       if (lrfOnly) {
@@ -607,7 +607,7 @@ const Index = () => {
       }
 
       // For Added / Deleted / Repositioned: match on field label or expected value
-      if (pv.includes(al) || al.includes(pv)) return true;
+      if (pv.includes(al)) return true;
       if (ev && pv.includes(ev)) return true;
       return false;
     };
@@ -1185,7 +1185,7 @@ const Index = () => {
           <div className="flex items-center gap-8">
             <div className="flex items-center gap-2">
               <span className="text-[#94a3b8] font-bold tracking-widest uppercase text-[10px]">CR Number</span>
-              <span className="text-[#334155] font-semibold text-[13px]">{formData.metadata.cr_number || "CR-2025-0042"}</span>
+              <span className="text-[#334155] font-semibold text-[13px]">{formData.metadata.cr_number || "—"}</span>
             </div>
             <div className="flex items-center gap-2">
               <span className="text-[#94a3b8] font-bold tracking-widest uppercase text-[10px]">SKU</span>
@@ -1193,7 +1193,7 @@ const Index = () => {
             </div>
             <div className="flex items-center gap-2">
               <span className="text-[#94a3b8] font-bold tracking-widest uppercase text-[10px]">Revision</span>
-              <span className="text-[#334155] font-semibold text-[13px]">{formData.metadata.label_version || "REV-D"}</span>
+              <span className="text-[#334155] font-semibold text-[13px]">{formData.metadata.label_version || "—"}</span>
             </div>
           </div>
           <div className="flex items-center gap-2">
@@ -1304,7 +1304,7 @@ const Index = () => {
         <div className="font-mono text-xs text-slate-400 font-medium tracking-wide flex items-center gap-4">
           <span>Generated: {new Date().toISOString().split("T")[0]}</span>
           {formData && (
-            <span>Ref: {formData?.metadata?.cr_number || "CR-2025-0042"}</span>
+            <span>Ref: {formData?.metadata?.cr_number || "—"}</span>
           )}
         </div>
         <div className="flex items-center gap-6">

@@ -922,16 +922,6 @@ const PreviewPage = () => {
   );
 
   const existingNewBoxes: DrawnBox[] = useMemo(() => {
-    const requirementAiBoxes = activeRequirementBoxes.map((b: any, i: number) => ({
-      id:     `requirement-${i}`,
-      type:   (b.changeType ?? 'Modified') as DrawnBox['type'],
-      top:    (b.y ?? 0) * 100,
-      left:   (b.x ?? 0) * 100,
-      width:  (b.width ?? 0) * 100,
-      height: (b.height ?? 0) * 100,
-      text:   b.label ?? b.text ?? '',
-    }));
-
     const annotationAiBoxes = activeAnnotations.map((b: any, i: number) => ({
       id:     `annotation-${i}`,
       type:   (b.change_type ?? 'Modified') as DrawnBox['type'],
@@ -942,10 +932,10 @@ const PreviewPage = () => {
       text:   b.label ?? b.text ?? '',
     }));
 
-    return [...requirementAiBoxes, ...annotationAiBoxes].filter(
+    return annotationAiBoxes.filter(
       box => !hiddenAiBoxIds.includes(box.id) && !discardedAnnotationBoxIds.includes(box.id)
     );
-  }, [activeAnnotations, activeRequirementBoxes, hiddenAiBoxIds, discardedAnnotationBoxIds]);
+  }, [activeAnnotations, hiddenAiBoxIds, discardedAnnotationBoxIds]);
 
   // ── AI box position adjustments (human-in-the-loop fine-tuning) ─────────
   // Keyed by child index so each child retains its own independent adjustments.
