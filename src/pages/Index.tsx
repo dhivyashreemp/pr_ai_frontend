@@ -2,6 +2,8 @@ import { useState, useEffect, useMemo, useCallback, useRef } from "react";
 import { API_URL } from "@/constants";
 import { Download, RefreshCw, FileText, AlertCircle, Play, ScanLine, ArrowLeft } from "lucide-react";
 import AnalysisProgressModal from "@/components/AnalysisProgressModal";
+import { CompareProgress } from "@/components/CompareProgress";
+import { useCompareStream } from "@/hooks/useCompareStream";
 import { useLocation, useNavigate } from "react-router-dom";
 import Dropzone from "@/components/Dropzone";
 import VisualDiffViewer, { type RequirementBox, type Annotation } from "@/components/VisualDiffViewer";
@@ -54,6 +56,7 @@ const Index = () => {
     !!(location.state?.apiResults?.length > 0 || location.state?.lrfAnalysis)
   );
   const [loading, setLoading] = useState(false);
+  const { start: startStream, cancel: cancelStream, reset: resetStream, state: streamState } = useCompareStream({ apiBase: API_URL });
 
   // lrfOnly: fall back to single-label analysis only when no base file is available.
   // When a base file is uploaded alongside a proof request, run the full comparison
@@ -135,11 +138,11 @@ const Index = () => {
   // Guard: when a base file is present, wait for its PDF expansion to finish before
   // running — otherwise expandedBaseFiles is still [] and the count-match check fails.
   useEffect(() => {
-    if (formData && expandedChildFiles.length > 0 && !analysisRun && !loading) {
+    if (formData && expandedChildFiles.length > 0 && !analysisRun && !loading && streamState.status === 'idle') {
       if (!lrfOnly && isExpandingBase) return;
       handleRunAnalysis();
     }
-  }, [formData, lrfOnly, isExpandingBase, expandedBaseFiles, expandedChildFiles, analysisRun, loading]);
+  }, [formData, lrfOnly, isExpandingBase, expandedBaseFiles, expandedChildFiles, analysisRun, loading, streamState.status]);
 
   const [selectedResultIndex, setSelectedResultIndex] = useState<number>(
     location.state?.selectedResultIndex ?? 0
@@ -290,67 +293,15 @@ const Index = () => {
         setReportId(generateReportId());
         setAnalysisRun(true);
       } else {
-        // ── Full diff mode: N base labels paired positionally with N child labels ──
+        // ── Full diff mode: stream results via /api/compare/stream ──
         const data = new FormData();
-        expandedBaseFiles.forEach(file => data.append("base_files", file));
-        expandedChildFiles.forEach(file => data.append("child_files", file));
+        const baseForUpload = baseFile.length === 1 && isPdfFile(baseFile[0]) ? [baseFile[0]] : expandedBaseFiles;
+        const childForUpload = childFiles.length === 1 && isPdfFile(childFiles[0]) ? [childFiles[0]] : expandedChildFiles;
+        baseForUpload.forEach(file => data.append("base_files", file));
+        childForUpload.forEach(file => data.append("child_files", file));
         if (submissionId) data.append("submission_id", submissionId);
-        const response = await fetch(`${API_URL}/api/compare`, { method: "POST", body: data });
-        if (!response.ok) throw new Error(`Analysis failed: ${response.statusText}`);
-        const rawData = await response.json();
-
-        const processedResults = rawData.results.map((result: any, index: number) => {
-          const apiDiscrepancies = result.discrepancies || {};
-          const parsedItems: any[] = [];
-          let idCounter = 1;
-          let discrepancyIdx = 0;
-
-          for (const status of ["Added", "Deleted", "Modified", "Repositioned"]) {
-            if (apiDiscrepancies[status]) {
-              apiDiscrepancies[status].forEach((item: any) => {
-                let oldText, newText;
-                let value = item.Value;
-                if (status === "Modified" && typeof value === "string") {
-                  const match = value.match(/From:\s*'(.*?)'\s*➔\s*To:\s*'(.*?)'/);
-                  if (match) { oldText = match[1]; newText = match[2]; }
-                }
-                // Find the annotation whose discrepancy_id matches this item's position
-                const ann = (result.annotations ?? []).find(
-                  (a: any) => a.discrepancy_id === discrepancyIdx
-                );
-                parsedItems.push({
-                  id: `api-d${index}-${idCounter++}`,
-                  discrepancy_id: discrepancyIdx,
-                  category: item.Category,
-                  status,
-                  value,
-                  oldText,
-                  newText,
-                  detail: item.detail ?? null,
-                  aiSummary: ann?.summary ?? null,
-                  confidence: ann?.confidence ?? null,
-                });
-                discrepancyIdx++;
-              });
-            }
-          }
-
-          return {
-            ...result,
-            parsedItems,
-            yolo_review: result.yolo_review ?? [],
-            child_fields: result.child_fields ?? {},
-          };
-        });
-
-        setLrfAnalysis(null);
-        setApiResults(processedResults);
-        setAdjustedBoxes(null);
-        setSelectedResultIndex(0);
-        setAdjustedAnnotations(null);
-        setDeletedDiscrepancyIds(new Set());
-        setReportId(generateReportId());
-        setAnalysisRun(true);
+        startStream(data);
+        return;
       }
     } catch (error) {
       console.error("Comparison error:", error);
@@ -359,6 +310,56 @@ const Index = () => {
       setTimeout(() => setLoading(false), 500);
     }
   };
+
+  const processStreamResults = useCallback((rawResults: any[]) => {
+    const processedResults = rawResults.map((result: any, index: number) => {
+      const apiDiscrepancies = result.discrepancies || {};
+      const parsedItems: any[] = [];
+      let idCounter = 1;
+      let discrepancyIdx = 0;
+
+      for (const status of ["Added", "Deleted", "Modified", "Repositioned"]) {
+        if (apiDiscrepancies[status]) {
+          apiDiscrepancies[status].forEach((item: any) => {
+            let oldText: string | undefined, newText: string | undefined;
+            let value = item.Value;
+            if (status === "Modified" && typeof value === "string") {
+              const match = value.match(/From:\s*'(.*?)'\s*➔\s*To:\s*'(.*?)'/);
+              if (match) { oldText = match[1]; newText = match[2]; }
+            }
+            const ann = (result.annotations ?? []).find(
+              (a: any) => a.discrepancy_id === discrepancyIdx
+            );
+            parsedItems.push({
+              id: `api-d${index}-${idCounter++}`,
+              discrepancy_id: discrepancyIdx,
+              category: item.Category,
+              status,
+              value,
+              oldText,
+              newText,
+              detail: item.detail ?? null,
+              aiSummary: ann?.summary ?? null,
+              confidence: ann?.confidence ?? null,
+            });
+            discrepancyIdx++;
+          });
+        }
+      }
+
+      return { ...result, parsedItems, yolo_review: result.yolo_review ?? [], child_fields: result.child_fields ?? {} };
+    });
+
+    setLrfAnalysis(null);
+    setApiResults(processedResults);
+    setAdjustedBoxes(null);
+    setSelectedResultIndex(0);
+    setAdjustedAnnotations(null);
+    setDeletedDiscrepancyIds(new Set());
+    setReportId(generateReportId());
+    setAnalysisRun(true);
+    resetStream();
+  }, [resetStream]);
 
   // ── LRF requirement validation ──────────────────────────────────────────────
   // Cross-reference every LRF change against AI-found discrepancies.
@@ -1171,13 +1172,24 @@ const Index = () => {
       ...barcodeSummaryBoxes,
     ].filter((b: any) => !hiddenLabels.has((b.label ?? '').toLowerCase().trim()));
 
+    const lb = result.label_bounds as { x: number; y: number; w: number; h: number } | undefined;
+    const transformed = lb
+      ? combined.map(box => ({
+          ...box,
+          x:      lb.x + (box.x      ?? 0) * lb.w,
+          y:      lb.y + (box.y      ?? 0) * lb.h,
+          width:  (box.width  ?? 0) * lb.w,
+          height: (box.height ?? 0) * lb.h,
+        }))
+      : combined;
+
     // Deduplicate by spatial proximity (center within 5%).
     // Category-aware: different-category boxes are never merged.
     // When an incoming duplicate carries a discrepancy_id that the surviving entry
     // lacks (e.g. a discrepancyBox overlapping a resolvedAnnotation that the backend
     // didn't tag), patch it in so bbox deletion can still link to the parsedItem row.
     const deduped: any[] = [];
-    for (const box of combined) {
+    for (const box of transformed) {
       const cx = (box.x ?? 0) + (box.width ?? 0) / 2;
       const cy = (box.y ?? 0) + (box.height ?? 0) / 2;
       const existingIdx = deduped.findIndex(existing => {
@@ -1211,6 +1223,19 @@ const Index = () => {
     <div className="h-screen bg-[#f8f9fa] flex flex-col overflow-hidden">
 
       <AnalysisProgressModal isOpen={loading} />
+
+      {/* ── Streaming progress overlay (full diff mode) ── */}
+      {streamState.status !== 'idle' && (
+        <div className="fixed inset-0 bg-black/30 backdrop-blur-[2px] z-[100] flex items-center justify-center p-4">
+          <div className="w-full max-w-2xl">
+            <CompareProgress
+              state={streamState}
+              onDone={(results) => processStreamResults(results)}
+              onCancel={cancelStream}
+            />
+          </div>
+        </div>
+      )}
 
       {/* Navbar */}
       <nav className="bg-primary text-white px-6 py-0 flex items-center justify-between shadow-md sticky top-0 z-40" style={{ minHeight: 52 }}>
@@ -1305,10 +1330,10 @@ const Index = () => {
                 <div className="flex justify-center">
                   <button
                     onClick={handleRunAnalysis}
-                    disabled={loading || isExpandingBase}
+                    disabled={loading || isExpandingBase || streamState.status === 'running'}
                     className="px-8 py-3 bg-primary text-white font-bold rounded shadow-md hover:bg-primary/90 disabled:opacity-50 flex items-center gap-2 tracking-wide text-sm"
                   >
-                    {loading ? "ANALYZING..." : isExpandingBase ? "PROCESSING PDF..." : "RUN COMPARATOR ANALYSIS"}
+                    {loading || streamState.status === 'running' ? "ANALYZING..." : isExpandingBase ? "PROCESSING PDF..." : "RUN COMPARATOR ANALYSIS"}
                   </button>
                 </div>
               </div>
