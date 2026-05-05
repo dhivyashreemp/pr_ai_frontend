@@ -1,6 +1,6 @@
 import { useState, useRef, useCallback, useEffect, useMemo } from 'react';
 import { useNavigate, useLocation } from 'react-router-dom';
-import { ArrowLeft, FileText, ScanLine, Trash2, Pencil, X, Check, MapPin, Copy, Lock, ZoomIn, ZoomOut, RotateCcw } from 'lucide-react';
+import { ArrowLeft, FileText, ScanLine, Trash2, Pencil, X, Check, MapPin, Copy, Lock, ZoomIn, ZoomOut, RotateCcw, Maximize2, Hand } from 'lucide-react';
 import { TransformWrapper, TransformComponent } from 'react-zoom-pan-pinch';
 import ProfileDropdown from '@/components/ProfileDropdown';
 import StepIndicator from '@/components/StepIndicator';
@@ -71,6 +71,7 @@ interface DrawableImagePanelProps {
     width: number; height: number }>;
   transformRef?: React.RefObject<any>;
   onTransformed?: (_: any, state: { scale: number; positionX: number; positionY: number }) => void;
+  onExpand?: () => void;
 }
 
 function DrawableImagePanel({
@@ -82,12 +83,20 @@ function DrawableImagePanel({
   initialAiOverrides,
   transformRef,
   onTransformed,
+  onExpand,
 }: DrawableImagePanelProps) {
   const containerRef = useRef<HTMLDivElement>(null);
   const localPanRef = useRef<any>(null);
   const panRef = transformRef ?? localPanRef;
   const [draw, setDraw] = useState<DrawState | null>(null);
   const [cursorPos, setCursorPos] = useState<{ x: number; y: number } | null>(null);
+  const [isPanning, setIsPanning] = useState(false);
+  const [isActivePanDrag, setIsActivePanDrag] = useState(false);
+
+  // Reset pan mode whenever edit mode is turned off
+  useEffect(() => {
+    if (!isDrawingMode) { setIsPanning(false); setIsActivePanDrag(false); }
+  }, [isDrawingMode]);
 
   // Duplicate / selection state
   const [selectedBoxId, setSelectedBoxId] = useState<string | null>(null);
@@ -201,6 +210,7 @@ function DrawableImagePanel({
   }, [clampPlacement]);
 
   const handlePointerDown = (e: React.PointerEvent<HTMLDivElement>) => {
+    if (isPanning) { setIsActivePanDrag(true); return; }
     if (!isDrawingMode || placing) return;
     // Don't intercept clicks on buttons (e.g. the red delete X)
     if ((e.target as HTMLElement).closest('button')) return;
@@ -213,12 +223,13 @@ function DrawableImagePanel({
 
   const handlePointerMove = (e: React.PointerEvent<HTMLDivElement>) => {
     const { x, y } = toPercent(e.clientX, e.clientY);
-    if (isDrawingMode) setCursorPos({ x, y });
+    if (isDrawingMode && !isPanning) setCursorPos({ x, y });
     if (!draw) return;
     setDraw(d => d ? { ...d, curX: x, curY: y } : null);
   };
 
   const handlePointerUp = (e: React.PointerEvent<HTMLDivElement>) => {
+    setIsActivePanDrag(false);
     if (!draw) return;
     e.currentTarget.releasePointerCapture(e.pointerId);
     const left   = Math.min(draw.startX, draw.curX);
@@ -274,6 +285,18 @@ function DrawableImagePanel({
           <button onClick={() => panRef.current?.zoomIn(0.3)} className="p-1 hover:bg-black/10 rounded transition-colors" title="Zoom in"><ZoomIn className="h-3.5 w-3.5 text-gray-600" /></button>
           <button onClick={() => panRef.current?.zoomOut(0.3)} className="p-1 hover:bg-black/10 rounded transition-colors" title="Zoom out"><ZoomOut className="h-3.5 w-3.5 text-gray-600" /></button>
           <button onClick={() => panRef.current?.resetTransform()} className="p-1 hover:bg-black/10 rounded transition-colors" title="Reset zoom"><RotateCcw className="h-3.5 w-3.5 text-gray-600" /></button>
+          <button
+            onClick={() => setIsPanning(p => !p)}
+            className={`p-1 rounded transition-colors ${isPanning ? 'bg-blue-100 ring-1 ring-blue-400' : 'hover:bg-black/10'}`}
+            title={isPanning ? 'Pan mode ON — click to switch back to draw' : 'Pan mode — drag to move around the label'}
+          >
+            <Hand className={`h-3.5 w-3.5 ${isPanning ? 'text-blue-600' : 'text-gray-600'}`} />
+          </button>
+          {onExpand && (
+            <button onClick={onExpand} className="p-1 hover:bg-black/10 rounded transition-colors" title="Expand to fullscreen">
+              <Maximize2 className="h-3.5 w-3.5 text-gray-600" />
+            </button>
+          )}
         </div>
       </div>
 
@@ -284,7 +307,7 @@ function DrawableImagePanel({
           minScale={0.5}
           maxScale={4}
           initialScale={1}
-          panning={{ disabled: isDrawingMode || !!activeGroupId || !!placing }}
+          panning={{ disabled: placing ? true : !isPanning && (isDrawingMode || !!activeGroupId) }}
           wheel={{ step: 0.05 }}
           doubleClick={{ disabled: true }}
           onTransformed={onTransformed}
@@ -296,18 +319,18 @@ function DrawableImagePanel({
             <div
               ref={containerRef}
               className={`relative select-none w-full${isReadOnly ? ' pointer-events-none' : ''}`}
-              style={{ cursor: isReadOnly ? 'default' : isDrawingMode ? 'crosshair' : 'default' }}
+              style={{ cursor: isReadOnly ? 'default' : isPanning ? (isActivePanDrag ? 'grabbing' : 'grab') : isDrawingMode ? 'crosshair' : 'default' }}
               onPointerDown={isReadOnly ? undefined : handlePointerDown}
               onPointerMove={isReadOnly ? undefined : handlePointerMove}
               onPointerUp={isReadOnly ? undefined : handlePointerUp}
-              onPointerLeave={() => setCursorPos(null)}
+              onPointerLeave={() => { setCursorPos(null); setIsActivePanDrag(false); }}
               onClick={isReadOnly ? undefined : () => { if (!isDrawingMode && !placing) setSelectedBoxId(null); }}
             >
               <img src={src} alt={title} className="w-full h-auto block" draggable={false} />
 
 
-              {/* Crosshair — only visible in drawing mode */}
-              {isDrawingMode && !isReadOnly && cursorPos && (
+              {/* Crosshair — only visible in drawing mode (hidden when pan mode is active) */}
+              {isDrawingMode && !isPanning && !isReadOnly && cursorPos && (
                 <>
                   <div style={{
                     position: 'absolute', top: `${cursorPos.y}%`, left: 0, right: 0,
@@ -676,14 +699,14 @@ interface AnnotationDialogProps {
 
 function AnnotationDialog({ pending, onSave, onCancel }: AnnotationDialogProps) {
   const [comment, setComment] = useState('');
-  const [type,    setType]    = useState<AnnotationType>('Modified');
+  const [type,    setType]    = useState<AnnotationType | null>(null);
   const [elementType, setElementType] = useState<AnnotationElementType>('Text');
-  const [disposition, setDisposition] = useState<AnnotationDisposition>('Unexpected');
+  const [disposition, setDisposition] = useState<AnnotationDisposition | null>(null);
 
   const ELEMENT_TYPES: AnnotationElementType[] = ['Text', 'Symbol', 'Barcode', 'DataMatrix', 'Image'];
 
   return (
-    <div className="fixed inset-0 z-50 bg-black/40 flex items-center justify-center p-4">
+    <div className="fixed inset-0 z-[300] bg-black/40 flex items-center justify-center p-4">
       <div className="bg-white shadow-xl border border-gray-200 w-full max-w-sm">
         <div className="bg-gray-50 border-b border-gray-200 px-4 py-3 flex items-center justify-between">
           <span className="text-sm font-bold text-gray-800">Add Annotation</span>
@@ -707,7 +730,7 @@ function AnnotationDialog({ pending, onSave, onCancel }: AnnotationDialogProps) 
                   style={
                     type === t
                       ? { backgroundColor: TYPE_COLORS[t], color: '#fff', borderColor: TYPE_COLORS[t] }
-                      : { backgroundColor: `${TYPE_COLORS[t]}15`, color: TYPE_COLORS[t], borderColor: `${TYPE_COLORS[t]}60` }
+                      : { backgroundColor: '#f8f8f8', color: '#6b7280', borderColor: '#d1d5db' }
                   }
                 >
                   {t}
@@ -759,7 +782,7 @@ function AnnotationDialog({ pending, onSave, onCancel }: AnnotationDialogProps) 
                   style={
                     disposition === item
                       ? { backgroundColor: item === 'Expected' ? '#0f766e' : '#9a3412', color: '#fff', borderColor: item === 'Expected' ? '#0f766e' : '#9a3412' }
-                      : { backgroundColor: item === 'Expected' ? '#ccfbf1' : '#ffedd5', color: item === 'Expected' ? '#115e59' : '#9a3412', borderColor: item === 'Expected' ? '#5eead4' : '#fdba74' }
+                      : { backgroundColor: '#f8f8f8', color: '#6b7280', borderColor: '#d1d5db' }
                   }
                 >
                   {item}
@@ -788,9 +811,9 @@ function AnnotationDialog({ pending, onSave, onCancel }: AnnotationDialogProps) 
           </button>
           <button
             onClick={() => {
-              if (comment.trim()) onSave({ comment: comment.trim(), type, elementType, disposition });
+              if (comment.trim() && type && disposition) onSave({ comment: comment.trim(), type, elementType, disposition });
             }}
-            disabled={!comment.trim()}
+            disabled={!comment.trim() || !type || !disposition}
             className="px-4 py-1.5 text-xs font-semibold text-white bg-[#D71500] hover:bg-[#b01300] disabled:opacity-40 transition-colors flex items-center gap-1.5"
           >
             <Check className="w-3 h-3" />
@@ -883,21 +906,61 @@ const PreviewPage = () => {
   const expandedChildPreviewUrls: string[] = state.expandedChildPreviewUrls ?? [];
   const expandedBasePreviewUrls:  string[] = state.expandedBasePreviewUrls  ?? [];
   const expandedBaseFileNames:    string[] = state.expandedBaseFileNames    ?? [];
+  const originalBaseNames:        string[] = state.originalBaseNames        ?? [];
+  const originalChildNames:       string[] = state.originalChildNames       ?? [];
   const childFilesAll: File[] = state.childFiles ?? [];
+
+  // Helper: when the original file was a PDF, return the per-page expanded name
+  // with a .pdf extension so the UI shows "LCN_page1.pdf" instead of "LCN_page1.png".
+  const pdfPageName = (expanded: string | undefined, original: string | undefined): string =>
+    expanded && original && /\.pdf$/i.test(original)
+      ? expanded.replace(/\.png$/i, '.pdf')
+      : (expanded ?? original ?? '');
+
   const [selectedChildIndex, setSelectedChildIndex] = useState<number>(state.selectedResultIndex ?? 0);
 
   // ── Build existing AI / requirement boxes for overlay ────────────────────
   const annotations:      any[]            = state.annotations     ?? [];
   const requirementBoxes: RequirementBox[] = state.requirementBoxes ?? [];
-  const [hiddenAiBoxIds, setHiddenAiBoxIds] = useState<string[]>([]);
+
+  // Accumulated set of deleted discrepancy IDs — seeded from Index.tsx, grows
+  // as the user deletes more boxes on this page.  Used when navigating back so
+  // the analysis page restores the same deleted state.
+  const [allDeletedDiscrepancyIds, setAllDeletedDiscrepancyIds] = useState<Set<number | string>>(
+    () => new Set(state.deletedDiscrepancyIds ?? [])
+  );
+
+  // Helper: for a given annotation list + deleted-ID set, return the
+  // 'annotation-N' IDs that should be hidden on the canvas.
+  const deriveHiddenIds = (anns: any[], deletedSet: Set<number | string>): string[] =>
+    anns
+      .map((ann: any, i: number) =>
+        ann.discrepancy_id != null && deletedSet.has(ann.discrepancy_id)
+          ? `annotation-${i}` : null
+      )
+      .filter(Boolean) as string[];
+
+  // Per-child hidden AI box IDs — keyed by child index so deletions on one
+  // label are not lost when switching to another and back.
+  const [hiddenAiBoxIdsByChild, setHiddenAiBoxIdsByChild] = useState<Record<number, string[]>>(
+    () => {
+      const idx = state.selectedResultIndex ?? 0;
+      return { [idx]: deriveHiddenIds(state.annotations ?? [], new Set(state.deletedDiscrepancyIds ?? [])) };
+    }
+  );
+  const hiddenAiBoxIds = hiddenAiBoxIdsByChild[selectedChildIndex] ?? [];
 
   // When the user picks a different child in the sidebar, show that child's
-  // AI annotations. Fall back to the originally-passed annotations for the
-  // child that was active when Index.tsx navigated here.
-  const activeAnnotations: any[] =
-    selectedChildIndex === (state.selectedResultIndex ?? 0)
-      ? annotations
-      : (state.apiResults?.[selectedChildIndex]?.annotations ?? []);
+  // AI annotations. Prefer the per-child adjusted arrays passed from Index.tsx
+  // (which already have bbox deletions applied) so deleted boxes never reappear.
+  // Fall back to the originally-passed annotations for the active child, then to
+  // raw API results for children that were never modified.
+  const activeAnnotations: any[] = (() => {
+    const allAdjusted = state.allAdjustedAnnotations as Record<string, any[]> | undefined;
+    if (allAdjusted?.[selectedChildIndex] != null) return allAdjusted[selectedChildIndex];
+    if (selectedChildIndex === (state.selectedResultIndex ?? 0)) return annotations;
+    return state.apiResults?.[selectedChildIndex]?.annotations ?? [];
+  })();
 
   // Requirement boxes only apply to the originally-selected child (they are
   // pre-computed by Index.tsx for that specific child). For other children
@@ -969,8 +1032,20 @@ const PreviewPage = () => {
   }, [selectedChildIndex]);
 
   const handleDeleteAiBox = useCallback((id: string) => {
-    setHiddenAiBoxIds(prev => prev.includes(id) ? prev : [...prev, id]);
-  }, []);
+    setHiddenAiBoxIdsByChild(prev => {
+      const current = prev[selectedChildIndex] ?? [];
+      if (current.includes(id)) return prev;
+      return { ...prev, [selectedChildIndex]: [...current, id] };
+    });
+    // Also track the discrepancy_id so the deletion round-trips back to the analysis page
+    const idx = parseInt(id.replace('annotation-', ''), 10);
+    if (!isNaN(idx)) {
+      const discrepancyId = activeAnnotations[idx]?.discrepancy_id;
+      if (discrepancyId != null) {
+        setAllDeletedDiscrepancyIds(prev => new Set([...prev, discrepancyId]));
+      }
+    }
+  }, [activeAnnotations, selectedChildIndex]);
 
   // ── User-drawn annotation state (per-child) ─────────────────────────────
   const [userAnnotationsByChild, setUserAnnotationsByChild] = useState<Record<number, UserAnnotation[]>>(
@@ -1007,6 +1082,33 @@ const PreviewPage = () => {
     basePanRef.current?.setTransform(s.positionX, s.positionY, s.scale, 0);
     setTimeout(() => { isSyncing.current = false; }, 0);
   }, []);
+
+  // Expanded fullscreen modal state and synchronized zoom refs
+  const [isExpanded, setIsExpanded] = useState(false);
+  const expandedBasePanRef = useRef<any>(null);
+  const expandedNewPanRef  = useRef<any>(null);
+  const isExpandedSyncing  = useRef(false);
+  const handleExpandedBaseTransformed = useCallback((_: any, s: { scale: number; positionX: number; positionY: number }) => {
+    if (isExpandedSyncing.current) return;
+    isExpandedSyncing.current = true;
+    expandedNewPanRef.current?.setTransform(s.positionX, s.positionY, s.scale, 0);
+    setTimeout(() => { isExpandedSyncing.current = false; }, 0);
+  }, []);
+  const handleExpandedNewTransformed = useCallback((_: any, s: { scale: number; positionX: number; positionY: number }) => {
+    if (isExpandedSyncing.current) return;
+    isExpandedSyncing.current = true;
+    expandedBasePanRef.current?.setTransform(s.positionX, s.positionY, s.scale, 0);
+    setTimeout(() => { isExpandedSyncing.current = false; }, 0);
+  }, []);
+
+  // Close expanded modal on Escape
+  useEffect(() => {
+    const handler = (e: KeyboardEvent) => {
+      if (e.key === 'Escape' && isExpanded) setIsExpanded(false);
+    };
+    window.addEventListener('keydown', handler);
+    return () => window.removeEventListener('keydown', handler);
+  }, [isExpanded]);
 
   /**
    * When set, the next draw will add to an EXISTING annotation group
@@ -1140,14 +1242,21 @@ const PreviewPage = () => {
   // Fall back to index 0 when fewer base labels were uploaded than child labels
   // (e.g. 1 base vs N children — the single base is shown alongside every child).
   const activeBaseUrl  = expandedBasePreviewUrls[selectedChildIndex] || expandedBasePreviewUrls[0] || baseUrl;
-  // Corresponding base label filename for the panel subtitle
-  const activeBaseFileName = expandedBaseFileNames[selectedChildIndex] || expandedBaseFileNames[0] || baseFileName;
+  // Corresponding base label filename for the panel subtitle.
+  // Prefer the per-page expanded name with .pdf extension so each child shows
+  // its correct page (e.g. "LCN_page2.pdf") rather than the bare original PDF name.
+  const activeBaseFileName = pdfPageName(
+    expandedBaseFileNames[selectedChildIndex] || expandedBaseFileNames[0],
+    originalBaseNames[selectedChildIndex]     || originalBaseNames[0]     || baseFileName,
+  );
   const hasBase = !!activeBaseUrl;
   const hasNew  = !!activeChildUrl;
 
-  // Subtitle shown in the "New Version" panel header
-  const activeChildFileName =
-    childFilesAll[selectedChildIndex]?.name ?? childFileName;
+  // Subtitle shown in the "New Version" panel header — same .pdf extension fix.
+  const activeChildFileName = pdfPageName(
+    childFilesAll[selectedChildIndex]?.name,
+    originalChildNames[selectedChildIndex] || childFileName,
+  );
 
   const userBaseBoxes = userAnnotations.filter(a => a.target === 'base');
   const userNewBoxes  = userAnnotations.filter(a => a.target === 'new');
@@ -1155,10 +1264,25 @@ const PreviewPage = () => {
   // ── Child switching ──────────────────────────────────────────────────────
   const handleSelectChild = useCallback((index: number) => {
     setSelectedChildIndex(index);
-    // Reset per-panel state so it doesn't bleed across children
-    setHiddenAiBoxIds([]);
+    // If this child was already visited, its hidden IDs are preserved in the map — don't
+    // re-derive, otherwise manually-deleted boxes (those without a discrepancy_id) would
+    // reappear on return. Only initialise on the very first visit to a child.
+    setHiddenAiBoxIdsByChild(prev => {
+      if (index in prev) return prev; // already initialised — keep as-is
+      // Use adjusted annotations (already filtered) when available; no hidden IDs needed
+      // since the deleted boxes are simply absent. Fall back to raw + derive for others.
+      const allAdjusted = state.allAdjustedAnnotations as Record<string, any[]> | undefined;
+      if (allAdjusted?.[index] != null) {
+        return { ...prev, [index]: [] };
+      }
+      const childAnnotations: any[] =
+        index === (state.selectedResultIndex ?? 0)
+          ? (state.annotations ?? [])
+          : (state.apiResults?.[index]?.annotations ?? []);
+      return { ...prev, [index]: deriveHiddenIds(childAnnotations, allDeletedDiscrepancyIds) };
+    });
     // aiBoxAdjustments is per-child — each child retains its own adjustments
-  }, []);
+  }, [allDeletedDiscrepancyIds, state]);
 
   // ── Annotations panel hover / select state ───────────────────────────────
   const [hoveredAnnotationId,  setHoveredAnnotationId]  = useState<string | null>(null);
@@ -1236,27 +1360,70 @@ const PreviewPage = () => {
         // Forward ALL child label URLs and names so the report can display every
         // new-version label when multiple were uploaded.
         childPreviewUrls: expandedChildPreviewUrls,
-        childFileNames:   childFilesAll.map(f => f.name),
+        childFileNames:   originalChildNames.length > 0 ? originalChildNames : childFilesAll.map(f => f.name),
         // Build per-pair data for multi-label reports. Each entry carries its own
         // base/child URLs, file names, and raw AI results so the report page can
         // render independent label comparisons + change tables for every pair.
         allPairs: (() => {
           const allApiResults: any[] = state.apiResults ?? [];
           if (allApiResults.length === 0) return [];
-          const deletedIds: Set<number | string> = new Set(state.deletedDiscrepancyIds ?? []);
-          return allApiResults.map((result: any, i: number) => ({
-            pairIndex:    i,
-            // Fall back to index 0 when fewer base labels were uploaded than child labels
-            baseUrl:      expandedBasePreviewUrls[i]  ?? expandedBasePreviewUrls[0]  ?? '',
-            childUrl:     expandedChildPreviewUrls[i] ?? '',
-            baseFileName: expandedBaseFileNames[i]    ?? expandedBaseFileNames[0]    ?? '',
-            childFileName: childFilesAll[i]?.name     ?? '',
-            annotations:  result.annotations           ?? [],
-            parsedItems:  (result.parsedItems ?? []).filter((item: any) =>
+          const deletedIds: Set<number | string> = allDeletedDiscrepancyIds;
+          // Per-child filtered annotation arrays from Index.tsx (bbox deletions already applied)
+          const adjustedMap = state.allAdjustedAnnotations as Record<string, any[]> | undefined;
+          return allApiResults.map((result: any, i: number) => {
+            const filteredParsedItems = (result.parsedItems ?? []).filter((item: any) =>
               item.discrepancy_id == null || !deletedIds.has(item.discrepancy_id)
-            ),
-            barcode_summary: result.barcode_summary     ?? null,
-          }));
+            );
+            // Build the filtered annotation list for this pair:
+            // 1. Start from the Index.tsx-adjusted array (bbox deletions from the analysis page),
+            //    or fall back to raw API data filtered by discrepancy_id.
+            // 2. Remove any boxes the user additionally hid inside PreviewPage.
+            const baseAnns: any[] = adjustedMap?.[i] != null
+              ? adjustedMap[i]
+              : (result.annotations ?? []).filter((ann: any) =>
+                  ann.discrepancy_id == null || !deletedIds.has(ann.discrepancy_id)
+                );
+            const hiddenInPreview = hiddenAiBoxIdsByChild[i] ?? [];
+            const filteredAnnotations = hiddenInPreview.length > 0
+              ? baseAnns.filter((_: any, idx: number) => !hiddenInPreview.includes(`annotation-${idx}`))
+              : baseAnns;
+            const pairAnnotations: UserAnnotation[] = userAnnotationsByChild[i] ?? [];
+            // Deduplicate by groupId to produce one entry per annotation group
+            const seenGroups = new Set<string>();
+            const pairUniqueAnnotations = pairAnnotations.filter((a: UserAnnotation) => {
+              if (seenGroups.has(a.groupId)) return false;
+              seenGroups.add(a.groupId);
+              return true;
+            });
+            return {
+              pairIndex:    i,
+              // Fall back to index 0 when fewer base labels were uploaded than child labels
+              baseUrl:      expandedBasePreviewUrls[i]  ?? expandedBasePreviewUrls[0]  ?? '',
+              childUrl:     expandedChildPreviewUrls[i] ?? '',
+              baseFileName: pdfPageName(
+                expandedBaseFileNames[i] ?? expandedBaseFileNames[0],
+                originalBaseNames[i]     ?? originalBaseNames[0],
+              ),
+              childFileName: pdfPageName(
+                childFilesAll[i]?.name,
+                originalChildNames[i] ?? originalChildNames[0],
+              ),
+              annotations:     filteredAnnotations,
+              parsedItems:     filteredParsedItems,
+              barcode_summary: result.barcode_summary ?? null,
+              // Full box lists (one entry per drawn box) — used for image overlays
+              userAnnotationsBase: pairAnnotations.filter(a => a.target === 'base'),
+              userAnnotationsNew:  pairAnnotations.filter(a => a.target === 'new'),
+              // One entry per group — used for report tables
+              userExpectedUnique:   pairUniqueAnnotations.filter(a => a.disposition === 'Expected'),
+              userUnexpectedUnique: pairUniqueAnnotations.filter(a => a.disposition !== 'Expected'),
+              hasChanges: (
+                pairAnnotations.length > 0 ||
+                filteredAnnotations.length > 0 ||
+                filteredParsedItems.length > 0
+              ),
+            };
+          });
         })(),
         userAnnotationsBase,
         userAnnotationsNew,
@@ -1291,16 +1458,29 @@ const PreviewPage = () => {
         basePreviewUrl:           state.basePreviewUrl           ?? '',
         expandedBasePreviewUrls:  state.expandedBasePreviewUrls  ?? [],
         expandedChildPreviewUrls: state.expandedChildPreviewUrls ?? [],
+        expandedBaseFileNames:    state.expandedBaseFileNames    ?? [],
+        originalBaseNames:        state.originalBaseNames        ?? [],
+        originalChildNames:       state.originalChildNames       ?? [],
         analysisRun:              state.analysisRun              ?? true,
         selectedResultIndex:      selectedChildIndex,
         apiResults:   state.apiResults  ?? [],
         lrfAnalysis:  state.lrfAnalysis ?? null,
         discardedUnexpectedIds: [...discardedUnexpectedIds],
-        deletedDiscrepancyIds: state.deletedDiscrepancyIds ?? [],
+        deletedDiscrepancyIds: [...allDeletedDiscrepancyIds],
         reportId: state.reportId ?? '',
         userAnnotations,
         requirementBoxes,
         annotations: state.annotations ?? [],
+        // Merge per-child maps: start with what Index.tsx passed, then override the
+        // active pair with the accumulated set from this PreviewPage session so any
+        // boxes deleted here also survive the back-nav.
+        allAdjustedAnnotations: state.allAdjustedAnnotations ?? {},
+        allAdjustedBoxes: state.allAdjustedBoxes ?? {},
+        allDeletedDiscrepancyIdsByChild: (() => {
+          const base: Record<string, (number | string)[]> = { ...(state.allDeletedDiscrepancyIdsByChild ?? {}) };
+          base[String(selectedChildIndex)] = [...allDeletedDiscrepancyIds];
+          return base;
+        })(),
       },
     });
   };
@@ -1392,8 +1572,13 @@ const PreviewPage = () => {
         <LabelSidebar
           baseFile={baseFileArr[0] ?? null}
           basePreviewUrl={activeBaseUrl || null}
-          baseFileName={baseFileName}
+          baseFileName={activeBaseFileName}
           childFiles={childFilesAll}
+          childFileNames={
+            childFilesAll.length > 0
+              ? childFilesAll.map((f, i) => pdfPageName(f.name, originalChildNames[i] ?? originalChildNames[0]))
+              : originalChildNames
+          }
           childPreviewUrls={expandedChildPreviewUrls}
           apiResults={state.apiResults ?? []}
           selectedIndex={selectedChildIndex}
@@ -1494,6 +1679,7 @@ const PreviewPage = () => {
                 initialAiOverrides={aiBoxAdjustments[selectedChildIndex]}
                 transformRef={newPanRef}
                 onTransformed={handleNewTransformed}
+                onExpand={() => setIsExpanded(true)}
               />
             )}
             {!hasBase && !hasNew && (
@@ -1560,6 +1746,119 @@ const PreviewPage = () => {
           onSave={handleSaveAnnotation}
           onCancel={() => setPendingBox(null)}
         />
+      )}
+
+      {/* Expanded fullscreen modal */}
+      {isExpanded && (
+        <div
+          className="fixed inset-0 z-[200] bg-black/90 flex flex-col"
+          style={{ overflow: 'hidden' }}
+        >
+          {/* Header */}
+          <div className="bg-[#1e293b] text-white px-4 py-2 flex items-center justify-between flex-shrink-0 gap-3">
+            <div className="flex items-center gap-2">
+              <Maximize2 className="w-3.5 h-3.5 opacity-70" />
+              <span className="text-xs font-bold uppercase tracking-wider">Labels — Full View</span>
+              {isDrawingMode && !activeGroupId && (
+                <span className="text-[10px] font-bold text-white bg-blue-600 px-2 py-0.5 flex items-center gap-1 ml-1">
+                  <Pencil className="w-2.5 h-2.5" /> Drawing active
+                </span>
+              )}
+              {activeGroupId && (
+                <span className="text-[10px] font-bold text-white bg-amber-500 px-2 py-0.5 flex items-center gap-1 ml-1">
+                  <MapPin className="w-2.5 h-2.5" /> Adding location
+                </span>
+              )}
+            </div>
+            <div className="flex items-center gap-2">
+              <span className="text-[10px] text-white/40 hidden lg:block">
+                Click-drag to draw · Click box to select · Drag selected to move · Esc to close
+              </span>
+              {!activeGroupId && (
+                <button
+                  onClick={() => setIsDrawingMode(m => !m)}
+                  className={`flex items-center gap-1.5 px-3 py-1.5 text-xs font-bold uppercase tracking-wide border-2 transition-all ${
+                    isDrawingMode
+                      ? 'bg-red-600 text-white border-red-600'
+                      : 'bg-blue-600 text-white border-blue-600 hover:bg-blue-700'
+                  }`}
+                >
+                  <Pencil className="w-3 h-3" />
+                  {isDrawingMode ? 'Exit Edit' : 'Edit Mode'}
+                </button>
+              )}
+              {activeGroupId && (
+                <button
+                  onClick={handleExitAddLocation}
+                  className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-bold border-2 border-amber-400 text-amber-200 bg-amber-500/20 hover:bg-amber-500/30 transition-colors"
+                >
+                  <Check className="w-3 h-3" /> Done
+                </button>
+              )}
+              <div className="w-px h-4 bg-white/20 mx-1" />
+              <button onClick={() => { expandedBasePanRef.current?.zoomIn(0.3); expandedNewPanRef.current?.zoomIn(0.3); }} className="p-1.5 bg-white/10 hover:bg-white/20 rounded transition-colors" title="Zoom in"><ZoomIn className="h-3.5 w-3.5" /></button>
+              <button onClick={() => { expandedBasePanRef.current?.zoomOut(0.3); expandedNewPanRef.current?.zoomOut(0.3); }} className="p-1.5 bg-white/10 hover:bg-white/20 rounded transition-colors" title="Zoom out"><ZoomOut className="h-3.5 w-3.5" /></button>
+              <button onClick={() => { expandedBasePanRef.current?.resetTransform(); expandedNewPanRef.current?.resetTransform(); }} className="p-1.5 bg-white/10 hover:bg-white/20 rounded transition-colors" title="Reset zoom"><RotateCcw className="h-3.5 w-3.5" /></button>
+              <div className="w-px h-4 bg-white/20 mx-1" />
+              <button
+                onClick={() => setIsExpanded(false)}
+                className="p-1.5 bg-red-600/30 hover:bg-red-600/50 rounded border border-red-500/40 transition-colors"
+                title="Close fullscreen (Esc)"
+              >
+                <X className="h-4 w-4" />
+              </button>
+            </div>
+          </div>
+
+          {/* Panel area */}
+          <div className={`flex-1 overflow-hidden ${hasBase && hasNew ? 'grid grid-cols-2' : 'flex'} bg-[#f1f5f9]`} style={{ minHeight: 0 }}>
+            {hasBase && (
+              <div className="border-r-4 border-[#94a3b8] h-full overflow-hidden">
+                <DrawableImagePanel
+                  src={activeBaseUrl}
+                  title="Current Version"
+                  subtitle={activeBaseFileName}
+                  target="base"
+                  aiBoxes={[]}
+                  userBoxes={userBaseBoxes}
+                  isDrawingMode={isDrawingMode || !!activeGroupId}
+                  activeGroupId={activeGroupId}
+                  onDrawComplete={handleDrawComplete}
+                  onDeleteBox={handleDeleteBox}
+                  onDeleteAiBox={handleDeleteAiBox}
+                  onDuplicateBox={handleDuplicateBox}
+                  onAdjustAiBox={handleAdjustAiBox}
+                  highlightedGroupId={hoveredAnnotationId ?? selectedAnnotationId}
+                  isReadOnly={true}
+                  transformRef={expandedBasePanRef}
+                  onTransformed={handleExpandedBaseTransformed}
+                />
+              </div>
+            )}
+            {hasNew && (
+              <DrawableImagePanel
+                key={`expanded-new-${selectedChildIndex}`}
+                src={activeChildUrl}
+                title="New Version"
+                subtitle={activeChildFileName}
+                target="new"
+                aiBoxes={existingNewBoxes}
+                userBoxes={userNewBoxes}
+                isDrawingMode={isDrawingMode || !!activeGroupId}
+                activeGroupId={activeGroupId}
+                onDrawComplete={handleDrawComplete}
+                onDeleteBox={handleDeleteBox}
+                onDeleteAiBox={handleDeleteAiBox}
+                onDuplicateBox={handleDuplicateBox}
+                onAdjustAiBox={handleAdjustAiBox}
+                highlightedGroupId={hoveredAnnotationId ?? selectedAnnotationId}
+                initialAiOverrides={aiBoxAdjustments[selectedChildIndex]}
+                transformRef={expandedNewPanRef}
+                onTransformed={handleExpandedNewTransformed}
+              />
+            )}
+          </div>
+        </div>
       )}
     </div>
   );

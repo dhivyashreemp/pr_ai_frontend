@@ -59,6 +59,7 @@ export interface PairReportData {
   requirements:  Requirement[];
   unexpectedChanges: UnexpectedChange[];
   discrepancyCategories: DiscrepancyCategory[];
+  hasChanges?:   boolean;
 }
 
 export interface ReportData {

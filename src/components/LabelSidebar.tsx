@@ -8,6 +8,7 @@ interface LabelSidebarProps {
   basePreviewUrl: string | null;
   baseFileName?: string;
   childFiles: File[];
+  childFileNames?: string[];   // fallback names when File objects are unavailable (e.g. after back-nav)
   childPreviewUrls: string[];
   apiResults: any[];
   selectedIndex: number;
@@ -160,6 +161,7 @@ const LabelSidebar = ({
   basePreviewUrl,
   baseFileName,
   childFiles,
+  childFileNames,
   childPreviewUrls,
   apiResults,
   selectedIndex,
@@ -209,17 +211,22 @@ const LabelSidebar = ({
   );
 
   // ── Child card list (expanded mode) ─────────────────────────────────────────
+  // Use the longer of childFiles or childPreviewUrls so cards render even when
+  // File objects didn't survive location.state serialization on back-navigation.
+  const childCount = Math.max(childFiles.length, childPreviewUrls.length);
   const childrenList = (
     <div className="flex flex-col gap-3">
-      {childFiles.length === 0 ? (
+      {childCount === 0 ? (
         <div className="text-[11px] text-gray-400 italic py-2 text-center">No child labels</div>
       ) : (
-        childFiles.map((file, idx) => {
+        Array.from({ length: childCount }, (_, idx) => {
+          const file = childFiles[idx] ?? null;
+          const displayName = file?.name ?? childFileNames?.[idx] ?? `Label ${idx + 1}`;
           const analysed = analysisRun && !!apiResults[idx];
           const isActive = idx === selectedIndex;
           return (
             <button
-              key={`${file.name}-${idx}`}
+              key={`child-${idx}`}
               type="button"
               onClick={() => onSelectChild(idx)}
               className={`w-full text-left rounded-lg overflow-hidden transition-all duration-150 transform-gpu ${
@@ -230,7 +237,7 @@ const LabelSidebar = ({
             >
               <CardThumbnail file={file} url={childPreviewUrls[idx] ?? null} />
               <CardFooter
-                filename={file.name}
+                filename={displayName}
                 badge={<StatusBadge analysed={analysed} />}
                 dotColor={isActive ? "bg-[#d51900]" : "bg-gray-300"}
               />
@@ -253,7 +260,7 @@ const LabelSidebar = ({
             <div className="bg-blue-50 rounded-lg overflow-hidden border border-blue-200 border-l-4 border-l-blue-500 shadow-sm">
               <CardThumbnail file={baseFile} url={basePreviewUrl} />
               <CardFooter
-                filename={baseFile?.name ?? baseFileName ?? ''}
+                filename={baseFileName ?? baseFile?.name ?? ''}
                 badge={<BaseBadge />}
                 dotColor="bg-blue-500"
               />
@@ -279,16 +286,18 @@ const LabelSidebar = ({
           <FilmstripThumb file={baseFile} url={basePreviewUrl} />
         </div>
       )}
-      {baseFile && childFiles.length > 0 && (
+      {baseFile && childCount > 0 && (
         <div className="w-5 h-px bg-gray-200" />
       )}
-      {childFiles.map((file, idx) => {
+      {Array.from({ length: childCount }, (_, idx) => {
+        const file = childFiles[idx] ?? null;
+        const displayName = file?.name ?? childFileNames?.[idx] ?? `Label ${idx + 1}`;
         const isActive = idx === selectedIndex;
         return (
           <button
-            key={`${file.name}-${idx}`}
+            key={`child-${idx}`}
             type="button"
-            title={file.name}
+            title={displayName}
             onClick={() => onSelectChild(idx)}
             className={`rounded-md focus:outline-none focus-visible:ring-2 focus-visible:ring-[#d51900] ${
               isActive ? "ring-2 ring-[#d51900]" : "ring-1 ring-gray-200"

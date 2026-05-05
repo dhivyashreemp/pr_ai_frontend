@@ -1,6 +1,6 @@
 import { useState, useEffect, useRef } from 'react';
 import { useLocation, useNavigate } from 'react-router-dom';
-import { CheckCircle, Download, ChevronLeft, ChevronRight } from 'lucide-react';
+import { CheckCircle, Download, ChevronLeft, ChevronRight, Archive } from 'lucide-react';
 import { ThemeProvider } from '@/report/ThemeContext';
 import { ReportHeader } from '@/report/ReportHeader';
 import { MetadataRow } from '@/report/MetadataRow';
@@ -217,6 +217,46 @@ function buildAnnotationBoxes(
 
 // ── print helpers ─────────────────────────────────────────────────────────────
 
+const PDF_HTML2PDF_OPTIONS = {
+  margin: [14, 12, 18, 12],
+  pagebreak: { mode: ['css', 'legacy'] },
+  image: { type: 'jpeg', quality: 0.98 },
+  html2canvas: { scale: 2, useCORS: true, logging: false },
+  jsPDF: { unit: 'mm', format: 'a4', orientation: 'portrait' },
+} as const;
+
+const PDF_LAYOUT_CSS = `
+  .report-page-break { page-break-before: always !important; break-before: page !important; display: block !important; width: 100% !important; }
+  .report-label-page { display: block !important; width: 100% !important; }
+  .report-label-grid { display: block !important; width: 100% !important; padding: 0 2rem !important; box-sizing: border-box !important; }
+  .report-label-box { display: block !important; width: 100% !important; margin-bottom: 3rem !important; border-top: 1px solid #d1d5db !important; padding-top: 2px !important; box-sizing: border-box !important; }
+  .report-label-box + .report-label-box { page-break-before: always !important; break-before: page !important; border-top: 1px solid #d1d5db !important; margin-top: 3rem !important; }
+  .report-label-img  {
+    width: 100% !important;
+    height: auto !important;
+    display: block !important;
+    margin: 0 auto !important;
+  }
+  table { width: 100% !important; font-size: 8pt !important; }
+  th, td { padding: 4px 6px !important; }
+  .report-content-wrap {
+    max-width: none !important;
+    padding-left: 0 !important;
+    padding-right: 0 !important;
+    padding-top: 0 !important;
+    margin-left: 0 !important;
+    margin-right: 0 !important;
+  }
+  td span[class*="inline-block"] {
+    display: inline-flex !important;
+    align-items: center !important;
+    justify-content: center !important;
+    line-height: 1 !important;
+    padding-top: 4px !important;
+    padding-bottom: 4px !important;
+  }
+`;
+
 function _getISTDateParts() {
   const now = new Date();
   const ist = new Date(now.getTime() + (5 * 60 + 30) * 60 * 1000);
@@ -229,28 +269,13 @@ function _getISTDateParts() {
   };
 }
 
-async function _generateAndSave(
+// Prepares the DOM, generates the PDF blob, restores the DOM. No file I/O.
+async function _generatePdfBlob(
   filename: string,
   element: HTMLElement,
   extraPrepare?: () => void,
   extraRestore?: () => void,
-): Promise<void> {
-  let handle: any = null;
-
-  // 1. Show the OS "Save As" dialog FIRST.
-  if (typeof (window as any).showSaveFilePicker === 'function') {
-    try {
-      handle = await (window as any).showSaveFilePicker({
-        suggestedName: `${filename}.pdf`,
-        types: [{ description: 'PDF Document', accept: { 'application/pdf': ['.pdf'] } }],
-      });
-    } catch (pickerErr: any) {
-      if (pickerErr?.name === 'AbortError') return;
-      throw pickerErr;
-    }
-  }
-
-  // 2. Prepare DOM for high-quality PDF capture
+): Promise<Blob> {
   const clipped = Array.from(
     document.querySelectorAll<HTMLElement>('.overflow-y-auto,.overflow-hidden,.overflow-auto')
   );
@@ -263,60 +288,21 @@ async function _generateAndSave(
     el.style.maxHeight = 'none';
   });
 
-  const uiEls = Array.from(
-    document.querySelectorAll<HTMLElement>('.print\\:hidden')
-  );
+  const uiEls = Array.from(document.querySelectorAll<HTMLElement>('.print\\:hidden'));
   uiEls.forEach(el => {
     el.dataset._uiDisplay = el.style.display;
     el.style.display = 'none';
   });
 
-  const printEls = Array.from(
-    document.querySelectorAll<HTMLElement>('.print\\:block')
-  );
+  const printEls = Array.from(document.querySelectorAll<HTMLElement>('.print\\:block'));
   printEls.forEach(el => {
     el.dataset._printDisplay = el.style.display;
     el.style.display = 'block';
   });
 
-  // Inject specific print layout CSS
   const pdfLayoutStyle = document.createElement('style');
   pdfLayoutStyle.id = '__pdf-label-layout__';
-  pdfLayoutStyle.textContent = `
-    .report-page-break { page-break-before: always !important; break-before: page !important; display: block !important; width: 100% !important; }
-    .report-label-page { display: block !important; width: 100% !important; }
-    .report-label-grid { display: block !important; width: 100% !important; padding: 0 2rem !important; box-sizing: border-box !important; }
-    .report-label-box { display: block !important; width: 100% !important; margin-bottom: 3rem !important; border-top: 1px solid #d1d5db !important; padding-top: 2px !important; box-sizing: border-box !important; }
-    .report-label-box + .report-label-box { page-break-before: always !important; break-before: page !important; border-top: 1px solid #d1d5db !important; margin-top: 3rem !important; }
-    .report-label-img  {
-      width: 100% !important;
-      height: auto !important;
-      display: block !important;
-      margin: 0 auto !important;
-    }
-    table { width: 100% !important; font-size: 8pt !important; }
-    th, td { padding: 4px 6px !important; }
-
-    /* Extend content out to match header width */
-    .report-content-wrap {
-      max-width: none !important;
-      padding-left: 0 !important;
-      padding-right: 0 !important;
-      padding-top: 0 !important;
-      margin-left: 0 !important;
-      margin-right: 0 !important;
-    }
-
-    /* Vertically center text in badges/code blocks */
-    td span[class*="inline-block"] {
-      display: inline-flex !important;
-      align-items: center !important;
-      justify-content: center !important;
-      line-height: 1 !important;
-      padding-top: 4px !important;
-      padding-bottom: 4px !important;
-    }
-  `;
+  pdfLayoutStyle.textContent = PDF_LAYOUT_CSS;
   document.head.appendChild(pdfLayoutStyle);
   extraPrepare?.();
 
@@ -327,41 +313,56 @@ async function _generateAndSave(
       el.style.height    = el.dataset._printHeight   ?? '';
       el.style.maxHeight = el.dataset._printMaxH     ?? '';
     });
-    uiEls.forEach(el => {
-      el.style.display = el.dataset._uiDisplay ?? '';
-    });
-    printEls.forEach(el => {
-      el.style.display = el.dataset._printDisplay ?? '';
-    });
+    uiEls.forEach(el => { el.style.display = el.dataset._uiDisplay ?? ''; });
+    printEls.forEach(el => { el.style.display = el.dataset._printDisplay ?? ''; });
     extraRestore?.();
   };
 
   try {
-    // 3. Generate the PDF blob via html2pdf
     const blob: Blob = await html2pdf()
-      .set({
-        margin: [14, 12, 18, 12],
-        filename: `${filename}.pdf`,
-        pagebreak: { mode: ['css', 'legacy'] },
-        image: { type: 'jpeg', quality: 0.98 },
-        html2canvas: { scale: 2, useCORS: true, logging: false },
-        jsPDF: { unit: 'mm', format: 'a4', orientation: 'portrait' },
-      })
+      .set({ ...PDF_HTML2PDF_OPTIONS, filename: `${filename}.pdf` })
       .from(element)
       .toPdf()
       .get('pdf')
       .then((pdf: any) => pdf.output('blob'));
-
     restore();
+    return blob;
+  } catch (err) {
+    restore();
+    throw err;
+  }
+}
 
-    // 4. Persistence: Write to file picker location AND trigger Chrome download notification
+async function _generateAndSave(
+  filename: string,
+  element: HTMLElement,
+  extraPrepare?: () => void,
+  extraRestore?: () => void,
+): Promise<void> {
+  let handle: any = null;
+
+  // Show the OS "Save As" dialog FIRST so it isn't blocked as a non-gesture popup.
+  if (typeof (window as any).showSaveFilePicker === 'function') {
+    try {
+      handle = await (window as any).showSaveFilePicker({
+        suggestedName: `${filename}.pdf`,
+        types: [{ description: 'PDF Document', accept: { 'application/pdf': ['.pdf'] } }],
+      });
+    } catch (pickerErr: any) {
+      if (pickerErr?.name === 'AbortError') return;
+      throw pickerErr;
+    }
+  }
+
+  try {
+    const blob = await _generatePdfBlob(filename, element, extraPrepare, extraRestore);
+
     if (handle) {
       const writable = await handle.createWritable();
       await writable.write(blob);
       await writable.close();
     }
 
-    // This triggers the standard Chrome download bar / notification
     const url = URL.createObjectURL(blob);
     const a = document.createElement('a');
     a.href = url;
@@ -376,7 +377,6 @@ async function _generateAndSave(
       duration: 5000,
     });
   } catch (err: any) {
-    restore();
     if (err?.name !== 'AbortError') {
       toast.error('Save failed. Please try again.', { duration: 4000 });
     }
@@ -542,15 +542,39 @@ const ReportPageInner = () => {
   const summaryData           = buildSummaryData(requirements, allUnexpected);
 
   // Annotation boxes for the label comparison images
-  const newBoxes = buildAnnotationBoxes(annotations, formData ? reqBoxes : undefined, userBoxesNew)
+  // Build a positional map for LRF requirement boxes so they get the correct
+  // expected-changes row number (#1, #2, …) even after the discard filter.
+  const _allNewBoxesRaw = buildAnnotationBoxes(annotations, formData ? reqBoxes : undefined, userBoxesNew);
+  const _lrfRowMap = new Map<string, number>();
+  let _lrfIdx = 0;
+  for (const b of _allNewBoxesRaw) {
+    if (!b.linkedRowId && b.id.startsWith('req-')) _lrfRowMap.set(b.id, ++_lrfIdx);
+  }
+
+  const _assignRowNumber = (box: DrawnBox): DrawnBox => {
+    // LRF requirement box → expected changes row number
+    if (!box.linkedRowId && box.id.startsWith('req-')) {
+      const rn = _lrfRowMap.get(box.id);
+      return rn != null ? { ...box, rowNumber: rn } : box;
+    }
+    if (!box.linkedRowId) return box;
+    // Unexpected changes
+    const unexpIdx = allUnexpected.findIndex(uc => String(uc.id) === box.linkedRowId);
+    if (unexpIdx >= 0) return { ...box, rowNumber: unexpIdx + 1 };
+    // User-expected annotations → expected changes row number
+    const expIdx = (userExpectedUnique as any[]).findIndex(
+      b => `user-${(b as any).groupId ?? ''}` === box.linkedRowId
+    );
+    if (expIdx >= 0) return { ...box, rowNumber: baseRequirements.length + 1 + expIdx };
+    return box;
+  };
+
+  const newBoxes = _allNewBoxesRaw
     .filter((box) => !box.linkedRowId || !discardedUnexpectedIds.includes(box.linkedRowId))
-    .map(box => {
-      if (!box.linkedRowId) return box;
-      const idx = allUnexpected.findIndex(uc => String(uc.id) === box.linkedRowId);
-      return idx >= 0 ? { ...box, rowNumber: idx + 1 } : box;
-    });
+    .map(_assignRowNumber);
   const currentBoxes = buildAnnotationBoxes([], undefined, userBoxesBase)
-    .filter((box) => !box.linkedRowId || !discardedUnexpectedIds.includes(box.linkedRowId));
+    .filter((box) => !box.linkedRowId || !discardedUnexpectedIds.includes(box.linkedRowId))
+    .map(_assignRowNumber);
 
   const { yyyy, mm, dd } = _getISTDateParts();
   const computedReportId  = (location.state?.reportId as string | undefined) || `${yyyy}${mm}${dd}0001`;
@@ -578,7 +602,16 @@ const ReportPageInner = () => {
   const hasSidebar = rawPairs.length >= 1 || !!(restoredChildUrl || restoredBaseUrl || childUrl || baseUrl);
 
   const pairReportData: PairReportData[] = rawPairs.map((pair: any) => {
-    const pairReqs = buildRequirements(pair.satisfiedItems ?? [], pair.missingItems ?? []);
+    // Form-requirement rows (from LRF analysis, typically empty in pure multi-pair mode)
+    const pairBaseReqs = buildRequirements(pair.satisfiedItems ?? [], pair.missingItems ?? []);
+    // Manual expected rows from reviewer annotations
+    const pairManualReqs = buildManualExpectedRequirements(
+      pair.userExpectedUnique ?? [],
+      pairBaseReqs.length + 1,
+    );
+    const allPairReqs = [...pairBaseReqs, ...pairManualReqs];
+
+    // AI-detected unexpected changes
     const pairItems = pair.parsedItems?.length > 0 ? pair.parsedItems : (pair.annotations ?? []);
     const pairAiUnexpected: UnexpectedChange[] = pairItems.map((item: any, i: number) => ({
       id:           `ai-p${pair.pairIndex}-${i}`,
@@ -588,22 +621,71 @@ const ReportPageInner = () => {
       linkedBoxIds: [`ai-p${pair.pairIndex}-${i}`],
       source:       'ai' as const,
     }));
+    const pairAiFiltered = pairAiUnexpected.filter(
+      (item) => !discardedUnexpectedIds.includes(item.id)
+    );
+
+    // Reviewer-marked unexpected rows from preview page annotations
+    const pairUserUnexpected: UnexpectedChange[] = (pair.userUnexpectedUnique ?? [])
+      .map((b: any, ui: number) => ({
+        id:           `user-${b.groupId ?? ui}`,
+        elementType:  b.elementType ?? 'Reviewer Note',
+        changeType:   b.type,
+        actual:       b.text || b.type,
+        linkedBoxIds: [`user-${b.groupId ?? ui}`],
+        source:       'reviewer' as const,
+      }))
+      .filter((item: UnexpectedChange) => !discardedUnexpectedIds.includes(item.id));
+
+    const allPairUnexpected = [...pairAiFiltered, ...pairUserUnexpected];
+
+    const derivedHasChanges =
+      allPairReqs.length > 0 ||
+      allPairUnexpected.length > 0 ||
+      (pair.userAnnotationsBase ?? []).length > 0 ||
+      (pair.userAnnotationsNew  ?? []).length > 0;
+
     return {
       pairIndex:    pair.pairIndex,
       baseUrl:      pair.baseUrl,
       childUrl:     pair.childUrl,
       baseFileName: pair.baseFileName,
       childFileName: pair.childFileName,
-      currentBoxes: [],
-      newBoxes: buildAnnotationBoxes(pair.annotations ?? [], undefined, []),
-      requirements: pairReqs,
-      unexpectedChanges: pairAiUnexpected.filter(
-        (item) => !discardedUnexpectedIds.includes(item.id)
-      ),
+      currentBoxes: buildAnnotationBoxes([], undefined, pair.userAnnotationsBase ?? [])
+        .filter(box => !box.linkedRowId || !discardedUnexpectedIds.includes(box.linkedRowId))
+        .map(box => {
+          if (!box.linkedRowId) return box;
+          const idx = allPairUnexpected.findIndex(uc => String(uc.id) === box.linkedRowId);
+          if (idx >= 0) return { ...box, rowNumber: idx + 1 };
+          const expIdx = (pair.userExpectedUnique ?? []).findIndex(
+            (b: any) => `user-${b.groupId ?? ''}` === box.linkedRowId
+          );
+          if (expIdx >= 0) return { ...box, rowNumber: pairBaseReqs.length + 1 + expIdx };
+          return box;
+        }),
+      newBoxes: buildAnnotationBoxes(pair.annotations ?? [], undefined, pair.userAnnotationsNew ?? [])
+        .filter(box => !box.linkedRowId || !discardedUnexpectedIds.includes(box.linkedRowId))
+        .map(box => {
+          if (!box.linkedRowId) return box;
+          // AI boxes use 'ai-${i}' but pair unexpected IDs use 'ai-p${pairIndex}-${i}' — translate
+          const resolvedId = /^ai-\d/.test(box.linkedRowId)
+            ? `ai-p${pair.pairIndex}-${box.linkedRowId.slice(3)}`
+            : box.linkedRowId;
+          const idx = allPairUnexpected.findIndex(uc => String(uc.id) === resolvedId);
+          if (idx >= 0) return { ...box, rowNumber: idx + 1 };
+          const expIdx = (pair.userExpectedUnique ?? []).findIndex(
+            (b: any) => `user-${b.groupId ?? ''}` === box.linkedRowId
+          );
+          if (expIdx >= 0) return { ...box, rowNumber: pairBaseReqs.length + 1 + expIdx };
+          return box;
+        }),
+      requirements:          allPairReqs,
+      unexpectedChanges:     allPairUnexpected,
       discrepancyCategories: buildDiscrepancyCategories(
         pair.parsedItems ?? [],
         pair.barcode_summary ?? null,
       ),
+      hasChanges: pair.hasChanges ?? derivedHasChanges,
     };
   });
 
@@ -699,6 +781,120 @@ const ReportPageInner = () => {
 
       await _generateAndSave(filename, element, extraPrepare, extraRestore);
     }
+  };
+
+  // Download selected pairs as a ZIP — one PDF per pair bundled together.
+  const downloadPairsAsZip = async (indices: number[]) => {
+    const element = document.getElementById('report-print-area');
+    if (!element) return;
+
+    const { default: JSZip } = await import('jszip');
+    const zip = new JSZip();
+
+    const toastId = 'zip-progress';
+    toast.loading(`Generating ZIP (0 / ${indices.length})…`, { id: toastId, duration: Infinity });
+
+    try {
+      for (let n = 0; n < indices.length; n++) {
+        const idx = indices[n];
+        const pairIndex = pairReportData[idx]?.pairIndex ?? idx;
+        const filename = computedSku
+          ? `${computedSku}_${computedReportId}_${idx + 1}`
+          : `${computedReportId}_${idx + 1}`;
+
+        const pairHideEls: HTMLElement[] = [];
+        const pairScreenEls: HTMLElement[] = [];
+
+        const extraPrepare = () => {
+          pairReportData
+            .map(p => p.pairIndex)
+            .filter(pi => pi !== pairIndex)
+            .forEach(pi => {
+              document.querySelectorAll<HTMLElement>(`[data-pair-print="${pi}"]`).forEach(el => {
+                el.dataset._pairDisplay = el.style.display;
+                el.style.display = 'none';
+                pairHideEls.push(el);
+              });
+            });
+          document.querySelectorAll<HTMLElement>('.report-pair-screen').forEach(el => {
+            el.dataset._psDisplay = el.style.display;
+            el.style.display = 'none';
+            pairScreenEls.push(el);
+          });
+        };
+
+        const extraRestore = () => {
+          pairHideEls.forEach(el => { el.style.display = el.dataset._pairDisplay ?? ''; });
+          pairScreenEls.forEach(el => { el.style.display = el.dataset._psDisplay ?? ''; });
+        };
+
+        const blob = await _generatePdfBlob(filename, element, extraPrepare, extraRestore);
+        zip.file(`${filename}.pdf`, blob);
+
+        toast.loading(`Generating ZIP (${n + 1} / ${indices.length})…`, { id: toastId, duration: Infinity });
+      }
+
+      const zipBlob = await zip.generateAsync({ type: 'blob' });
+      const zipFilename = computedSku
+        ? `${computedSku}_${computedReportId}_labels.zip`
+        : `${computedReportId}_labels.zip`;
+
+      const url = URL.createObjectURL(zipBlob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = zipFilename;
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+      setTimeout(() => URL.revokeObjectURL(url), 30000);
+
+      toast.dismiss(toastId);
+      toast.success('ZIP saved', { description: zipFilename, duration: 5000 });
+    } catch (err: any) {
+      toast.dismiss(toastId);
+      if (err?.name !== 'AbortError') {
+        toast.error('ZIP generation failed. Please try again.', { duration: 4000 });
+      }
+    }
+  };
+
+  // Download all selected pairs as one combined multi-page PDF.
+  const downloadPairsAsCombinedPdf = async (indices: number[]) => {
+    const element = document.getElementById('report-print-area');
+    if (!element) return;
+
+    const filename = computedSku
+      ? `${computedSku}_${computedReportId}_combined`
+      : `${computedReportId}_combined`;
+
+    const selectedPairIndices = new Set(indices.map(i => pairReportData[i]?.pairIndex ?? i));
+    const pairHideEls: HTMLElement[] = [];
+    const pairScreenEls: HTMLElement[] = [];
+
+    const extraPrepare = () => {
+      pairReportData
+        .map(p => p.pairIndex)
+        .filter(pi => !selectedPairIndices.has(pi))
+        .forEach(pi => {
+          document.querySelectorAll<HTMLElement>(`[data-pair-print="${pi}"]`).forEach(el => {
+            el.dataset._pairDisplay = el.style.display;
+            el.style.display = 'none';
+            pairHideEls.push(el);
+          });
+        });
+      document.querySelectorAll<HTMLElement>('.report-pair-screen').forEach(el => {
+        el.dataset._psDisplay = el.style.display;
+        el.style.display = 'none';
+        pairScreenEls.push(el);
+      });
+    };
+
+    const extraRestore = () => {
+      pairHideEls.forEach(el => { el.style.display = el.dataset._pairDisplay ?? ''; });
+      pairScreenEls.forEach(el => { el.style.display = el.dataset._psDisplay ?? ''; });
+    };
+
+    await _generateAndSave(filename, element, extraPrepare, extraRestore);
   };
 
   const reportData: ReportData = {
@@ -898,35 +1094,57 @@ const ReportPageInner = () => {
               <>
                 {/* Screen: active pair report */}
                 <div className="report-pair-screen flex-1 overflow-y-auto report-content-wrap max-w-none px-8 pt-6 pb-24">
-                  <FrameA
-                    data={activePairAsReportData}
-                    summaryData={activePairSummaryData}
-                    onDiscardUnexpected={onDiscard}
-                  />
+                  {activePair?.hasChanges === false ? (
+                    <FrameNoChange
+                      labelName={activePair.childFileName || undefined}
+                      labelUrl={activePair.childUrl   || undefined}
+                      baseLabelName={activePair.baseFileName || undefined}
+                      baseLabelUrl={activePair.baseUrl   || undefined}
+                      crNumber={reportData.crNumber || undefined}
+                      sku={reportData.sku || undefined}
+                    />
+                  ) : (
+                    <FrameA
+                      data={activePairAsReportData}
+                      summaryData={activePairSummaryData}
+                      onDiscardUnexpected={onDiscard}
+                    />
+                  )}
                 </div>
 
                 {/* Print: all pairs rendered; CSS hides non-selected via data-pair-print */}
                 <div className="hidden print:block w-full report-content-wrap">
                   {pairReportData.map(pair => (
                     <div key={pair.pairIndex} data-pair-print={pair.pairIndex}>
-                      <FrameA
-                        data={{
-                          ...reportData,
-                          currentLabelName:      pair.baseFileName,
-                          newLabelName:          pair.childFileName,
-                          currentLabelUrl:       pair.baseUrl  || undefined,
-                          newLabelUrl:           pair.childUrl || undefined,
-                          newLabelUrls:          undefined,
-                          newLabelNames:         undefined,
-                          currentBoxes:          pair.currentBoxes,
-                          newBoxes:              pair.newBoxes,
-                          requirements:          pair.requirements,
-                          unexpectedChanges:     pair.unexpectedChanges,
-                          discrepancyCategories: pair.discrepancyCategories,
-                        }}
-                        summaryData={buildSummaryData(pair.requirements, pair.unexpectedChanges)}
-                        onDiscardUnexpected={onDiscard}
-                      />
+                      {pair.hasChanges === false ? (
+                        <FrameNoChange
+                          labelName={pair.childFileName || undefined}
+                          labelUrl={pair.childUrl   || undefined}
+                          baseLabelName={pair.baseFileName || undefined}
+                          baseLabelUrl={pair.baseUrl   || undefined}
+                          crNumber={reportData.crNumber || undefined}
+                          sku={reportData.sku || undefined}
+                        />
+                      ) : (
+                        <FrameA
+                          data={{
+                            ...reportData,
+                            currentLabelName:      pair.baseFileName,
+                            newLabelName:          pair.childFileName,
+                            currentLabelUrl:       pair.baseUrl  || undefined,
+                            newLabelUrl:           pair.childUrl || undefined,
+                            newLabelUrls:          undefined,
+                            newLabelNames:         undefined,
+                            currentBoxes:          pair.currentBoxes,
+                            newBoxes:              pair.newBoxes,
+                            requirements:          pair.requirements,
+                            unexpectedChanges:     pair.unexpectedChanges,
+                            discrepancyCategories: pair.discrepancyCategories,
+                          }}
+                          summaryData={buildSummaryData(pair.requirements, pair.unexpectedChanges)}
+                          onDiscardUnexpected={onDiscard}
+                        />
+                      )}
                     </div>
                   ))}
                 </div>
@@ -1019,7 +1237,7 @@ const ReportPageInner = () => {
                   <p className="text-sm font-medium text-gray-700">
                     {checkedPairIndices.size} label{checkedPairIndices.size > 1 ? 's' : ''} selected
                   </p>
-                  <p className="text-xs text-gray-400">Download as a combined PDF report</p>
+                  <p className="text-xs text-gray-400">Download as ZIP or combined PDF</p>
                 </>
               ) : pairReportData.length >= 1 ? (
                 <>
@@ -1045,13 +1263,22 @@ const ReportPageInner = () => {
             </button>
             <div className="flex items-center gap-2">
               {isMultiPair && checkedPairIndices.size > 0 && (
-                <button
-                  onClick={() => downloadPairs([...checkedPairIndices])}
-                  className="flex items-center gap-2 bg-[#d51900] hover:bg-red-800 text-white text-sm font-medium px-5 py-2.5 rounded-lg transition-colors"
-                >
-                  <Download className="w-4 h-4" />
-                  Download Selected ({checkedPairIndices.size})
-                </button>
+                <>
+                  <button
+                    onClick={() => downloadPairsAsZip([...checkedPairIndices])}
+                    className="flex items-center gap-2 bg-[#d51900] hover:bg-red-800 text-white text-sm font-medium px-5 py-2.5 rounded-lg transition-colors"
+                  >
+                    <Archive className="w-4 h-4" />
+                    Download ZIP ({checkedPairIndices.size})
+                  </button>
+                  <button
+                    onClick={() => downloadPairsAsCombinedPdf([...checkedPairIndices])}
+                    className="flex items-center gap-2 border border-[#d51900] text-[#d51900] hover:bg-red-50 text-sm font-medium px-5 py-2.5 rounded-lg transition-colors"
+                  >
+                    <Download className="w-4 h-4" />
+                    Combined PDF ({checkedPairIndices.size})
+                  </button>
+                </>
               )}
               <button
                 onClick={pairReportData.length >= 1 ? () => downloadPairs([activePairIndex]) : handleDownloadPDF}

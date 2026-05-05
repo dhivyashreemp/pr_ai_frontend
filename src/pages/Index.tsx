@@ -2,6 +2,7 @@ import { useState, useEffect, useMemo, useCallback, useRef } from "react";
 import { API_URL } from "@/constants";
 import { Download, RefreshCw, FileText, AlertCircle, Play, ScanLine, ArrowLeft } from "lucide-react";
 import AnalysisProgressModal from "@/components/AnalysisProgressModal";
+import ReadingPdfModal from "@/components/ReadingPdfModal";
 import { CompareProgress } from "@/components/CompareProgress";
 import { useCompareStream } from "@/hooks/useCompareStream";
 import { useLocation, useNavigate } from "react-router-dom";
@@ -30,6 +31,12 @@ function generateReportId(): string {
   return `${dateKey}${String(next).padStart(4, '0')}`;
 }
 
+/** When a PDF is expanded to per-page PNGs, return the expanded name with .pdf extension. */
+const pdfPageName = (expanded: string | undefined, original: string | undefined): string =>
+  expanded && original && /\.pdf$/i.test(original)
+    ? expanded.replace(/\.png$/i, '.pdf')
+    : (expanded ?? original ?? '');
+
 const Index = () => {
   const location = useLocation();
   const navigate = useNavigate();
@@ -43,8 +50,22 @@ const Index = () => {
   // PNG File objects. All downstream usage (preview URLs, FormData, sidebar,
   // apiResults indexing) works off these expanded arrays.
   const [expandedBaseFiles, setExpandedBaseFiles] = useState<File[]>([]);
+  // Parallel string array for base page filenames. Kept separate so it survives
+  // back-nav even when expandedBaseFiles is truncated to 1 entry (only the active
+  // page is forwarded to PreviewPage, but the full name list must be preserved).
+  const [expandedBaseFileNames, setExpandedBaseFileNames] = useState<string[]>(
+    location.state?.expandedBaseFileNames ?? []
+  );
   const [expandedChildFiles, setExpandedChildFiles] = useState<File[]>([]);
   const [isExpandingBase, setIsExpandingBase] = useState(false);
+  const [isExpandingChild, setIsExpandingChild] = useState(false);
+  const [isPdfTransitioning, setIsPdfTransitioning] = useState(false);
+  const [originalBaseNames, setOriginalBaseNames] = useState<string[]>(
+    location.state?.originalBaseNames ?? []
+  );
+  const [originalChildNames, setOriginalChildNames] = useState<string[]>(
+    location.state?.originalChildNames ?? []
+  );
 
   // Restored from location state when navigating back from the report page
   const [apiResults, setApiResults] = useState<any[]>(location.state?.apiResults || []);
@@ -68,26 +89,38 @@ const Index = () => {
   useEffect(() => {
     if (baseFile.length === 0) {
       setExpandedBaseFiles([]);
+      if (!restoredBaseNamesRef.current) setOriginalBaseNames([]);
       setIsExpandingBase(false);
       return;
     }
+    const hasAnyPdf = baseFile.some(isPdfFile);
     let cancelled = false;
-    setIsExpandingBase(true);
+    setIsExpandingBase(hasAnyPdf);
 
     (async () => {
       try {
         const expanded: File[] = [];
+        const origNames: string[] = [];
         for (const file of baseFile) {
           if (isPdfFile(file)) {
             const pages = await pdfToImageFiles(file);
             expanded.push(...pages);
+            pages.forEach(() => origNames.push(file.name));
           } else {
             expanded.push(file);
+            origNames.push(file.name);
           }
         }
         if (!cancelled) {
           setExpandedBaseFiles(expanded);
+          setExpandedBaseFileNames(expanded.map(f => f.name));
+          if (restoredBaseNamesRef.current) {
+            restoredBaseNamesRef.current = false; // keep restored names; next upload will overwrite
+          } else {
+            setOriginalBaseNames(origNames);
+          }
           setIsExpandingBase(false);
+          if (formData && hasAnyPdf) setIsPdfTransitioning(true);
         }
       } catch (e) {
         console.error("Failed to expand base PDF pages:", e);
@@ -107,25 +140,44 @@ const Index = () => {
   useEffect(() => {
     if (childFiles.length === 0) {
       setExpandedChildFiles([]);
+      setOriginalChildNames([]);
+      setIsExpandingChild(false);
       return;
     }
+    const hasAnyPdf = childFiles.some(isPdfFile);
     let cancelled = false;
+    setIsExpandingChild(hasAnyPdf);
 
     (async () => {
       try {
         const expanded: File[] = [];
+        const origNames: string[] = [];
         for (const file of childFiles) {
           if (isPdfFile(file)) {
             const pages = await pdfToImageFiles(file);
             expanded.push(...pages);
+            pages.forEach(() => origNames.push(file.name));
           } else {
             expanded.push(file);
+            origNames.push(file.name);
           }
         }
-        if (!cancelled) setExpandedChildFiles(expanded);
+        if (!cancelled) {
+          setExpandedChildFiles(expanded);
+          if (restoredChildNamesRef.current) {
+            restoredChildNamesRef.current = false; // keep restored .pdf names; next upload will overwrite
+          } else {
+            setOriginalChildNames(origNames);
+          }
+          setIsExpandingChild(false);
+          if (formData && hasAnyPdf) setIsPdfTransitioning(true);
+        }
       } catch (e) {
         console.error("Failed to expand child PDF pages:", e);
-        if (!cancelled) toast.error("Failed to process PDF pages.");
+        if (!cancelled) {
+          setIsExpandingChild(false);
+          toast.error("Failed to process PDF pages.");
+        }
       }
     })();
 
@@ -147,20 +199,67 @@ const Index = () => {
   const [selectedResultIndex, setSelectedResultIndex] = useState<number>(
     location.state?.selectedResultIndex ?? 0
   );
-  // Tracks requirement box positions after user drags/resizes/duplicates them in VisualDiffViewer.
-  // Restored from location.state when navigating back from PreviewPage so label edits survive.
-  // `null` means the user has not edited anything yet.
-  const [adjustedBoxes, setAdjustedBoxes] = useState<RequirementBox[] | null>(
-    location.state?.requirementBoxes !== undefined ? location.state.requirementBoxes : null
+  // Always-current ref used inside stable setter callbacks so they never need
+  // selectedResultIndex in their dependency arrays.
+  const selectedResultIndexRef = useRef(selectedResultIndex);
+  selectedResultIndexRef.current = selectedResultIndex;
+
+  // ── Per-child state ─────────────────────────────────────────────────────────
+  // Keyed by child index so deletions / adjustments on one label survive
+  // switching to another label and back.  All three maps are initialised for
+  // the child that was active when Index.tsx last navigated here.
+  const initIdx = location.state?.selectedResultIndex ?? 0;
+
+  const [adjustedBoxesByChild, setAdjustedBoxesByChild] = useState<Record<number, RequirementBox[] | null>>(() => {
+    const fullMap = location.state?.allAdjustedBoxes as Record<string, RequirementBox[]> | undefined;
+    if (fullMap && Object.keys(fullMap).length > 0) {
+      return Object.fromEntries(Object.entries(fullMap).map(([k, v]) => [Number(k), v]));
+    }
+    return { [initIdx]: location.state?.requirementBoxes !== undefined ? location.state.requirementBoxes : null };
+  });
+  const [adjustedAnnotationsByChild, setAdjustedAnnotationsByChild] = useState<Record<number, Annotation[] | null>>(() => {
+    const fullMap = location.state?.allAdjustedAnnotations as Record<string, Annotation[]> | undefined;
+    if (fullMap && Object.keys(fullMap).length > 0) {
+      return Object.fromEntries(Object.entries(fullMap).map(([k, v]) => [Number(k), v]));
+    }
+    return { [initIdx]: location.state?.annotations !== undefined ? location.state.annotations : null };
+  });
+  const [deletedDiscrepancyIdsByChild, setDeletedDiscrepancyIdsByChild] = useState<Record<number, Set<number | string>>>(() => {
+    const fullMap = location.state?.allDeletedDiscrepancyIdsByChild as Record<string, (number | string)[]> | undefined;
+    if (fullMap && Object.keys(fullMap).length > 0) {
+      return Object.fromEntries(Object.entries(fullMap).map(([k, v]) => [Number(k), new Set(v)]));
+    }
+    return { [initIdx]: new Set(location.state?.deletedDiscrepancyIds ?? []) };
+  });
+
+  // Derive current child's values — same variable names so nothing downstream changes.
+  const adjustedBoxes        = adjustedBoxesByChild[selectedResultIndex]        ?? null;
+  const adjustedAnnotations  = adjustedAnnotationsByChild[selectedResultIndex]  ?? null;
+  const deletedDiscrepancyIds = deletedDiscrepancyIdsByChild[selectedResultIndex] ?? new Set<number | string>();
+
+  // Stable wrapper setters — use the ref so they never go stale.
+  const setAdjustedBoxes = useCallback(
+    (valOrUpdater: RequirementBox[] | null | ((p: RequirementBox[] | null) => RequirementBox[] | null)) => {
+      setAdjustedBoxesByChild(prev => {
+        const idx = selectedResultIndexRef.current;
+        const cur = prev[idx] ?? null;
+        return { ...prev, [idx]: typeof valOrUpdater === 'function' ? valOrUpdater(cur) : valOrUpdater };
+      });
+    }, []
   );
-  // Restored from location.state when navigating back from PreviewPage so annotation label edits survive.
-  const [adjustedAnnotations, setAdjustedAnnotations] = useState<Annotation[] | null>(
-    location.state?.annotations !== undefined ? location.state.annotations : null
+  const setAdjustedAnnotations = useCallback(
+    (val: Annotation[] | null) => {
+      setAdjustedAnnotationsByChild(prev => ({ ...prev, [selectedResultIndexRef.current]: val }));
+    }, []
   );
-  // Track discrepancy IDs explicitly deleted by the user from the viewer.
-  // Using a "deleted" set (not a "visible" set) means items without a bbox still show.
-  const [deletedDiscrepancyIds, setDeletedDiscrepancyIds] = useState<Set<number | string>>(
-    new Set(location.state?.deletedDiscrepancyIds ?? [])
+  const setDeletedDiscrepancyIds = useCallback(
+    (valOrUpdater: Set<number | string> | ((p: Set<number | string>) => Set<number | string>)) => {
+      setDeletedDiscrepancyIdsByChild(prev => {
+        const idx = selectedResultIndexRef.current;
+        const cur = prev[idx] ?? new Set<number | string>();
+        return { ...prev, [idx]: typeof valOrUpdater === 'function' ? valOrUpdater(cur) : valOrUpdater };
+      });
+    }, []
   );
   const [basePreviewUrls, setBasePreviewUrls] = useState<string[]>(
     location.state?.expandedBasePreviewUrls || []
@@ -179,6 +278,17 @@ const Index = () => {
   );
   const restoredChildUrlsRef = useRef<boolean>(
     (location.state?.expandedChildPreviewUrls?.length ?? 0) > 0
+  );
+  // Guard: don't overwrite restored originalBaseNames with a single-entry array
+  // on back-nav remount (same reason as restoredBaseUrlRef — only 1 base file restored).
+  const restoredBaseNamesRef = useRef<boolean>(
+    (location.state?.originalBaseNames?.length ?? 0) > 0
+  );
+  // Guard: child files are PNG pages (not PDFs) after back-nav, so the expansion
+  // effect would overwrite originalChildNames with ".png" names, breaking pdfPageName.
+  // Preserve the restored ".pdf" names until the user actually uploads new files.
+  const restoredChildNamesRef = useRef<boolean>(
+    (location.state?.originalChildNames?.length ?? 0) > 0
   );
 
   // Converts an image File to a data URL using FileReader.
@@ -201,7 +311,15 @@ const Index = () => {
       if (!restoredBaseUrlRef.current) setBasePreviewUrls([]);
       return;
     }
-    restoredBaseUrlRef.current = false;
+    // When navigating back from Preview/Report, only the active pair's base file is
+    // restored to state (Index only forwards one base file to PreviewPage).
+    // expandedBaseFiles is therefore a single-entry array on remount, but
+    // basePreviewUrls was correctly restored with the full multi-pair URL array.
+    // Skip the rebuild so we don't overwrite the full array with a single URL.
+    if (restoredBaseUrlRef.current) {
+      restoredBaseUrlRef.current = false;
+      return;
+    }
     let cancelled = false;
 
     (async () => {
@@ -243,18 +361,7 @@ const Index = () => {
     return () => { cancelled = true; };
   }, [expandedChildFiles]);
 
-  // Skip the first run so boxes/annotations restored from navigation state (back from PreviewPage)
-  // are not immediately wiped. Only reset when the user actually changes the selected child.
-  const isFirstResultIndexRender = useRef(true);
-  useEffect(() => {
-    if (isFirstResultIndexRender.current) {
-      isFirstResultIndexRender.current = false;
-      return;
-    }
-    setAdjustedBoxes(null);
-    setAdjustedAnnotations(null);
-    setDeletedDiscrepancyIds(new Set());
-  }, [selectedResultIndex]);
+  // Per-child state is preserved — no reset needed when switching children.
 
   // Derived: URL for the base label of the currently selected pair
   const basePreviewUrl = basePreviewUrls[selectedResultIndex] || basePreviewUrls[0] || "";
@@ -275,6 +382,7 @@ const Index = () => {
       return;
     }
 
+    setIsPdfTransitioning(false);
     setLoading(true);
     setAnalysisRun(false);
 
@@ -352,10 +460,10 @@ const Index = () => {
 
     setLrfAnalysis(null);
     setApiResults(processedResults);
-    setAdjustedBoxes(null);
+    setAdjustedBoxesByChild({});
+    setAdjustedAnnotationsByChild({});
+    setDeletedDiscrepancyIdsByChild({});
     setSelectedResultIndex(0);
-    setAdjustedAnnotations(null);
-    setDeletedDiscrepancyIds(new Set());
     setReportId(generateReportId());
     setAnalysisRun(true);
     resetStream();
@@ -1222,6 +1330,7 @@ const Index = () => {
   return (
     <div className="h-screen bg-[#f8f9fa] flex flex-col overflow-hidden">
 
+      <ReadingPdfModal isOpen={(isExpandingBase || isExpandingChild || isPdfTransitioning) && !loading} />
       <AnalysisProgressModal isOpen={loading} />
 
       {/* ── Streaming progress overlay (full diff mode) ── */}
@@ -1296,11 +1405,16 @@ const Index = () => {
         <LabelSidebar
           baseFile={expandedBaseFiles[selectedResultIndex] ?? expandedBaseFiles[0] ?? null}
           basePreviewUrl={basePreviewUrl || null}
+          baseFileName={pdfPageName(
+            expandedBaseFileNames[selectedResultIndex] ?? expandedBaseFileNames[0],
+            originalBaseNames[selectedResultIndex]     ?? originalBaseNames[0],
+          )}
           childFiles={expandedChildFiles}
+          childFileNames={expandedChildFiles.map((f, i) => pdfPageName(f.name, originalChildNames[i] ?? originalChildNames[0]))}
           childPreviewUrls={childPreviewUrls}
           apiResults={apiResults}
           selectedIndex={selectedResultIndex}
-          onSelectChild={(i) => { setSelectedResultIndex(i); setAdjustedAnnotations(null); setDeletedDiscrepancyIds(new Set()); }}
+          onSelectChild={(i) => { setSelectedResultIndex(i); }}
           analysisRun={analysisRun}
         />
 
@@ -1417,13 +1531,30 @@ const Index = () => {
                 reportId,
                 // User-adjusted requirement box positions (proof-request mode only)
                 requirementBoxes: (adjustedBoxes?.length ?? 0) > 0 ? adjustedBoxes : (requirementBoxes ?? []),
+                // Full per-child maps — preserved across the round-trip so back-nav
+                // restores deletions / adjustments for ALL pairs, not just the active one.
+                allAdjustedAnnotations: Object.fromEntries(
+                  Object.entries(adjustedAnnotationsByChild).filter(([, v]) => v !== null)
+                ),
+                allAdjustedBoxes: Object.fromEntries(
+                  Object.entries(adjustedBoxesByChild).filter(([, v]) => v !== null)
+                ),
+                allDeletedDiscrepancyIdsByChild: Object.fromEntries(
+                  Object.entries(deletedDiscrepancyIdsByChild).map(([k, v]) => [k, [...v]])
+                ),
                 // Barcode pipeline results for report summary + changes made
                 barcode_summary: analysisRun && apiResults.length > 0 ? apiResults[selectedResultIndex]?.barcode_summary ?? null : null,
                 // Pass as arrays — PreviewPage unpacks [0] for display, passes single File to ReportPage
                 baseFile: expandedBaseFiles[selectedResultIndex] ? [expandedBaseFiles[selectedResultIndex]] : [],
                 childFile: expandedChildFiles[selectedResultIndex] ? [expandedChildFiles[selectedResultIndex]] : [],
-                baseFileName: expandedBaseFiles[selectedResultIndex]?.name ?? '',
-                childFileName: expandedChildFiles[selectedResultIndex]?.name ?? '',
+                baseFileName: pdfPageName(
+                  expandedBaseFileNames[selectedResultIndex] ?? expandedBaseFileNames[0],
+                  originalBaseNames[selectedResultIndex] ?? originalBaseNames[0],
+                ),
+                childFileName: pdfPageName(
+                  expandedChildFiles[selectedResultIndex]?.name,
+                  originalChildNames[selectedResultIndex] ?? originalChildNames[0],
+                ),
                 // Stored so compare page can be fully restored when navigating back.
                 // Preview URLs (strings) are the source of truth on remount because
                 // File objects may not survive location.state across all remount paths.
@@ -1433,7 +1564,9 @@ const Index = () => {
                 basePreviewUrl,
                 expandedBasePreviewUrls: basePreviewUrls,
                 expandedChildPreviewUrls: childPreviewUrls,
-                expandedBaseFileNames: expandedBaseFiles.map(f => f.name),
+                expandedBaseFileNames,
+                originalBaseNames,
+                originalChildNames,
                 analysisRun,
                 selectedResultIndex,
                 userAnnotations: restoredUserAnnotations,
