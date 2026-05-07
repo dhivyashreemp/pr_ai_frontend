@@ -47,6 +47,7 @@ export interface ReportDetailsPanelProps {
   onHoverAnnotation:  (id: string | null) => void;
   onSelectAnnotation: (id: string | null) => void;
   onDeleteAnnotation: (id: string) => void;
+  hiddenAiBoxIds?: string[];
 }
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
@@ -283,25 +284,43 @@ const PanelContent = (props: PanelContentProps) => {
     [satisfiedItems, missingItems],
   );
 
-  // Build unexpected items using aiAnnotations for structure/mapping (preserves discard),
-  // but pull value/oldText/newText from parsedItems (inspection details) via discrepancy_id.
   const unexpectedItems = useMemo(() => {
-    const parsedByDiscrepancyId = new Map(
-      parsedItems.map((pi: any) => [pi.discrepancy_id, pi])
-    );
-    return aiAnnotations.map((ann: any, i: number) => {
-      const pi = parsedByDiscrepancyId.get(ann.discrepancy_id ?? i);
-      return {
+    if (parsedItems && parsedItems.length > 0) {
+      // Use parsedItems as the source of truth, filtering out expected changes
+      const unexpectedParsed = parsedItems.filter((pi: any) => pi.isValid !== true);
+      
+      return unexpectedParsed.map((pi: any, idx: number) => {
+        // Find matching aiAnnotation in the UNFILTERED array to preserve the correct original index
+        const annIdx = aiAnnotations.findIndex((a: any) => a.discrepancy_id != null && a.discrepancy_id === pi.discrepancy_id);
+        const panelId = annIdx !== -1 ? `ai-${annIdx}` : `parsed-${pi.id ?? idx}`;
+        
+        return {
+          _panelId:    panelId,
+          elementType: pi.category ?? 'Text',
+          changeType:  pi.status ?? 'Modified',
+          category:    pi.category ?? 'Text',
+          value:       pi.value ?? pi.label ?? '—',
+          oldText:     pi.oldText as string | undefined,
+          newText:     pi.newText as string | undefined,
+        };
+      });
+    }
+
+    // Fallback if parsedItems is empty
+    const hiddenSet = new Set(props.hiddenAiBoxIds ?? []);
+    return aiAnnotations
+      .map((ann: any, i: number) => ({ ann, i }))
+      .filter(({ i }) => !hiddenSet.has(`annotation-${i}`))
+      .map(({ ann, i }) => ({
         _panelId:    `ai-${i}`,
         elementType: ann.category ?? 'Text',
-        changeType:  pi?.status ?? ann.change_type ?? 'Modified',
+        changeType:  ann.change_type ?? 'Modified',
         category:    ann.category ?? 'Text',
-        value:       pi?.value ?? ann.label ?? ann.value ?? '—',
-        oldText:     pi?.oldText as string | undefined,
-        newText:     pi?.newText as string | undefined,
-      };
-    });
-  }, [aiAnnotations, parsedItems]);
+        value:       ann.label ?? ann.value ?? '—',
+        oldText:     undefined,
+        newText:     undefined,
+      }));
+  }, [aiAnnotations, parsedItems, props.hiddenAiBoxIds]);
 
   const annotationGroups = useMemo(
     () => [...groupAnnotations(annotations)].reverse(),

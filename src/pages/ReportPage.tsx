@@ -647,6 +647,7 @@ const ReportPageInner = () => {
 
     return {
       pairIndex:    pair.pairIndex,
+      sku:          pair.sku || undefined,
       baseUrl:      pair.baseUrl,
       childUrl:     pair.childUrl,
       baseFileName: pair.baseFileName,
@@ -712,7 +713,7 @@ const ReportPageInner = () => {
   const activePairAsReportData: ReportData | null = activePair ? {
     reportId:              location.state?.reportId ?? '',
     crNumber:              formData?.metadata?.cr_number   ?? '',
-    sku:                   formData?.metadata?.part_number ?? '',
+    sku:                   activePair.sku || formData?.metadata?.part_number || '',
     currentRevision:       revParts[0] ?? '',
     newRevision:           revParts[1] ?? '',
     currentLabelName:      activePair.baseFileName,
@@ -743,7 +744,8 @@ const ReportPageInner = () => {
     if (!element) return;
 
     for (const idx of indices) {
-      const filename = computedSku ? `${computedSku}_${computedReportId}_${idx + 1}` : `${computedReportId}_${idx + 1}`;
+      const pairSku = pairReportData[idx]?.sku || computedSku;
+      const filename = pairSku ? `${pairSku}_${computedReportId}_${idx + 1}` : `${computedReportId}_${idx + 1}`;
 
       const pairHideEls: HTMLElement[] = [];
       const pairScreenEls: HTMLElement[] = [];
@@ -798,8 +800,9 @@ const ReportPageInner = () => {
       for (let n = 0; n < indices.length; n++) {
         const idx = indices[n];
         const pairIndex = pairReportData[idx]?.pairIndex ?? idx;
-        const filename = computedSku
-          ? `${computedSku}_${computedReportId}_${idx + 1}`
+        const pairSku = pairReportData[idx]?.sku || computedSku;
+        const filename = pairSku
+          ? `${pairSku}_${computedReportId}_${idx + 1}`
           : `${computedReportId}_${idx + 1}`;
 
         const pairHideEls: HTMLElement[] = [];
@@ -929,7 +932,7 @@ const ReportPageInner = () => {
         activeScenario={activeScenario}
         onScenarioChange={setActiveScenario}
         reportId={reportData.reportId || undefined}
-        sku={computedSku}
+        sku={activePair?.sku || computedSku}
         currentRevision={reportData.currentRevision}
         newRevision={reportData.newRevision}
         onDownloadPDF={isMultiPair ? () => downloadPairs([activePairIndex]) : handleDownloadPDF}
@@ -954,7 +957,7 @@ const ReportPageInner = () => {
                         key={pair.pairIndex}
                         type="button"
                         onClick={() => setActivePairIndex(i)}
-                        title={pair.childFileName || `Label ${i + 1}`}
+                        title={pair.sku || pair.childFileName || `Label ${i + 1}`}
                         className={`w-9 h-9 rounded border-2 overflow-hidden flex-shrink-0 transition-all ${
                           activePairIndex === i
                             ? 'border-blue-600 ring-1 ring-blue-400'
@@ -1035,7 +1038,7 @@ const ReportPageInner = () => {
                               </div>
                             )}
                             <div className="text-[11px] font-semibold text-gray-700 truncate">
-                              {pair.childFileName || `Label ${i + 1}`}
+                              {pair.sku || pair.childFileName || `Label ${i + 1}`}
                             </div>
                             <div className="text-[10px] text-gray-400 mt-0.5">
                               Label {i + 1} of {pairReportData.length}

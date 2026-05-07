@@ -836,8 +836,8 @@ const PreviewPage = () => {
   const formData   = state.formData;
 
   // ── Restore image URLs from File objects ─────────────────────────────────
-  const baseFileArr:  File[] = state.baseFile  ?? [];
-  const childFileArr: File[] = state.childFile ?? [];
+  const baseFileArr:  File[] = state.originalBaseFiles ?? state.baseFile  ?? [];
+  const childFileArr: File[] = state.originalChildFiles ?? state.childFile ?? [];
   const [baseUrl,  setBaseUrl]  = useState('');
   const [childUrl, setChildUrl] = useState('');
 
@@ -909,6 +909,8 @@ const PreviewPage = () => {
   const originalBaseNames:        string[] = state.originalBaseNames        ?? [];
   const originalChildNames:       string[] = state.originalChildNames       ?? [];
   const childFilesAll: File[] = state.childFiles ?? [];
+  // Per-label ref numbers extracted by backend OCR — used to rename pages and header SKU
+  const allLabelSkus: string[] = state.allLabelSkus ?? [];
 
   // Helper: when the original file was a PDF, return the per-page expanded name
   // with a .pdf extension so the UI shows "LCN_page1.pdf" instead of "LCN_page1.png".
@@ -923,11 +925,20 @@ const PreviewPage = () => {
   const annotations:      any[]            = state.annotations     ?? [];
   const requirementBoxes: RequirementBox[] = state.requirementBoxes ?? [];
 
-  // Accumulated set of deleted discrepancy IDs — seeded from Index.tsx, grows
-  // as the user deletes more boxes on this page.  Used when navigating back so
-  // the analysis page restores the same deleted state.
-  const [allDeletedDiscrepancyIds, setAllDeletedDiscrepancyIds] = useState<Set<number | string>>(
-    () => new Set(state.deletedDiscrepancyIds ?? [])
+  // Per-child deleted discrepancy ID sets — keyed by child index so deletions
+  // on one label never bleed into another. Seeded from the per-child map passed
+  // by Index.tsx (allDeletedDiscrepancyIdsByChild) and grows as the user deletes
+  // more boxes here.  Used when navigating back so the analysis page restores
+  // the same deleted state per label.
+  const [deletedDiscrepancyIdsByChildPreview, setDeletedDiscrepancyIdsByChildPreview] = useState<Record<number, Set<number | string>>>(
+    () => {
+      const childMap = state.allDeletedDiscrepancyIdsByChild as Record<string, (number | string)[]> | undefined;
+      if (childMap && Object.keys(childMap).length > 0) {
+        return Object.fromEntries(Object.entries(childMap).map(([k, v]) => [Number(k), new Set(v)]));
+      }
+      const initIdx = state.selectedResultIndex ?? 0;
+      return { [initIdx]: new Set(state.deletedDiscrepancyIds ?? []) };
+    }
   );
 
   // Helper: for a given annotation list + deleted-ID set, return the
@@ -945,7 +956,12 @@ const PreviewPage = () => {
   const [hiddenAiBoxIdsByChild, setHiddenAiBoxIdsByChild] = useState<Record<number, string[]>>(
     () => {
       const idx = state.selectedResultIndex ?? 0;
-      return { [idx]: deriveHiddenIds(state.annotations ?? [], new Set(state.deletedDiscrepancyIds ?? [])) };
+      const initDeletedSet = (() => {
+        const childMap = state.allDeletedDiscrepancyIdsByChild as Record<string, (number | string)[]> | undefined;
+        if (childMap?.[String(idx)]) return new Set<number | string>(childMap[String(idx)]);
+        return new Set<number | string>(state.deletedDiscrepancyIds ?? []);
+      })();
+      return { [idx]: deriveHiddenIds(state.annotations ?? [], initDeletedSet) };
     }
   );
   const hiddenAiBoxIds = hiddenAiBoxIdsByChild[selectedChildIndex] ?? [];
@@ -958,15 +974,36 @@ const PreviewPage = () => {
   const activeAnnotations: any[] = (() => {
     const allAdjusted = state.allAdjustedAnnotations as Record<string, any[]> | undefined;
     if (allAdjusted?.[selectedChildIndex] != null) return allAdjusted[selectedChildIndex];
-    if (selectedChildIndex === (state.selectedResultIndex ?? 0)) return annotations;
-    return state.apiResults?.[selectedChildIndex]?.annotations ?? [];
+    return state.allProcessedAnnotations?.[selectedChildIndex] ?? 
+      (selectedChildIndex === (state.selectedResultIndex ?? 0) ? annotations : (state.apiResults?.[selectedChildIndex]?.annotations ?? []));
   })();
 
   // Requirement boxes only apply to the originally-selected child (they are
   // pre-computed by Index.tsx for that specific child). For other children
   // we only show the raw AI annotations.
   const activeRequirementBoxes: RequirementBox[] =
-    selectedChildIndex === (state.selectedResultIndex ?? 0) ? requirementBoxes : [];
+    state.allProcessedRequirementBoxes?.[selectedChildIndex] ?? 
+    (selectedChildIndex === (state.selectedResultIndex ?? 0) ? requirementBoxes : []);
+
+  // Compute parsedItems for the active child, ensuring we only include items
+  // that have a localized bbox in the VisualDiffViewer, exactly matching
+  // the behaviour of DataTables in Index.tsx.
+  const activeParsedItems: any[] = (() => {
+    const items = state?.allProcessedParsedItems?.[selectedChildIndex] ?? 
+      (selectedChildIndex === (state?.selectedResultIndex ?? 0)
+        ? (state?.parsedItems ?? [])
+        : (state?.apiResults?.[selectedChildIndex]?.parsedItems ?? []));
+    
+    // Fallback to the active page's bbox IDs if the per-child arrays aren't present
+    let validIds: Set<number | string>;
+    if (state.allProcessedBboxIds?.[selectedChildIndex]) {
+      validIds = new Set(state.allProcessedBboxIds[selectedChildIndex]);
+    } else {
+      validIds = new Set(state.bboxDiscrepancyIds ?? []);
+    }
+    
+    return items.filter((item: any) => validIds.has(item.discrepancy_id));
+  })();
 
   // ── Discard state for unexpected changes ────────────────────────────────
   const [discardedUnexpectedIds, setDiscardedUnexpectedIds] = useState<Set<string>>(
@@ -974,6 +1011,24 @@ const PreviewPage = () => {
   );
   const handleDiscard = (id: string) => {
     setDiscardedUnexpectedIds(prev => new Set([...prev, id]));
+
+    let discrepancyId: number | string | undefined;
+    if (id.startsWith('ai-')) {
+      const idx = parseInt(id.slice(3), 10);
+      discrepancyId = activeAnnotations[idx]?.discrepancy_id;
+    } else if (id.startsWith('parsed-')) {
+      const parsedId = id.slice(7);
+      const parsedItem = activeParsedItems.find((pi: any) => pi.id == parsedId) 
+                      || activeParsedItems[parseInt(parsedId, 10)];
+      discrepancyId = parsedItem?.discrepancy_id;
+    }
+
+    if (discrepancyId != null) {
+      setDeletedDiscrepancyIdsByChildPreview(prev => {
+        const current = prev[selectedChildIndex] ?? new Set<number | string>();
+        return { ...prev, [selectedChildIndex]: new Set([...current, discrepancyId!]) };
+      });
+    }
   };
 
   // Convert discarded panel IDs (ai-N) → canvas box IDs (annotation-N) so
@@ -986,19 +1041,6 @@ const PreviewPage = () => {
   );
 
   const existingNewBoxes: DrawnBox[] = useMemo(() => {
-    // Comparator AI annotation boxes
-    const annotationAiBoxes = activeAnnotations.map((b: any, i: number) => ({
-      id:     `annotation-${i}`,
-      type:   (b.change_type ?? 'Modified') as DrawnBox['type'],
-      top:    (b.y ?? b.top ?? 0) * (b.y !== undefined ? 100 : 1),
-      left:   (b.x ?? b.left ?? 0) * (b.x !== undefined ? 100 : 1),
-      width:  (b.width ?? 0) * ((b.width ?? 0) <= 1 ? 100 : 1),
-      height: (b.height ?? 0) * ((b.height ?? 0) <= 1 ? 100 : 1),
-      text:   b.label ?? b.text ?? '',
-    })).filter(
-      box => !hiddenAiBoxIds.includes(box.id) && !discardedAnnotationBoxIds.includes(box.id)
-    );
-
     // LRF requirement boxes (0-1 normalized coords → convert to %)
     // Color matches VisualDiffViewer: satisfied → green (Added), missing → red (Deleted)
     const reqBoxes: DrawnBox[] = activeRequirementBoxes
@@ -1017,8 +1059,48 @@ const PreviewPage = () => {
       }))
       .filter(box => !hiddenAiBoxIds.includes(box.id));
 
-    return annotationAiBoxes;
-  }, [activeAnnotations, activeRequirementBoxes, hiddenAiBoxIds, discardedAnnotationBoxIds]);
+    const reqBoxKeys = new Set(reqBoxes.map(b => `${b.left.toFixed(3)},${b.top.toFixed(3)},${b.width.toFixed(3)},${b.height.toFixed(3)}`));
+    
+    // Only apply expected discrepancy filtering to the originally selected child,
+    // as parsedItems and requirementBoxes are only valid for that specific child.
+    const expectedDiscrepancyIds = new Set(
+      (state.allProcessedParsedItems?.[selectedChildIndex] ?? 
+      (selectedChildIndex === (state.selectedResultIndex ?? 0) ? (state.parsedItems ?? []) : []))
+        .filter((pi: any) => pi.isValid === true && pi.discrepancy_id != null)
+        .map((pi: any) => pi.discrepancy_id)
+    );
+
+    // Comparator AI annotation boxes
+    const annotationAiBoxes = activeAnnotations.map((b: any, i: number) => ({
+      id:     `annotation-${i}`,
+      type:   (b.change_type ?? 'Modified') as DrawnBox['type'],
+      top:    (b.y ?? b.top ?? 0) * (b.y !== undefined ? 100 : 1),
+      left:   (b.x ?? b.left ?? 0) * (b.x !== undefined ? 100 : 1),
+      width:  (b.width ?? 0) * ((b.width ?? 0) <= 1 ? 100 : 1),
+      height: (b.height ?? 0) * ((b.height ?? 0) <= 1 ? 100 : 1),
+      text:   b.label ?? b.text ?? '',
+      discrepancy_id: b.discrepancy_id,
+      category: b.category,
+      confidence: b.confidence,
+    })).filter(
+      box => {
+        if (hiddenAiBoxIds.includes(box.id) || discardedAnnotationBoxIds.includes(box.id)) return false;
+        if (box.discrepancy_id != null && expectedDiscrepancyIds.has(box.discrepancy_id)) return false;
+        const key = `${box.left.toFixed(3)},${box.top.toFixed(3)},${box.width.toFixed(3)},${box.height.toFixed(3)}`;
+        if (reqBoxKeys.has(key)) return false;
+        
+        // Hide standalone ZXing barcodes that aren't tied to a discrepancy, as they
+        // are only passed for snap-to-box purposes in the Analysis Page.
+        if (box.discrepancy_id == null && (box.category === 'Barcode' || box.category === 'DataMatrix')) {
+          return false;
+        }
+
+        return true;
+      }
+    );
+
+    return [...annotationAiBoxes, ...reqBoxes];
+  }, [activeAnnotations, activeRequirementBoxes, hiddenAiBoxIds, discardedAnnotationBoxIds, state.parsedItems]);
 
   // ── AI box position adjustments (human-in-the-loop fine-tuning) ─────────
   // Keyed by child index so each child retains its own independent adjustments.
@@ -1037,12 +1119,15 @@ const PreviewPage = () => {
       if (current.includes(id)) return prev;
       return { ...prev, [selectedChildIndex]: [...current, id] };
     });
-    // Also track the discrepancy_id so the deletion round-trips back to the analysis page
+    // Track the discrepancy_id per-child so deletions on one label don't affect others
     const idx = parseInt(id.replace('annotation-', ''), 10);
     if (!isNaN(idx)) {
       const discrepancyId = activeAnnotations[idx]?.discrepancy_id;
       if (discrepancyId != null) {
-        setAllDeletedDiscrepancyIds(prev => new Set([...prev, discrepancyId]));
+        setDeletedDiscrepancyIdsByChildPreview(prev => {
+          const current = prev[selectedChildIndex] ?? new Set<number | string>();
+          return { ...prev, [selectedChildIndex]: new Set([...current, discrepancyId]) };
+        });
       }
     }
   }, [activeAnnotations, selectedChildIndex]);
@@ -1253,10 +1338,12 @@ const PreviewPage = () => {
   const hasNew  = !!activeChildUrl;
 
   // Subtitle shown in the "New Version" panel header — same .pdf extension fix.
-  const activeChildFileName = pdfPageName(
-    childFilesAll[selectedChildIndex]?.name,
-    originalChildNames[selectedChildIndex] || childFileName,
-  );
+  const activeChildFileName =
+    allLabelSkus[selectedChildIndex] ||
+    pdfPageName(
+      childFilesAll[selectedChildIndex]?.name,
+      originalChildNames[selectedChildIndex] || childFileName,
+    );
 
   const userBaseBoxes = userAnnotations.filter(a => a.target === 'base');
   const userNewBoxes  = userAnnotations.filter(a => a.target === 'new');
@@ -1279,10 +1366,12 @@ const PreviewPage = () => {
         index === (state.selectedResultIndex ?? 0)
           ? (state.annotations ?? [])
           : (state.apiResults?.[index]?.annotations ?? []);
-      return { ...prev, [index]: deriveHiddenIds(childAnnotations, allDeletedDiscrepancyIds) };
+      // Use this child's own deletion set — not a global one — to avoid cross-child bleed
+      const childDeletedSet = deletedDiscrepancyIdsByChildPreview[index] ?? new Set<number | string>();
+      return { ...prev, [index]: deriveHiddenIds(childAnnotations, childDeletedSet) };
     });
     // aiBoxAdjustments is per-child — each child retains its own adjustments
-  }, [allDeletedDiscrepancyIds, state]);
+  }, [deletedDiscrepancyIdsByChildPreview, state]);
 
   // ── Annotations panel hover / select state ───────────────────────────────
   const [hoveredAnnotationId,  setHoveredAnnotationId]  = useState<string | null>(null);
@@ -1317,7 +1406,7 @@ const PreviewPage = () => {
         return { ...b, y: adj.top / 100, x: adj.left / 100, width: adj.width / 100, height: adj.height / 100 };
       });
 
-    const adjustedAnnotations = (state.annotations ?? [])
+    const adjustedAnnotations = (activeAnnotations ?? [])
       .filter((_: any, i: number) => !hiddenAiBoxIds.includes(`annotation-${i}`))
       .map((b: any, i: number) => {
         const adj = childAdjustments[`annotation-${i}`];
@@ -1360,29 +1449,68 @@ const PreviewPage = () => {
         // Forward ALL child label URLs and names so the report can display every
         // new-version label when multiple were uploaded.
         childPreviewUrls: expandedChildPreviewUrls,
-        childFileNames:   originalChildNames.length > 0 ? originalChildNames : childFilesAll.map(f => f.name),
+        childFileNames: (() => {
+          const base = originalChildNames.length > 0 ? originalChildNames : childFilesAll.map(f => f.name);
+          return base.map((n, i) => allLabelSkus[i] || n);
+        })(),
+        allLabelSkus,
+        // Filter parsedItems for the main reportData fallback (used when isMultiPair is false)
+        parsedItems: (() => {
+          const idx = state.selectedResultIndex ?? 0;
+          const pairDeletedIds = deletedDiscrepancyIdsByChildPreview[idx] ?? new Set<number | string>();
+          const processedItems = state.allProcessedParsedItems?.[idx] ?? state.parsedItems ?? [];
+          
+          let validIds: Set<number | string>;
+          if (state.allProcessedBboxIds?.[idx]) {
+            validIds = new Set(state.allProcessedBboxIds[idx]);
+          } else {
+            validIds = new Set(state.bboxDiscrepancyIds ?? []);
+          }
+
+          return processedItems.filter((item: any) =>
+            item.discrepancy_id == null || !pairDeletedIds.has(item.discrepancy_id)
+          ).filter((item: any) => validIds.has(item.discrepancy_id));
+        })(),
         // Build per-pair data for multi-label reports. Each entry carries its own
         // base/child URLs, file names, and raw AI results so the report page can
         // render independent label comparisons + change tables for every pair.
         allPairs: (() => {
           const allApiResults: any[] = state.apiResults ?? [];
           if (allApiResults.length === 0) return [];
-          const deletedIds: Set<number | string> = allDeletedDiscrepancyIds;
           // Per-child filtered annotation arrays from Index.tsx (bbox deletions already applied)
           const adjustedMap = state.allAdjustedAnnotations as Record<string, any[]> | undefined;
           return allApiResults.map((result: any, i: number) => {
-            const filteredParsedItems = (result.parsedItems ?? []).filter((item: any) =>
-              item.discrepancy_id == null || !deletedIds.has(item.discrepancy_id)
-            );
+            // Use this pair's own deletion set — avoids cross-pair contamination
+            const pairDeletedIds: Set<number | string> = deletedDiscrepancyIdsByChildPreview[i] ?? new Set<number | string>();
+            const processedItems = state.allProcessedParsedItems?.[i] ?? result.parsedItems ?? [];
+            
+            let pairValidIds: Set<number | string>;
+            if (state.allProcessedBboxIds?.[i]) {
+              pairValidIds = new Set(state.allProcessedBboxIds[i]);
+            } else {
+              pairValidIds = new Set(state.bboxDiscrepancyIds ?? []);
+            }
+
+            const filteredParsedItems = processedItems.filter((item: any) =>
+              item.discrepancy_id == null || !pairDeletedIds.has(item.discrepancy_id)
+            ).filter((item: any) => pairValidIds.has(item.discrepancy_id));
             // Build the filtered annotation list for this pair:
             // 1. Start from the Index.tsx-adjusted array (bbox deletions from the analysis page),
             //    or fall back to raw API data filtered by discrepancy_id.
             // 2. Remove any boxes the user additionally hid inside PreviewPage.
             const baseAnns: any[] = adjustedMap?.[i] != null
               ? adjustedMap[i]
-              : (result.annotations ?? []).filter((ann: any) =>
-                  ann.discrepancy_id == null || !deletedIds.has(ann.discrepancy_id)
-                );
+              : (() => {
+                  // Use the same annotation source that hiddenAiBoxIdsByChild was derived from
+                  // so that annotation-N index IDs stay aligned with baseAnns[N].
+                  // For the original child, that source is state.annotations (processed by Index.tsx).
+                  // For all other children it is the pre-processed annotations from Index.tsx (if available) or raw.
+                  const rawAnns = state.allProcessedAnnotations?.[i] ?? 
+                    (i === (state.selectedResultIndex ?? 0) ? (state.annotations ?? []) : (result.annotations ?? []));
+                  return rawAnns.filter((ann: any) =>
+                    ann.discrepancy_id == null || !pairDeletedIds.has(ann.discrepancy_id)
+                  );
+                })();
             const hiddenInPreview = hiddenAiBoxIdsByChild[i] ?? [];
             const filteredAnnotations = hiddenInPreview.length > 0
               ? baseAnns.filter((_: any, idx: number) => !hiddenInPreview.includes(`annotation-${idx}`))
@@ -1404,10 +1532,13 @@ const PreviewPage = () => {
                 expandedBaseFileNames[i] ?? expandedBaseFileNames[0],
                 originalBaseNames[i]     ?? originalBaseNames[0],
               ),
-              childFileName: pdfPageName(
-                childFilesAll[i]?.name,
-                originalChildNames[i] ?? originalChildNames[0],
-              ),
+              childFileName:
+                allLabelSkus[i] ||
+                pdfPageName(
+                  childFilesAll[i]?.name,
+                  originalChildNames[i] ?? originalChildNames[0],
+                ),
+              sku: allLabelSkus[i] || undefined,
               annotations:     filteredAnnotations,
               parsedItems:     filteredParsedItems,
               barcode_summary: result.barcode_summary ?? null,
@@ -1448,13 +1579,15 @@ const PreviewPage = () => {
       state: {
         formData:     state.formData,
         submissionId: state.submissionId,
-        baseFile:     baseFileArr,
+        baseFile:     state.expandedBaseFiles ?? state.originalBaseFiles ?? baseFileArr,
         childFile:    childFileArr,
         // Pass back the full expanded child array + preview URLs + UI state so
         // /compare can fully restore its sidebar, selected child, and analysed
         // badges on remount (File objects alone are not sufficient — preview
         // URLs carry the visual state through location.state as plain strings).
-        childFiles:               state.childFiles               ?? [],
+        originalBaseFiles:        state.originalBaseFiles ?? state.baseFile,
+        originalChildFiles:       state.originalChildFiles ?? state.childFiles,
+        childFiles:               state.expandedChildFiles ?? state.childFiles ?? [],
         basePreviewUrl:           state.basePreviewUrl           ?? '',
         expandedBasePreviewUrls:  state.expandedBasePreviewUrls  ?? [],
         expandedChildPreviewUrls: state.expandedChildPreviewUrls ?? [],
@@ -1466,19 +1599,21 @@ const PreviewPage = () => {
         apiResults:   state.apiResults  ?? [],
         lrfAnalysis:  state.lrfAnalysis ?? null,
         discardedUnexpectedIds: [...discardedUnexpectedIds],
-        deletedDiscrepancyIds: [...allDeletedDiscrepancyIds],
+        deletedDiscrepancyIds: [...(deletedDiscrepancyIdsByChildPreview[selectedChildIndex] ?? [])],
         reportId: state.reportId ?? '',
         userAnnotations,
         requirementBoxes,
         annotations: state.annotations ?? [],
-        // Merge per-child maps: start with what Index.tsx passed, then override the
-        // active pair with the accumulated set from this PreviewPage session so any
-        // boxes deleted here also survive the back-nav.
+        // Merge per-child maps: start with what Index.tsx passed, then overlay every
+        // child's accumulated deletion set from this PreviewPage session so back-nav
+        // restores the correct deleted state for ALL labels, not just the active one.
         allAdjustedAnnotations: state.allAdjustedAnnotations ?? {},
         allAdjustedBoxes: state.allAdjustedBoxes ?? {},
         allDeletedDiscrepancyIdsByChild: (() => {
           const base: Record<string, (number | string)[]> = { ...(state.allDeletedDiscrepancyIdsByChild ?? {}) };
-          base[String(selectedChildIndex)] = [...allDeletedDiscrepancyIds];
+          Object.entries(deletedDiscrepancyIdsByChildPreview).forEach(([k, v]) => {
+            base[k] = [...v];
+          });
           return base;
         })(),
       },
@@ -1576,8 +1711,11 @@ const PreviewPage = () => {
           childFiles={childFilesAll}
           childFileNames={
             childFilesAll.length > 0
-              ? childFilesAll.map((f, i) => pdfPageName(f.name, originalChildNames[i] ?? originalChildNames[0]))
-              : originalChildNames
+              ? childFilesAll.map((f, i) =>
+                  allLabelSkus[i] ||
+                  pdfPageName(f.name, originalChildNames[i] ?? originalChildNames[0])
+                )
+              : originalChildNames.map((n, i) => allLabelSkus[i] || n)
           }
           childPreviewUrls={expandedChildPreviewUrls}
           apiResults={state.apiResults ?? []}
@@ -1695,12 +1833,9 @@ const PreviewPage = () => {
           <ReportDetailsPanel
             satisfiedItems={state?.satisfiedItems ?? []}
             missingItems={state?.missingItems ?? []}
-            parsedItems={
-              selectedChildIndex === (state?.selectedResultIndex ?? 0)
-                ? (state?.parsedItems ?? [])
-                : (state?.apiResults?.[selectedChildIndex]?.parsedItems ?? [])
-            }
-            aiAnnotations={activeAnnotations.filter((_: any, i: number) => !hiddenAiBoxIds.includes(`annotation-${i}`))}
+            parsedItems={activeParsedItems}
+            aiAnnotations={activeAnnotations}
+            hiddenAiBoxIds={hiddenAiBoxIds}
             discardedUnexpectedIds={discardedUnexpectedIds}
             onDiscard={handleDiscard}
             analysisRun={true}

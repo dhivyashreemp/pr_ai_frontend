@@ -172,7 +172,8 @@ const DraggableBoxOverlay = ({
     moved: boolean;
   } | null>(null);
 
-  const boxKey = initialBoxes.map(b => b.id).join(",");
+  // Include position fingerprint so pages with identical box counts (same IDs) still trigger a reset
+  const boxKey = initialBoxes.map(b => `${b.id}:${b.x.toFixed(3)},${b.y.toFixed(3)}`).join("|");
   useEffect(() => {
     setStates(initialBoxes.map(b => ({ x: b.x, y: b.y, w: b.width, h: b.height })));
     setSelectedIdx(null);
@@ -990,6 +991,7 @@ const VisualDiffViewer = ({
   annotations      = [],
   requirementBoxes = [],
   detailCount,
+  pageKey,
   onBoxesChange,
   onAddBox,
   onDeleteBox,
@@ -1000,6 +1002,8 @@ const VisualDiffViewer = ({
   annotations?:       Annotation[];
   requirementBoxes?:  RequirementBox[];
   detailCount?:       number;
+  /** Unique key for the current page — forces overlay to remount on every page switch */
+  pageKey?:           string | number;
   onBoxesChange?:     (boxes: RequirementBox[]) => void;
   onAddBox?:          (box: RequirementBox) => void;
   onDeleteBox?:       (boxId: string) => void;
@@ -1234,6 +1238,7 @@ const VisualDiffViewer = ({
 
                   {(useReqBoxes || annotations.length > 0) && (
                     <DraggableBoxOverlay
+                      key={`${pageKey ?? 0}-${childImage ?? 'no-child'}`}
                       initialBoxes={useReqBoxes
                         ? [...requirementBoxes, ...editableAnnotationBoxes]
                         : editableAnnotationBoxes}

@@ -50,6 +50,7 @@ export interface DiscrepancyCategory {
 
 export interface PairReportData {
   pairIndex:     number;
+  sku?:          string;
   baseUrl:       string;
   childUrl:      string;
   baseFileName:  string;
