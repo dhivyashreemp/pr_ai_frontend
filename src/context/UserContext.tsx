@@ -24,9 +24,14 @@ function getUserFromStorage(): UserInfo {
     const token = localStorage.getItem("token");
     if (!token) return { name: "", role: "" };
     const payload = JSON.parse(atob(token.split(".")[1]));
+    if (payload.exp && Date.now() / 1000 > payload.exp) {
+      localStorage.removeItem("token");
+      return { name: "", role: "" };
+    }
     if (payload.name) return { name: payload.name, role: payload.role || "" };
   } catch {
-    // malformed token — ignore
+    // malformed token — clear it
+    localStorage.removeItem("token");
   }
   return { name: "", role: "" };
 }
@@ -41,6 +46,8 @@ export const UserProvider = ({ children }: { children: ReactNode }) => {
   const logout = () => {
     localStorage.removeItem("token");
     setUserState({ name: "", role: "" });
+    // TODO: redirect to ${API_URL}/auth/logout once the backend endpoint is implemented
+    window.location.href = "/login";
   };
 
   return (

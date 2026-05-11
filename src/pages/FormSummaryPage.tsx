@@ -1,7 +1,9 @@
 import { useLocation, useNavigate, useSearchParams } from "react-router-dom";
+import { authFetch } from "@/lib/authFetch";
 import { API_URL } from "@/constants";
 import { ScanLine, ArrowLeft, ArrowRight, ChevronRight, Edit2, FileText, Upload, X, CheckCircle2, Hash, Package, Tag, User, Calendar, Layers } from "lucide-react";
 import { useState, useEffect } from "react";
+import { toast } from "sonner";
 import { CATEGORIES } from "@/data/attributes";
 import { FormMetadata } from "@/types/form";
 import { useUser } from "@/context/UserContext";
@@ -108,10 +110,8 @@ const FormSummaryPage = () => {
 
     setSubmitting(true);
 
-    // Save the LRF submission to the backend (non-blocking on failure)
-    let submissionId: string | null = null;
     try {
-      const resp = await fetch(`${API_URL}/api/submissions`, {
+      const resp = await authFetch(`${API_URL}/api/submissions`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
@@ -124,16 +124,16 @@ const FormSummaryPage = () => {
       });
       if (resp.ok) {
         const data = await resp.json();
-        submissionId = data.submission_id;
+        navigate("/compare", { state: { formData, submissionId: data.submission_id, baseFile, childFiles: childFile } });
+      } else {
+        toast.error("Failed to save submission. Please try again.");
       }
     } catch (e) {
       console.error("Failed to save submission:", e);
-      // Non-blocking — proceed with analysis even if DB save fails
+      toast.error("Failed to save submission. Please check your connection and try again.");
     } finally {
       setSubmitting(false);
     }
-
-    navigate("/compare", { state: { formData, submissionId, baseFile, childFiles: childFile } });
   };
 
   return (

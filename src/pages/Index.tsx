@@ -11,6 +11,7 @@ import VisualDiffViewer, { type RequirementBox, type Annotation } from "@/compon
 import DataTables from "@/components/DataTables";
 import LabelSidebar from "@/components/LabelSidebar";
 import { pdfToImage, pdfToImageFiles, isPdfFile } from "@/lib/pdfToImage";
+import { authFetch } from "@/lib/authFetch";
 import ProfileDropdown from "@/components/ProfileDropdown";
 import StepIndicator from "@/components/StepIndicator";
 import { toast } from "sonner";
@@ -401,7 +402,7 @@ const Index = () => {
         // ── LRF-only mode: single-label analysis ────────────────────────────
         const data = new FormData();
         data.append("child_file", expandedChildFiles[0]);
-        const response = await fetch(`${API_URL}/api/analyze-label`, { method: "POST", body: data });
+        const response = await authFetch(`${API_URL}/api/analyze-label`, { method: "POST", body: data });
         if (!response.ok) throw new Error(`Analysis failed: ${response.statusText}`);
         const rawData = await response.json();
         setLrfAnalysis(rawData);

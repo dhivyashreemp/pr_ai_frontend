@@ -1,4 +1,5 @@
 import { useState, useCallback, useRef } from "react";
+import { authFetch } from "@/lib/authFetch";
 
 export type StreamStatus = "idle" | "running" | "done" | "error";
 
@@ -82,7 +83,7 @@ export function useCompareStream({ apiBase = "" }: { apiBase?: string } = {}) {
     setState({ ...INITIAL_STATE, status: "running" });
 
     try {
-      const response = await fetch(`${apiBase}/api/compare/stream`, {
+      const response = await authFetch(`${apiBase}/api/compare/stream`, {
         method: "POST",
         body:   formData,
         signal: controller.signal,
