@@ -1,28 +1,20 @@
-function getToken(): string | null {
-  return localStorage.getItem("token");
-}
+// Auth is now handled via HttpOnly cookie — no token in localStorage.
+// credentials: "include" instructs the browser to send the cookie automatically.
 
 export function getAuthHeaders(): Record<string, string> {
-  const token = getToken();
-  return token ? { Authorization: `Bearer ${token}` } : {};
+  return {};
 }
 
 /**
  * Drop-in replacement for fetch() that:
- * - Attaches Authorization: Bearer <token> from localStorage
- * - On 401: clears the stored token and redirects to /login
+ * - Sends the HttpOnly access_token cookie automatically via credentials: "include"
+ * - On 401: clears stored user info and redirects to /login
  */
 export async function authFetch(url: string, options: RequestInit = {}): Promise<Response> {
-  const token = getToken();
-  const headers = new Headers(options.headers);
-  if (token) {
-    headers.set("Authorization", `Bearer ${token}`);
-  }
-
-  const response = await fetch(url, { ...options, headers });
+  const response = await fetch(url, { ...options, credentials: "include" });
 
   if (response.status === 401) {
-    localStorage.removeItem("token");
+    localStorage.removeItem("userInfo");
     window.location.href = "/login";
     throw new Error("Unauthorized — session cleared");
   }

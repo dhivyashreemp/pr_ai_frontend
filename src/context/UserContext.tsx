@@ -1,4 +1,5 @@
 import { createContext, useContext, useState, ReactNode } from "react";
+import { API_URL } from "@/constants";
 
 interface UserInfo {
   name: string;
@@ -21,17 +22,12 @@ export const useUser = () => useContext(UserContext);
 
 function getUserFromStorage(): UserInfo {
   try {
-    const token = localStorage.getItem("token");
-    if (!token) return { name: "", role: "" };
-    const payload = JSON.parse(atob(token.split(".")[1]));
-    if (payload.exp && Date.now() / 1000 > payload.exp) {
-      localStorage.removeItem("token");
-      return { name: "", role: "" };
-    }
-    if (payload.name) return { name: payload.name, role: payload.role || "" };
+    const raw = localStorage.getItem("userInfo");
+    if (!raw) return { name: "", role: "" };
+    const info = JSON.parse(raw);
+    if (info.name) return { name: info.name, role: info.role || "" };
   } catch {
-    // malformed token — clear it
-    localStorage.removeItem("token");
+    localStorage.removeItem("userInfo");
   }
   return { name: "", role: "" };
 }
@@ -40,14 +36,14 @@ export const UserProvider = ({ children }: { children: ReactNode }) => {
   const [user, setUserState] = useState<UserInfo>(getUserFromStorage);
 
   const setUser = (u: UserInfo) => {
+    localStorage.setItem("userInfo", JSON.stringify(u));
     setUserState(u);
   };
 
   const logout = () => {
-    localStorage.removeItem("token");
+    localStorage.removeItem("userInfo");
     setUserState({ name: "", role: "" });
-    // TODO: redirect to ${API_URL}/auth/logout once the backend endpoint is implemented
-    window.location.href = "/login";
+    window.location.href = `${API_URL}/auth/logout`;
   };
 
   return (

@@ -19,14 +19,17 @@ const LoginPage = () => {
   const [isLoading, setIsLoading] = useState(false);
 
   useEffect(() => {
-    const params = new URLSearchParams(window.location.search);
-    const token = params.get('token');
-    if (token) {
-      localStorage.setItem('token', token);
-      const payload = JSON.parse(atob(token.split('.')[1]));
-      setUser({ name: payload.name, role: payload.role });
-      navigate('/');
-    }
+    // After OAuth redirect the access_token cookie is already set by the backend.
+    // Fetch user info from /auth/me and navigate into the app if authenticated.
+    fetch(`${API_URL}/auth/me`, { credentials: "include" })
+      .then(res => res.ok ? res.json() : null)
+      .then(data => {
+        if (data?.name) {
+          setUser({ name: data.name, role: data.role || "" });
+          navigate('/');
+        }
+      })
+      .catch(() => {});
   }, []);
 
   const handleLogin = () => {
