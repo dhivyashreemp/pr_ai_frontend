@@ -16,7 +16,7 @@
     ],
     "metadata_fields": [
       { "id": "cr_number",      "label": "CR",                 "type": "text", "placeholder": "e.g. CR-2026-0041",                   "required": false },
-      { "id": "part_number",    "label": "SKU",                "type": "text", "placeholder": "e.g. 2440-00-511",                    "required": true  },
+      { "id": "part_number",    "label": "SKU",                "type": "text", "placeholder": "e.g. 2440-00-511",                    "required": false },
       { "id": "label_version",  "label": "Label Revision",     "type": "text", "placeholder": "e.g. Rev C → Rev D",                  "required": false },
       { "id": "product_name",   "label": "Product name",       "type": "text", "placeholder": "e.g. QUICKSET STD Tissue Protector",  "required": false },
       { "id": "requested_by",   "label": "Requested by",       "type": "text", "placeholder": "Name / department",                   "required": false },

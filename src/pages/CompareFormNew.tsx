@@ -74,7 +74,7 @@ const CompareFormNew = () => {
           </div>
           <div className="flex items-center gap-2">
             <span className="text-gray-400 mr-1.5 font-bold tracking-widest uppercase text-[10px]">SKU</span>
-            <span className="text-[#334155] font-semibold text-[13px]">{formData.metadata.part_number || "08714729-MX"}</span>
+            <span className="text-[#334155] font-semibold text-[13px]">{formData.metadata.part_number || "—"}</span>
           </div>
           <div className="flex items-center gap-2">
             <span className="text-gray-400 mr-1.5 font-bold tracking-widest uppercase text-[10px]">Revision</span>

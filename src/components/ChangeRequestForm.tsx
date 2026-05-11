@@ -200,13 +200,6 @@ const ChangeRequestForm = () => {
 
   const handleGenerate = () => {
     const errors: Record<string, boolean> = {};
-    if (!metadata.part_number.trim()) errors.part_number = true;
-
-    if (Object.keys(errors).length > 0) {
-      setValidationErrors(errors);
-      toast.error("Please fill in all required fields");
-      return;
-    }
 
     const formData = { metadata, changes, customAttributes, totalChanges };
     navigate(`/form-summary?flow=${flow}`, { state: { formData } });

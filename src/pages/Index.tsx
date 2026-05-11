@@ -417,6 +417,10 @@ const Index = () => {
         baseForUpload.forEach(file => data.append("base_files", file));
         childForUpload.forEach(file => data.append("child_files", file));
         if (submissionId) data.append("submission_id", submissionId);
+        const userSku = formData?.metadata?.part_number?.trim();
+        if (userSku) {
+          data.append("skus", JSON.stringify(childForUpload.map(() => userSku)));
+        }
         startStream(data);
         return;
       }
@@ -637,7 +641,7 @@ const Index = () => {
             </div>
             <div className="flex items-center gap-2">
               <span className="text-[#94a3b8] font-bold tracking-widest uppercase text-[10px]">SKU</span>
-              <span className="text-[#334155] font-semibold text-[13px]">{formData.metadata.part_number || "08714729-MX"}</span>
+              <span className="text-[#334155] font-semibold text-[13px]">{formData.metadata.part_number || apiResults[selectedResultIndex]?.sku || "—"}</span>
             </div>
             <div className="flex items-center gap-2">
               <span className="text-[#94a3b8] font-bold tracking-widest uppercase text-[10px]">Revision</span>
@@ -780,8 +784,8 @@ const Index = () => {
                 allProcessedAnnotations: allProcessedResults.map(r => r.currentAnnotations ?? []),
                 allProcessedBboxIds: allProcessedResults.map(r => [...(r.bboxDiscrepancyIds ?? [])]),
                 allProcessedRequirementBoxes: allProcessedResults.map(r => r.requirementBoxes ?? []),
-                // Per-label ref numbers extracted by backend OCR — used to rename pages and header SKU
-                allLabelSkus: apiResults.map(r => (r.child_fields?.ref_number as string | undefined) ?? ''),
+                // Per-label SKU: backend resolves priority (user-entered > AI-extracted registration_number)
+                allLabelSkus: apiResults.map(r => (r.sku as string | undefined) ?? ''),
                 
                 // Keep the active page specific ones for simple fallback if needed
                 parsedItems: filteredValidatedParsedItems ?? (analysisRun && apiResults.length > 0 ? apiResults[selectedResultIndex]?.parsedItems : []) ?? [],
