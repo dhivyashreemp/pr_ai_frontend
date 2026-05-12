@@ -7,10 +7,52 @@ interface DropzoneProps {
   onFilesSelect: (files: File[]) => void;
   multiple?: boolean;
   alwaysShowUploadBox?: boolean;
+  maxSizeBytes?: number;
+  maxFiles?: number;
 }
 
-const Dropzone = ({ label, files, onFilesSelect, multiple = false, alwaysShowUploadBox = false }: DropzoneProps) => {
+const MAX_TOTAL_BYTES = 100 * 1024 * 1024; // 100 MB across all files in this dropzone
+
+const Dropzone = ({
+  label,
+  files,
+  onFilesSelect,
+  multiple = false,
+  alwaysShowUploadBox = false,
+  maxSizeBytes = 20 * 1024 * 1024,
+  maxFiles = 10,
+}: DropzoneProps) => {
   const [isDragOver, setIsDragOver] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  const validateAndSelect = useCallback(
+    (incoming: File[]) => {
+      const limitMB = Math.round(maxSizeBytes / 1024 / 1024);
+      const oversized = incoming.find(f => f.size > maxSizeBytes);
+      if (oversized) {
+        setError(`"${oversized.name}" exceeds the ${limitMB} MB per-file limit.`);
+        return;
+      }
+      if (multiple) {
+        const combined = [...files, ...incoming];
+        if (combined.length > maxFiles) {
+          setError(`Maximum ${maxFiles} files allowed.`);
+          return;
+        }
+        const totalSize = combined.reduce((sum, f) => sum + f.size, 0);
+        if (totalSize > MAX_TOTAL_BYTES) {
+          setError("Total upload size exceeds 100 MB.");
+          return;
+        }
+        setError(null);
+        onFilesSelect(combined);
+      } else {
+        setError(null);
+        onFilesSelect([incoming[0]]);
+      }
+    },
+    [files, multiple, onFilesSelect, maxSizeBytes, maxFiles]
+  );
 
   const handleDrop = useCallback(
     (e: React.DragEvent) => {
@@ -18,34 +60,30 @@ const Dropzone = ({ label, files, onFilesSelect, multiple = false, alwaysShowUpl
       setIsDragOver(false);
       const droppedFiles = Array.from(e.dataTransfer.files);
       if (droppedFiles.length > 0) {
-        if (multiple) {
-          onFilesSelect([...files, ...droppedFiles]);
-        } else {
-          onFilesSelect([droppedFiles[0]]);
-        }
+        validateAndSelect(droppedFiles);
       }
     },
-    [onFilesSelect, multiple, files]
+    [validateAndSelect]
   );
 
   const handleChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const selectedFiles = Array.from(e.target.files || []);
     if (selectedFiles.length > 0) {
-      if (multiple) {
-        onFilesSelect([...files, ...selectedFiles]);
-      } else {
-        onFilesSelect([selectedFiles[0]]);
-      }
+      validateAndSelect(selectedFiles);
     }
+    // Reset so the same file can be re-selected after an error
+    e.target.value = "";
   };
 
   const removeFile = (index: number) => {
     const newFiles = [...files];
     newFiles.splice(index, 1);
+    setError(null);
     onFilesSelect(newFiles);
   };
 
   const clearFiles = () => {
+    setError(null);
     onFilesSelect([]);
   };
 
@@ -92,7 +130,7 @@ const Dropzone = ({ label, files, onFilesSelect, multiple = false, alwaysShowUpl
             <span className="text-sm text-muted-foreground">
               {multiple && files.length > 0 ? "Add more files" : <>Drag & drop or <span className="underline">browse</span></>}
             </span>
-            <span className="text-xs text-muted-foreground mt-1">PDF / PNG / JPEG / TIFF</span>
+            <span className="text-xs text-muted-foreground mt-1">PDF / PNG / JPEG / TIFF · Max {Math.round(maxSizeBytes / 1024 / 1024)} MB per file · Up to {maxFiles} files</span>
             <input
               type="file"
               accept=".pdf,.png,.jpg,.jpeg,.tiff,.tif"
@@ -101,7 +139,11 @@ const Dropzone = ({ label, files, onFilesSelect, multiple = false, alwaysShowUpl
               className="hidden"
             />
           </label>
-          
+
+          {error && (
+            <p className="text-xs text-red-500 font-medium px-1">{error}</p>
+          )}
+
           {/* List of files for single-file mode with alwaysShowUploadBox */}
           {!multiple && alwaysShowUploadBox && files.length > 0 && (
             <div className="space-y-2">

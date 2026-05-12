@@ -1,7 +1,7 @@
 import { useState, useCallback, useRef } from "react";
 import { authFetch } from "@/lib/authFetch";
 
-export type StreamStatus = "idle" | "running" | "done" | "error";
+export type StreamStatus = "idle" | "running" | "done" | "partial_failed" | "error";
 
 export interface LogEntry {
   page: number;
@@ -60,8 +60,17 @@ function applyEvent(state: CompareStreamState, event: any): CompareStreamState {
         completed: state.completed + 1,
         log: state.log.map(e => e.page === event.page ? { ...e, status: "error", error: event.error } : e),
       };
-    case "complete":
-      return { ...state, status: "done", results: event.results, reportId: event.report_id, totalSecs: event.total_secs, etaSecs: 0 };
+    case "complete": {
+      const hasFailed = state.log.some(e => e.status === "error");
+      return {
+        ...state,
+        status: hasFailed ? "partial_failed" : "done",
+        results: event.results,
+        reportId: event.report_id,
+        totalSecs: event.total_secs,
+        etaSecs: 0,
+      };
+    }
     default:
       return state;
   }

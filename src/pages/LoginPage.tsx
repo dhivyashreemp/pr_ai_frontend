@@ -2,16 +2,27 @@ import { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useUser } from '@/context/UserContext';
 import { API_URL } from '@/constants';
+import { setSessionToken } from '@/lib/authFetch';
 
 const MicrosoftLogo = () => (
   <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 21 21" className="w-5 h-5 mr-3">
     <rect x="1" y="1" width="9" height="9" fill="#f25022" />
     <rect x="11" y="1" width="9" height="9" fill="#7fba00" />
-    <rect x="1" y="11" width="9" height="9" fill="#00a4ef" />
-    <rect x="11" y="11" width="9" height="9" fill="#ffb900" />
+    <rect x="1" y="11" width="9" height="9" fill="#ffb900" />
+    <rect x="11" y="11" width="9" height="9" fill="#00a4ef" />
   </svg>
 );
 
+/** Read claims from a JWT without verifying the signature (display-only). */
+function decodeJwt(token: string): Record<string, any> | null {
+  try {
+    const payload = token.split('.')[1];
+    const padded = payload.replace(/-/g, '+').replace(/_/g, '/');
+    return JSON.parse(atob(padded));
+  } catch {
+    return null;
+  }
+}
 
 const LoginPage = () => {
   const navigate = useNavigate();
@@ -19,8 +30,30 @@ const LoginPage = () => {
   const [isLoading, setIsLoading] = useState(false);
 
   useEffect(() => {
-    // After OAuth redirect the access_token cookie is already set by the backend.
-    // Fetch user info from /auth/me and navigate into the app if authenticated.
+    const params = new URLSearchParams(window.location.search);
+    const urlToken = params.get("token");
+
+    if (urlToken) {
+      // Clean URL immediately — token must not sit in browser history / referrer.
+      window.history.replaceState({}, "", "/login");
+
+      // Persist for authFetch to attach as Bearer on every subsequent API call.
+      setSessionToken(urlToken);
+
+      // Decode name + role from JWT payload (no signature verification needed —
+      // only used for UI display; all real authorization happens on the backend).
+      const claims = decodeJwt(urlToken);
+      const name = claims?.name ?? claims?.preferred_username ?? "";
+      const role = claims?.role ?? claims?.roles?.[0] ?? "";
+
+      if (name) {
+        setUser({ name, role });
+        navigate('/');
+        return;
+      }
+    }
+
+    // Fallback: cookie-based auth for when the backend adds HttpOnly cookie support.
     fetch(`${API_URL}/auth/me`, { credentials: "include" })
       .then(res => res.ok ? res.json() : null)
       .then(data => {
@@ -35,7 +68,6 @@ const LoginPage = () => {
   const handleLogin = () => {
     setIsLoading(true);
     window.location.href = `${API_URL}/auth/login`;
-    console.log(API_URL);
   };
 
   return (
@@ -47,13 +79,11 @@ const LoginPage = () => {
           <img src="/favicon.ico" alt="Logo" className="w-12 h-12" />
         </div>
 
-        {/* Header Texts */}
         <h1 className="text-2xl font-bold text-gray-900 mb-2">Welcome Back</h1>
         <p className="text-sm text-gray-500 mb-10 text-center">
           Sign in to access your account
         </p>
 
-        {/* Action Button */}
         <button
           onClick={handleLogin}
           disabled={isLoading}
@@ -72,7 +102,6 @@ const LoginPage = () => {
           )}
         </button>
 
-        {/* Footer */}
         <div className="mt-10 pt-6 border-t border-gray-100 w-full text-center">
           <p className="text-xs text-gray-400">
             Need help? Contact your account manager

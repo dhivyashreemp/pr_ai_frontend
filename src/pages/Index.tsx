@@ -392,6 +392,38 @@ const Index = () => {
       return;
     }
 
+    // ── Upload limit guards (second gate — Dropzone enforces these at selection time) ──
+    const LIMIT_FILE_BYTES = 20 * 1024 * 1024;
+    const LIMIT_TOTAL_BYTES = 100 * 1024 * 1024;
+    const LIMIT_PAGES = 50;
+
+    if (lrfOnly) {
+      if ((expandedChildFiles[0]?.size ?? 0) > LIMIT_FILE_BYTES) {
+        toast.error("File exceeds the 20 MB per-file limit.");
+        return;
+      }
+    } else {
+      if (expandedChildFiles.length > LIMIT_PAGES) {
+        toast.error(`New version has ${expandedChildFiles.length} pages. Maximum allowed is ${LIMIT_PAGES}.`);
+        return;
+      }
+      if (expandedBaseFiles.length > LIMIT_PAGES) {
+        toast.error(`Current version has ${expandedBaseFiles.length} pages. Maximum allowed is ${LIMIT_PAGES}.`);
+        return;
+      }
+      const allFiles = [...expandedBaseFiles, ...expandedChildFiles];
+      const oversized = allFiles.find(f => f.size > LIMIT_FILE_BYTES);
+      if (oversized) {
+        toast.error(`"${oversized.name}" exceeds the 20 MB per-file limit.`);
+        return;
+      }
+      const totalSize = allFiles.reduce((sum, f) => sum + f.size, 0);
+      if (totalSize > LIMIT_TOTAL_BYTES) {
+        toast.error(`Total upload size (${(totalSize / 1024 / 1024).toFixed(1)} MB) exceeds the 100 MB limit.`);
+        return;
+      }
+    }
+
     setIsPdfTransitioning(false);
     setLoading(true);
     setAnalysisRun(false);
@@ -412,15 +444,16 @@ const Index = () => {
         setAnalysisRun(true);
       } else {
         // ── Full diff mode: stream results via /api/compare/stream ──
+        // Always send the frontend-expanded PNGs so there is a single source of
+        // truth for page count, page order, and rendered images — both UI and
+        // backend work from the same files.
         const data = new FormData();
-        const baseForUpload = baseFile.length === 1 && isPdfFile(baseFile[0]) ? [baseFile[0]] : expandedBaseFiles;
-        const childForUpload = childFiles.length === 1 && isPdfFile(childFiles[0]) ? [childFiles[0]] : expandedChildFiles;
-        baseForUpload.forEach(file => data.append("base_files", file));
-        childForUpload.forEach(file => data.append("child_files", file));
+        expandedBaseFiles.forEach(file => data.append("base_files", file));
+        expandedChildFiles.forEach(file => data.append("child_files", file));
         if (submissionId) data.append("submission_id", submissionId);
         const userSku = formData?.metadata?.part_number?.trim();
         if (userSku) {
-          data.append("skus", JSON.stringify(childForUpload.map(() => userSku)));
+          data.append("skus", JSON.stringify(expandedChildFiles.map(() => userSku)));
         }
         startStream(data);
         return;

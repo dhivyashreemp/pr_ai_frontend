@@ -44,6 +44,36 @@ export function CompareProgress({ state, onDone, onCancel }: CompareProgressProp
             </button>
           )}
         </div>
+      ) : status === "partial_failed" ? (
+        <div className="flex flex-col gap-3">
+          <div className="flex items-start gap-3">
+            <AlertTriangle className="w-5 h-5 text-amber-500 shrink-0 mt-0.5" />
+            <div className="flex-1 min-w-0">
+              <p className="text-sm font-semibold text-amber-700">
+                {log.filter(e => e.status === "error").length} label{log.filter(e => e.status === "error").length !== 1 ? "s" : ""} failed — report will be incomplete
+              </p>
+              <p className="text-xs text-amber-600 mt-0.5">
+                {results.length} of {total} completed in {formatTime(totalSecs)}
+              </p>
+            </div>
+          </div>
+          <div className="flex gap-2 justify-end">
+            {onCancel && (
+              <button
+                onClick={onCancel}
+                className="text-xs text-gray-400 hover:text-gray-600 border border-gray-200 rounded px-3 py-1.5 transition-colors"
+              >
+                Cancel
+              </button>
+            )}
+            <button
+              onClick={() => onDone(results, reportId)}
+              className="text-xs font-medium text-amber-700 hover:text-amber-800 border border-amber-300 bg-amber-50 hover:bg-amber-100 rounded px-3 py-1.5 transition-colors"
+            >
+              Proceed with partial results
+            </button>
+          </div>
+        </div>
       ) : status === "done" ? (
         <div className="flex items-center gap-3">
           <CheckCircle2 className="w-5 h-5 text-green-500 shrink-0" />
@@ -87,7 +117,7 @@ export function CompareProgress({ state, onDone, onCancel }: CompareProgressProp
         <div className="h-2 rounded-full bg-gray-100 overflow-hidden">
           <div
             className={`h-full rounded-full transition-[width] duration-500 ease-out ${
-              status === "done" ? "bg-green-500" : "bg-blue-500"
+              status === "done" ? "bg-green-500" : status === "partial_failed" ? "bg-amber-400" : "bg-blue-500"
             }`}
             style={{ width: `${pct}%` }}
           />
